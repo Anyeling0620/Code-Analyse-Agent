@@ -8,6 +8,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"gorm.io/plugin/opentelemetry/tracing"
 	"os"
 	"path/filepath"
 )
@@ -46,6 +47,10 @@ func (a *Adaptor) openDB(path string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("oepn sqlite: %v", err)
+	}
+	err = db.Use(tracing.NewPlugin())
+	if err != nil {
+		return fmt.Errorf("use plugin: %v", err)
 	}
 	err = db.AutoMigrate(
 		&model.Profile{},

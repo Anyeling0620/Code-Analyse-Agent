@@ -2,6 +2,7 @@ package tracing
 
 import (
 	"context"
+	"edu.agent.code/config"
 	"fmt"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -10,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	"go.opentelemetry.io/otel/trace"
 	"time"
 )
 
@@ -75,4 +77,8 @@ func doInit(ctx context.Context, config Config) (func(context.Context) error, er
 		),
 	)
 	return tp.Shutdown, nil
+}
+
+func Tracer() trace.Tracer {
+	return otel.Tracer(config.ServerName)
 }

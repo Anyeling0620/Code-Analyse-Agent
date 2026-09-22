@@ -61,7 +61,7 @@ func main() {
 		err := srv.ListenAndServe()
 		if err != nil {
 			serverErrors <- err
-			return
+			os.Exit(1)
 		}
 		serverErrors <- nil
 	}()
@@ -70,7 +70,7 @@ func main() {
 	case err := <-serverErrors:
 		if err != nil {
 			logger.Error(fmt.Sprintf("start server error: %v", err))
-			return
+			os.Exit(1)
 		}
 	case <-ctx.Done():
 
@@ -79,11 +79,11 @@ func main() {
 		defer cancel()
 		if err := shutdownFun(shutdownCtx); err != nil {
 			logger.Error(fmt.Sprintf("shutdown timeout after %s", conf.Server.HTTPAddr))
-			return
+			os.Exit(1)
 		}
 		if err := <-serverErrors; err != nil {
 			logger.Error(fmt.Sprintf("shutdown server error: %v", err))
-			return
+			os.Exit(1)
 		}
 	}
 }

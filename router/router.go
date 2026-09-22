@@ -16,5 +16,5 @@ func New(h *api.Handler) *gin.Engine {
 
 func routeRegister(app *gin.Engine, h *api.Handler) {
 	app.GET("/healthz", h.Health)
-
+	app.GET("/api/cost/daily", h.CostDaily)
 }

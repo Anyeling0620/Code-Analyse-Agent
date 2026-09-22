@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"edu.agent.code/adaptor"
 	"edu.agent.code/config"
 	"edu.agent.code/utils/logger"
 	"edu.agent.code/utils/tracing"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -33,4 +35,11 @@ func main() {
 			logger.Error("shutdown failed: %v", err)
 		}
 	}()
+
+	adpt, err := adaptor.NewAdaptor(conf)
+	if err != nil {
+		logger.Error("new adaptor failed: %v", err)
+		os.Exit(1)
+	}
+	fmt.Println(adpt)
 }

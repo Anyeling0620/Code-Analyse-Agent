@@ -2,10 +2,11 @@ package main
 
 import (
 	"edu.agent.code/config"
-	"fmt"
+	"edu.agent.code/utils/logger"
 )
 
 func main() {
 	conf := config.InitConfig()
-	fmt.Println(conf)
+	logger.Init(conf.Server.LogLevel)
+	logger.Info("test a=%d, b=%s", 1, "hello")
 }

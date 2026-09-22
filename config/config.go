@@ -27,6 +27,7 @@ type Config struct {
 	Server   Server   `yaml:"server"`
 	SQLite   SQLite   `yaml:"sqlite"`
 	DeepSeek DeepSeek `yaml:"deep_seek"`
+	OTel     OTel     `yaml:"otel"`
 	Agents   Agents   `yaml:"agents"`
 }
 
@@ -45,6 +46,12 @@ type DeepSeek struct {
 	APIKey  string `yaml:"api_key"`
 	BaseURL string `yaml:"base_url"`
 	Model   string `yaml:"model"`
+}
+
+type OTel struct {
+	Endpoint   string  `yaml:"endpoint"`
+	SampleRate float64 `yaml:"sample_rate"`
+	StdOut     bool    `yaml:"std_out"`
 }
 
 type Agents struct {

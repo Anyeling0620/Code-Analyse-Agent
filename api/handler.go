@@ -3,6 +3,7 @@ package api
 import (
 	"edu.agent.code/adaptor"
 	"edu.agent.code/common"
+	"edu.agent.code/service/conversation"
 	"edu.agent.code/service/cost"
 	"edu.agent.code/service/dto"
 	"edu.agent.code/service/quota"
@@ -14,6 +15,7 @@ type Handler struct {
 	adaptor adaptor.IAdaptor
 	cost    *cost.Service
 	quota   *quota.Service
+	session *conversation.Service
 }
 
 func NewHandler(adaptor adaptor.IAdaptor) *Handler {
@@ -21,6 +23,7 @@ func NewHandler(adaptor adaptor.IAdaptor) *Handler {
 		adaptor: adaptor,
 		cost:    cost.NewService(adaptor),
 		quota:   quota.NewService(adaptor),
+		session: conversation.NewService(adaptor),
 	}
 }
 

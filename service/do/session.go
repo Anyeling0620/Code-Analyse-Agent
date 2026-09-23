@@ -42,20 +42,20 @@ type ChatStreamEvent struct {
 	Result        *ChatResult `json:"result"`
 
 	//  中断事件
-	PendingApprovalID string
-	PendingCommand    string
-	PendingRiskReason string
-	PendingRiskLevel  string
-	PendingWorkDir    string
-	PendingTimeoutSec int
+	PendingApprovalID string `json:"pending_approval_id"`
+	PendingCommand    string `json:"pending_command"`
+	PendingRiskReason string `json:"pending_risk_reason"`
+	PendingRiskLevel  string `json:"pending_risk_level"`
+	PendingWorkDir    string `json:"pending_work_dir"`
+	PendingTimeoutSec int    `json:"pending_timeout_sec"`
 }
 
 type ChatMessageRecord struct {
-	ID           uint
-	SessionID    string
-	UserID       string
-	Role         string
-	Content      string
-	RenderEvents []ChatStreamEvent
-	CreatedAt    time.Time
+	ID           uint              `json:"id"`
+	SessionID    string            `json:"session_id"`
+	UserID       string            `json:"user_id"`
+	Role         string            `json:"role"`
+	Content      string            `json:"content"`
+	RenderEvents []ChatStreamEvent `json:"render_events"`
+	CreatedAt    time.Time         `json:"created_at"`
 }

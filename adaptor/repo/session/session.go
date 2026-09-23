@@ -5,6 +5,7 @@ import (
 	"edu.agent.code/adaptor"
 	"edu.agent.code/adaptor/repo/model"
 	"edu.agent.code/service/do"
+	"edu.agent.code/service/dto"
 	"encoding/json"
 	"errors"
 	"github.com/gogf/gf/v2/util/gconv"
@@ -15,8 +16,8 @@ import (
 
 type ISession interface {
 	GetByID(ctx context.Context, sessionID string) (*do.SessionContext, error)
-	ListByUser(ctx context.Context, userID string, limit int) ([]*do.SessionContext, error)
-	ListMessage(ctx context.Context, userID, sessionID string, limit int) ([]do.ChatMessageRecord, error)
+	ListByUser(ctx context.Context, userID string, pager dto.Pager) ([]*do.SessionContext, int64, error)
+	ListMessage(ctx context.Context, userID, sessionID string, pager dto.Pager) ([]do.ChatMessageRecord, int64, error)
 	AppendMessage(ctx context.Context, msg *do.ChatMessageRecord) error
 	Upsert(ctx context.Context, session *do.SessionContext) error
 	Delete(ctx context.Context, userID, sessionID string) error
@@ -62,21 +63,23 @@ func truncateContent(text string) string {
 	return text
 }
 
-func (s *Session) ListByUser(cx context.Context, userID string, limit int) ([]*do.SessionContext, error) {
-	if limit == 0 || limit > 100 {
-		limit = 50
-	}
+func (s *Session) ListByUser(cx context.Context, userID string, pager dto.Pager) ([]*do.SessionContext, int64, error) {
 	var rows []*model.Session
-	err := s.db.WithContext(cx).
-		Where("user_id = ?", userID).
-		Order("updated_at DESC").
-		Limit(limit).
+	tx := s.db.WithContext(cx).
+		Where("user_id = ?", userID)
+	var count int64
+	if err := tx.Count(&count).Error; err != nil {
+		return nil, 0, err
+	}
+	err := tx.Order("updated_at DESC").
+		Offset(pager.GetOffset()).
+		Limit(pager.GetLimit()).
 		Find(&rows).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, 0, nil
 		}
-		return nil, err
+		return nil, 0, err
 	}
 	var results []*do.SessionContext
 	lo.ForEach(rows, func(item *model.Session, index int) {
@@ -92,25 +95,27 @@ func (s *Session) ListByUser(cx context.Context, userID string, limit int) ([]*d
 			UpdatedAt:          item.UpdatedAt,
 		})
 	})
-	return results, err
+	return results, count, err
 }
 
-func (s *Session) ListMessage(ctx context.Context, userID, sessionID string, limit int) ([]do.ChatMessageRecord, error) {
-	if limit == 0 || limit > 100 {
-		limit = 50
-	}
-
+func (s *Session) ListMessage(ctx context.Context, userID, sessionID string, pager dto.Pager) ([]do.ChatMessageRecord, int64, error) {
 	var rows []*model.ChatMessage
-	err := s.db.WithContext(ctx).
-		Where("user_id = ? AND session_id = ?", userID, sessionID).
+	tx := s.db.WithContext(ctx).
+		Where("user_id = ? AND session_id = ?", userID, sessionID)
+	var count int64
+	if err := tx.Count(&count).Error; err != nil {
+		return nil, 0, err
+	}
+	err := tx.
 		Order("created_at DESC").
-		Limit(limit).
+		Offset(pager.GetOffset()).
+		Limit(pager.GetLimit()).
 		Find(&rows).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, 0, nil
 		}
-		return nil, err
+		return nil, 0, err
 	}
 
 	unmarshalRenderEventFun := func(row string) []do.ChatStreamEvent {
@@ -135,7 +140,7 @@ func (s *Session) ListMessage(ctx context.Context, userID, sessionID string, lim
 		})
 	})
 
-	return results, err
+	return results, count, err
 }
 
 func (s *Session) AppendMessage(ctx context.Context, msg *do.ChatMessageRecord) error {

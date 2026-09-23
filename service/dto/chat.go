@@ -1,6 +1,8 @@
 package dto
 
-import "time"
+import (
+	"time"
+)
 
 type Profile struct {
 	UserID           string    `json:"user_id"`
@@ -60,4 +62,14 @@ type ChatStreamEvent struct {
 	PendingRiskLevel  string `json:"pending_risk_level"`
 	PendingWorkDir    string `json:"pending_work_dir"`
 	PendingTimeoutSec int    `json:"pending_timeout_sec"`
+}
+
+type ChatMessageRecord struct {
+	ID           uint              `json:"id"`
+	SessionID    string            `json:"session_id"`
+	UserID       string            `json:"user_id"`
+	Role         string            `json:"role"`
+	Content      string            `json:"content"`
+	RenderEvents []ChatStreamEvent `json:"render_events"`
+	CreatedAt    time.Time         `json:"created_at"`
 }

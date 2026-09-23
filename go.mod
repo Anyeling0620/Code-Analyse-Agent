@@ -7,6 +7,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gogf/gf/v2 v2.10.3
 	github.com/google/uuid v1.6.0
+	github.com/jinzhu/copier v0.4.0
 	github.com/samber/lo v1.53.0
 	github.com/shopspring/decimal v1.4.0
 	github.com/spf13/viper v1.21.0
@@ -15,7 +16,6 @@ require (
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.45.0
 	go.opentelemetry.io/otel/sdk v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
-	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2

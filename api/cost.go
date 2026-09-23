@@ -47,3 +47,10 @@ func parseDay(ray string, fallback time.Time) (time.Time, error) {
 	}
 	return time.ParseInLocation(time.DateOnly, ray, time.Local)
 }
+
+func (h *Handler) CostByUser(c *gin.Context) {
+
+}
+func (h *Handler) CostByTool(c *gin.Context) {
+
+}

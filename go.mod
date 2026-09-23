@@ -3,10 +3,11 @@ module edu.agent.code
 go 1.26.5
 
 require (
-	github.com/cloudwego/eino v0.9.20
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-viper/mapstructure/v2 v2.5.0
+	github.com/gogf/gf/v2 v2.10.3
 	github.com/google/uuid v1.6.0
+	github.com/samber/lo v1.53.0
 	github.com/spf13/viper v1.21.0
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.46.0

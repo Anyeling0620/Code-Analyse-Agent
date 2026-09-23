@@ -26,7 +26,7 @@ var (
 type Config struct {
 	Server   Server   `yaml:"server"`
 	SQLite   SQLite   `yaml:"sqlite"`
-	DeepSeek DeepSeek `yaml:"deep_seek"`
+	DeepSeek DeepSeek `yaml:"deepseek"`
 	OTel     OTel     `yaml:"otel"`
 	Agents   Agents   `yaml:"agents"`
 }
@@ -60,7 +60,6 @@ type Agents struct {
 func init() {
 	flag.StringVar(&localConfigPath, "c", ServerName+"_local.yml", "path to local config file")
 	flag.StringVar(&etcdAddr, "r", os.Getenv("ETCD_ADDR"), "ETCD server address")
-	//flag.StringVar(&etcdKey, "k", os.Getenv("ETCD_KEY"), "ETCD key")
 	flag.StringVar(&etcdEnv, "e", "env", "ETCD environment")
 }
 
@@ -82,7 +81,9 @@ func InitConfig() *Config {
 	if err != nil {
 		panic(err)
 	}
-	conf.DeepSeek.APIKey = os.Getenv("DEEPSEEK_API_KEY")
+	if conf.DeepSeek.APIKey == "" {
+		conf.DeepSeek.APIKey = os.Getenv("DEEPSEEK_API_KEY")
+	}
 	GlobalConfig = *conf
 	return conf
 }

@@ -23,12 +23,14 @@ var (
 	GlobalConfig    Config
 )
 
+//goland:noinspection SpellCheckingInspection
 type Config struct {
-	Server   Server   `yaml:"server"`
-	SQLite   SQLite   `yaml:"sqlite"`
-	DeepSeek DeepSeek `yaml:"deepseek"`
-	OTel     OTel     `yaml:"otel"`
-	Agents   Agents   `yaml:"agents"`
+	Server     Server     `yaml:"server"`
+	SQLite     SQLite     `yaml:"sqlite"`
+	DeepSeek   DeepSeek   `yaml:"deepseek"`
+	OTel       OTel       `yaml:"otel"`
+	Agents     Agents     `yaml:"agents"`
+	ModelPrice ModelPrice `yaml:"model_price"`
 }
 
 type Server struct {
@@ -52,6 +54,16 @@ type OTel struct {
 	Endpoint   string  `yaml:"endpoint"`
 	SampleRate float64 `yaml:"sample_rate"`
 	StdOut     bool    `yaml:"std_out"`
+}
+
+type ModelPrice struct {
+	FallbackModel string                   `yaml:"fallback_model"`
+	PriceCNY      map[string]ModelPriceCNY `yaml:"price_cny"`
+}
+
+type ModelPriceCNY struct {
+	Prompt     float64 `yaml:"prompt"`
+	Completion float64 `yaml:"completion"`
 }
 
 type Agents struct {

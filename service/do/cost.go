@@ -3,8 +3,8 @@ package do
 import "time"
 
 type CostRecord struct {
-	UserID           int64
-	SessionID        int64
+	UserID           string
+	SessionID        string
 	Model            string
 	ToolName         string
 	PromptTokens     int64

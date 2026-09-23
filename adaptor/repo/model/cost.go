@@ -3,9 +3,9 @@ package model
 import "time"
 
 type CostRecord struct {
-	ID               int64  `gorm:"primary_key;AUTO_INCREMENT"`
-	UserID           int64  `gorm:"size:128;index"`
-	SessionID        int64  `gorm:"size:128;index"`
+	ID               string `gorm:"primary_key;AUTO_INCREMENT"`
+	UserID           string `gorm:"size:128;index"`
+	SessionID        string `gorm:"size:128;index"`
 	Model            string `gorm:"size:32"`
 	ToolName         string `gorm:"size:64;index"`
 	PromptTokens     int64

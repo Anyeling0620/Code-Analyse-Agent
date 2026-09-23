@@ -1,0 +1,64 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.5'
+          cache: true
+
+      - name: Install Gcc
+        run: sudo apt-get update && sudo apt-get install -y gcc
+
+      - name: Build
+        env:
+          CGO_ENABLED: "1"
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          go mod tidy
+          go build -o code-analyse-agent .
+
+      - name: Verify binary
+        run: |
+          file code-analyse-agent
+          file code-analyse-agent | grep -q "ELF 64-bit" || (echo "not linux elf" && exit 1)
+
+      - name: Copy Binary to Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "code-analyse-agent"
+          target: "/home/github/Code-Analyse-Agent/"
+          overwrite: true
+
+      - name: Restart Service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            chmod +x /home/github/Code-Analyse-Agent/code-analyse-agent
+            systemctl restart code-analyse-agent
+            sleep 2
+            systemctl status code-analyse-agent --no-pager

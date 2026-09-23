@@ -1,6 +1,7 @@
 package router
 
 import (
+	"edu.agent.code/common"
 	"edu.agent.code/utils/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -23,7 +24,7 @@ func Tracing() gin.HandlerFunc {
 		if traceID == "" {
 			traceID = getTraceID()
 		}
-		c.Set("trace_id", traceID)
+		c.Set(common.CtxKeyTraceID, traceID)
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 		// 出错才拿得到trace_id

@@ -15,7 +15,7 @@ func (h *Handler) Health(c *gin.Context) {
 
 func (h *Handler) Version(c *gin.Context) {
 	conf := h.adaptor.GetConfig()
-	c.JSON(http.StatusOK, dto.Response[any]{
+	c.JSON(http.StatusOK, dto.Response{
 		Code:    common.OK.Code,
 		Message: common.OK.Msg,
 		Data: dto.Version{

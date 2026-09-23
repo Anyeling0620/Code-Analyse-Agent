@@ -63,6 +63,10 @@ func startHeartBeat(ctx *gin.Context, w *streamWriter, traceID string) func() {
 					Message:   "stream alive",
 					Timestamp: now.Format(time.RFC3339Nano),
 				})
+				return
+				// 此处和PPT不同，PPT中如果断开连接可能会泄露goroutine
+			case <-ctx.Request.Context().Done():
+				return // 客户端断开，自动退出
 			}
 		}
 	}()

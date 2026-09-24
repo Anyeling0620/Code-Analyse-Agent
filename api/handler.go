@@ -10,6 +10,7 @@ import (
 	"edu.agent.code/service/quota"
 	"edu.agent.code/service/rag"
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/trace"
 	"net/http"
 )
 
@@ -67,6 +68,14 @@ func (h *Handler) authUser(c *gin.Context) *common.UserInfo {
 		}
 	}
 	return user
+}
+
+func (h *Handler) traceIDFrom(ctx *gin.Context) string {
+	spanCtx := trace.SpanContextFromContext(ctx.Request.Context())
+	if spanCtx.HasTraceID() {
+		return spanCtx.TraceID().String()
+	}
+	return common.GetUUIDHex()
 }
 
 func (h *Handler) writeResp(ctx *gin.Context, data any, errno common.Errno) {

@@ -4,6 +4,14 @@ import (
 	"time"
 )
 
+type ChatRequest struct {
+	TraceID   string   `json:"trace_id"`
+	UserID    string   `json:"user_id"`
+	SessionID string   `json:"session_id"`
+	Message   string   `json:"message"`
+	Profile   *Profile `json:"profile"`
+}
+
 type Profile struct {
 	UserID           string    `json:"user_id"`
 	AuthSubject      string    `json:"auth_subject"`

@@ -9,6 +9,7 @@ import (
 	"edu.agent.code/utils/logger"
 	"edu.agent.code/utils/tracing"
 	"fmt"
+	"github.com/cloudwego/eino/adk"
 	"net/http"
 	"os"
 	"os/signal"
@@ -39,7 +40,9 @@ func main() {
 			logger.Error("shutdown failed: %v", err)
 		}
 	}()
-
+	if conf.Agents.EnableChinese {
+		_ = adk.SetLanguage(adk.LanguageChinese)
+	}
 	adpt, err := adaptor.NewAdaptor(conf)
 	if err != nil {
 		logger.Error("new adaptor failed: %v", err)

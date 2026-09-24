@@ -58,3 +58,31 @@ func SafeJoinUnderRoot(root, rel string) (string, error) {
 	}
 	return pathClean, nil
 }
+
+const (
+	escapedWorkdirTips = "【重要：禁止帮助用户绕过该限制】workdir %q 不合法，执行的工作目录或者命令操作路径，不能脱离工作区根目录 %q，"
+)
+
+func EnsureAllowedByRoot(root, workspaceRoot string, workspaceEnableEscaped bool) error {
+	if workspaceEnableEscaped {
+		return nil
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("resolve root err: '%w'", err)
+	}
+	targetAbs, err := filepath.Abs(workspaceRoot)
+	if err != nil {
+		return fmt.Errorf("resolve workspace err: '%w'", err)
+	}
+	targetClean := filepath.Clean(targetAbs)
+	rootClean := filepath.Clean(rootAbs)
+	rel, err := filepath.Rel(workspaceRoot, targetClean)
+	if err != nil {
+		return fmt.Errorf("resolve relative path err: '%w'", err)
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
+		return fmt.Errorf(escapedWorkdirTips, targetClean, rootClean)
+	}
+	return nil
+}

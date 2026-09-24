@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -20,7 +21,8 @@ var (
 	etcdEnv         string
 	etcdAddr        string
 	localConfigPath string
-	GlobalConfig    Config
+	globalConfigMu  sync.RWMutex
+	globalConfig    Config
 )
 
 //goland:noinspection SpellCheckingInspection
@@ -31,6 +33,7 @@ type Config struct {
 	OTel       OTel       `yaml:"otel"`
 	Agents     Agents     `yaml:"agents"`
 	ModelPrice ModelPrice `yaml:"model_price"`
+	WorkSpace  WorkSpace  `yaml:"workspace"`
 }
 
 type Server struct {
@@ -54,6 +57,12 @@ type OTel struct {
 	Endpoint   string  `yaml:"endpoint"`
 	SampleRate float64 `yaml:"sample_rate"`
 	StdOut     bool    `yaml:"std_out"`
+}
+
+type WorkSpace struct {
+	Root          string `yaml:"root"`
+	EnableEscaped bool   `yaml:"enable_escaped"`
+	CommonDetect  bool   `yaml:"common_detect"`
 }
 
 type ModelPrice struct {
@@ -86,7 +95,7 @@ func InitConfig() *Config {
 		if err != nil {
 			panic(err)
 		}
-		GlobalConfig = *conf
+		globalConfig = *conf
 		return conf
 	}
 	conf, err := getFromLocal()
@@ -96,7 +105,7 @@ func InitConfig() *Config {
 	if conf.DeepSeek.APIKey == "" {
 		conf.DeepSeek.APIKey = os.Getenv("DEEPSEEK_API_KEY")
 	}
-	GlobalConfig = *conf
+	globalConfig = *conf
 	return conf
 }
 
@@ -128,7 +137,9 @@ func getFromRemoteAndWatchUpdate(v *viper.Viper) (*Config, error) {
 		for {
 			time.Sleep(time.Minute)
 			if err := v.WatchRemoteConfig(); err == nil {
-				_ = unmarshalViperConfig(v, &GlobalConfig)
+				globalConfigMu.Lock()
+				_ = unmarshalViperConfig(v, &globalConfig)
+				globalConfigMu.Unlock()
 			}
 		}
 	}()
@@ -140,4 +151,10 @@ func unmarshalViperConfig(v *viper.Viper, config *Config) error {
 	return v.Unmarshal(config, func(config *mapstructure.DecoderConfig) {
 		config.TagName = "yaml"
 	})
+}
+
+func GetLatestConfig() Config {
+	globalConfigMu.RLock()
+	defer globalConfigMu.RUnlock()
+	return globalConfig
 }

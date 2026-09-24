@@ -4,6 +4,7 @@ import (
 	"context"
 	"edu.agent.code/utils/logger"
 	"edu.agent.code/utils/pathutil"
+	"edu.agent.code/utils/sensitive"
 	"fmt"
 	"github.com/cloudwego/eino/components/tool"
 	toolutils "github.com/cloudwego/eino/components/tool/utils"
@@ -96,7 +97,7 @@ func readFileFull(root, rel string, startLine, endLine int) (string, string, err
 	if err != nil {
 		return "", "", err
 	}
-	text := string(data) // TODO: 密钥等脱敏
+	text := sensitive.RedActText(string(data))
 	lines := splitLines(text)
 	totalLines := len(lines)
 	var selectedLines []string

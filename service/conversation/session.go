@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Service) DeleteSession(ctx context.Context, userID, sessionID string) error {
-	err := s.session.Delete(ctx, userID, sessionID)
+	err := s.sessions.Delete(ctx, userID, sessionID)
 	if err != nil {
 		logger.Error("DeleteSession Delete error=%v user=%s session=%s", err, userID, sessionID)
 		return err
@@ -19,7 +19,7 @@ func (s *Service) DeleteSession(ctx context.Context, userID, sessionID string) e
 
 func (s *Service) ListSession(ctx context.Context,
 	user *common.UserInfo, req *dto.ListSession) (*dto.ListSessionResp, error) {
-	items, total, err := s.session.ListByUser(ctx, user.UserID, req.Pager)
+	items, total, err := s.sessions.ListByUser(ctx, user.UserID, req.Pager)
 	if err != nil {
 		logger.Error("ListSession ListByUser error=%v user=%s req=%+v", err, user, req)
 		return nil, err
@@ -34,7 +34,7 @@ func (s *Service) ListSession(ctx context.Context,
 }
 
 func (s *Service) GetSessionInfo(ctx context.Context, userID string, req *dto.GetSessionInfo) (*dto.SessionInfo, error) {
-	session, err := s.session.GetByID(ctx, req.SessionID)
+	session, err := s.sessions.GetByID(ctx, req.SessionID)
 	if err != nil {
 		logger.Error("GetSessionInfo GetByID error=%v user=%s req=%+v", err, userID, req)
 		return nil, err
@@ -43,7 +43,7 @@ func (s *Service) GetSessionInfo(ctx context.Context, userID string, req *dto.Ge
 		logger.Warn("GetSessionInfo GetByID this session not own user=%s req=%+v", userID, req)
 		return nil, nil
 	}
-	messages, total, err := s.session.ListMessage(ctx, userID, req.SessionID, req.Pager)
+	messages, total, err := s.sessions.ListMessage(ctx, userID, req.SessionID, req.Pager)
 	if err != nil {
 		logger.Error("GetSessionInfo ListMessage error=%v user=%s req=%+v", err, userID, req)
 		return nil, err

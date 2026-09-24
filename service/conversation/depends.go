@@ -11,6 +11,7 @@ import (
 	"edu.agent.code/service/agent/runner"
 	"edu.agent.code/service/cost"
 	"edu.agent.code/service/rag"
+	"edu.agent.code/service/tool/provider"
 	"edu.agent.code/utils/dsml"
 	"edu.agent.code/utils/logger"
 	"fmt"
@@ -38,6 +39,7 @@ type serviceRepos struct {
 type serviceDeps struct {
 	tools         conversationTools
 	repo          serviceRepos
+	toolProvider  provider.IProvider
 	composeRunner *adk.Runner
 	visibleTools  map[string]bool
 	cost          *cost.Service
@@ -47,15 +49,41 @@ type serviceDeps struct {
 func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps, err error) {
 	// TODO tools handlers ragTool
 	conf := a.GetConfig()
-	chatModel, err := buildChatModel(ctx, a.GetConfig())
+	// 处理工具集
+	toolProvider := provider.NewProvider(a)
+	toolGroups, err := toolProvider.Load(ctx)
 	if err != nil {
+		logger.Error("loading tool provider err", err)
 		return serviceDeps{}, err
 	}
-
+	defer func() {
+		if err != nil {
+			err = toolProvider.Close()
+			if err != nil {
+				logger.Error("closing tool provider err", err)
+			}
+		}
+	}()
+	tools := conversationTools{
+		analysis: toolGroups.Analysis,
+		direct:   toolGroups.Direct,
+		qa:       toolGroups.QA,
+		report:   toolGroups.Report,
+	}
+	// 前端可见工具集
+	visibleToolSet := buildVisibleToolSet(ctx, []string{}, toolGroups.Direct, toolGroups.QA, toolGroups.Analysis, toolGroups.Report)
+	// chatModel
+	chatModel, err := buildChatModel(ctx, a.GetConfig())
+	if err != nil {
+		logger.Error("buildChatModel err", err)
+		return serviceDeps{}, err
+	}
+	// TODO chatModel 中间件
 	var agentHandlers []adk.ChatModelAgentMiddleware
-
-	tools := conversationTools{}
+	// 数据层
 	repo := buildRepo(a)
+	// TODO RAG 工具
+	// 主agent + adk Runner
 	composeRunner, err := buildComposeRunner(
 		chatModel,
 		tools,
@@ -68,11 +96,13 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps
 		logger.Error("buildComposeRunner err:", err)
 		return serviceDeps{}, err
 	}
+	// 返回依赖
 	return serviceDeps{
 		tools:         tools,
+		toolProvider:  toolProvider,
 		repo:          repo,
 		composeRunner: composeRunner,
-		visibleTools:  nil,
+		visibleTools:  visibleToolSet,
 		cost:          cost.NewService(a),
 		rag:           nil,
 	}, nil
@@ -85,6 +115,30 @@ func buildRepo(adaptor adaptor.IAdaptor) serviceRepos {
 		sessions:        session.NewSession(adaptor),
 		checkPointStore: checkpoint.NewCheckPoint(adaptor),
 	}
+}
+
+func buildVisibleToolSet(
+	ctx context.Context,
+	toolName []string,
+	toolLists ...[]tool.BaseTool,
+) map[string]bool {
+	visibleToolSet := make(map[string]bool)
+	for _, name := range toolName {
+		visibleToolSet[name] = true
+	}
+	for _, toolList := range toolLists {
+		for _, item := range toolList {
+			if item == nil {
+				continue
+			}
+			info, err := item.Info(ctx)
+			if err != nil || info == nil || info.Name == "" {
+				continue
+			}
+			visibleToolSet[info.Name] = true
+		}
+	}
+	return visibleToolSet
 }
 
 func buildComposeRunner(chatModel model.ToolCallingChatModel,

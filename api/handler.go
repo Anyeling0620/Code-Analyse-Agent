@@ -8,6 +8,7 @@ import (
 	"edu.agent.code/service/cost"
 	"edu.agent.code/service/dto"
 	"edu.agent.code/service/quota"
+	"edu.agent.code/service/rag"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
@@ -17,20 +18,44 @@ type Handler struct {
 	cost    *cost.Service
 	quota   *quota.Service
 	session *conversation.Service
+	rag     *rag.Service
 }
 
-func NewHandler(ctx context.Context, adaptor adaptor.IAdaptor) *Handler {
-	session, _ := conversation.NewService(ctx, adaptor)
+func NewHandler(ctx context.Context, adaptor adaptor.IAdaptor) (*Handler, error) {
+	conversationSvc, err := conversation.NewService(ctx, adaptor)
+	if err != nil {
+		return nil, err
+	}
 	return &Handler{
 		adaptor: adaptor,
 		cost:    cost.NewService(adaptor),
 		quota:   quota.NewService(adaptor),
-		session: session,
-	}
+		session: conversationSvc,
+		rag:     rag.NewService(),
+	}, nil
 }
 
 func (h *Handler) GetQuotaService() *quota.Service {
 	return h.quota
+}
+
+func (h *Handler) Close() error {
+	if h == nil {
+		return nil
+	}
+	if h.session != nil {
+		err := h.session.Close()
+		if err != nil {
+			return err
+		}
+	}
+	if h.rag != nil {
+		err := h.rag.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *Handler) authUser(c *gin.Context) *common.UserInfo {

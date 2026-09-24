@@ -50,8 +50,16 @@ func main() {
 	}
 	fmt.Println(adpt)
 
-	apiHandler := api.NewHandler(ctx, adpt)
-	app := router.New(apiHandler)
+	handler, err := api.NewHandler(ctx, adpt)
+	if err != nil {
+		logger.Error("new api handler failed: %v", err)
+		os.Exit(1)
+	}
+	defer func(handler *api.Handler) {
+		_ = handler.Close()
+	}(handler)
+
+	app := router.New(handler)
 	srv := &http.Server{
 		Addr:              conf.Server.HTTPAddr,
 		Handler:           app,

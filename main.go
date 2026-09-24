@@ -50,7 +50,7 @@ func main() {
 	}
 	fmt.Println(adpt)
 
-	apiHandler := api.NewHandler(adpt)
+	apiHandler := api.NewHandler(ctx, adpt)
 	app := router.New(apiHandler)
 	srv := &http.Server{
 		Addr:              conf.Server.HTTPAddr,

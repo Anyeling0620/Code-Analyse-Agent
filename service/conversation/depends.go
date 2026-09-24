@@ -52,7 +52,7 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps
 		return serviceDeps{}, err
 	}
 
-	agentHandlers := []adk.ChatModelAgentMiddleware{}
+	var agentHandlers []adk.ChatModelAgentMiddleware
 
 	tools := conversationTools{}
 	repo := buildRepo(a)

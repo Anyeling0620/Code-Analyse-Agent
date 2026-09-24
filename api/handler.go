@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"edu.agent.code/adaptor"
 	"edu.agent.code/common"
 	"edu.agent.code/service/conversation"
@@ -18,12 +19,13 @@ type Handler struct {
 	session *conversation.Service
 }
 
-func NewHandler(adaptor adaptor.IAdaptor) *Handler {
+func NewHandler(ctx context.Context, adaptor adaptor.IAdaptor) *Handler {
+	session, _ := conversation.NewService(ctx, adaptor)
 	return &Handler{
 		adaptor: adaptor,
 		cost:    cost.NewService(adaptor),
 		quota:   quota.NewService(adaptor),
-		session: conversation.NewService(adaptor),
+		session: session,
 	}
 }
 

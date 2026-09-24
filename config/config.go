@@ -31,6 +31,7 @@ type Config struct {
 	SQLite     SQLite     `yaml:"sqlite"`
 	DeepSeek   DeepSeek   `yaml:"deepseek"`
 	OTel       OTel       `yaml:"otel"`
+	MCP        MCP        `yaml:"mcp"`
 	Agents     Agents     `yaml:"agents"`
 	ModelPrice ModelPrice `yaml:"model_price"`
 	WorkSpace  WorkSpace  `yaml:"workspace"`
@@ -47,6 +48,27 @@ type SQLite struct {
 	Path string `yaml:"path"`
 }
 
+type MCP struct {
+	Enable  bool        `yaml:"enable"`
+	Servers []MCPServer `yaml:"servers"`
+}
+
+type MCPServer struct {
+	Name           string            `yaml:"name"`             // Server 名，用于日志和默认工具名前缀。
+	Enabled        bool              `yaml:"enabled"`          // 是否启用该 Server；未配置时按启用处理。
+	Transport      string            `yaml:"transport"`        // stdio 或 sse streamable。
+	URL            string            `yaml:"url"`              // sse transport endpoint。
+	Command        string            `yaml:"command"`          // stdio transport 命令。
+	Args           []string          `yaml:"args"`             // stdio transport 参数。
+	Env            map[string]string `yaml:"env"`              // stdio transport 环境变量增量。
+	Headers        map[string]string `yaml:"headers"`          // MCP 请求 headers。
+	ToolPrefix     string            `yaml:"tool_prefix"`      // 暴露给模型的工具名前缀；为空默认使用 name。
+	Groups         []string          `yaml:"groups"`           // 这些工具加载到哪些agent中，direct、analysis、qa；为空默认 analysis。
+	IncludeTools   []string          `yaml:"include_tools"`    // 只加载这些 MCP 原始工具名，空表示加载所有的。
+	ExcludeTools   []string          `yaml:"exclude_tools"`    // 排除这些 MCP 原始工具名。
+	Required       bool              `yaml:"required"`         // true 表示该 Server 加载失败时服务启动失败。
+	InitTimeoutSec int               `yaml:"init_timeout_sec"` // 初始化超时秒数。
+}
 type DeepSeek struct {
 	APIKey  string `yaml:"api_key"`
 	BaseURL string `yaml:"base_url"`

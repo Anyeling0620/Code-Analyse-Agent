@@ -11,16 +11,16 @@ import (
 	"github.com/cloudwego/eino/components/tool"
 )
 
-type LocalProvider struct {
+type LocalLoader struct {
 	conf *config.Config
 	// TODO 后续可加入MySQL
 }
 
-func NewLocalProvider(conf *config.Config) *LocalProvider {
-	return &LocalProvider{conf}
+func NewLocalLoader(conf *config.Config) *LocalLoader {
+	return &LocalLoader{conf}
 }
 
-func (l *LocalProvider) Load(ctx context.Context) (Groups, error) {
+func (l *LocalLoader) Load(ctx context.Context) (Groups, error) {
 	analysisTools, err := newAnalysisTools()
 	if err != nil {
 		return Groups{}, err
@@ -41,7 +41,7 @@ func (l *LocalProvider) Load(ctx context.Context) (Groups, error) {
 	}, nil
 }
 
-func (l *LocalProvider) Close() error {
+func (l *LocalLoader) Close() error {
 	return nil
 }
 

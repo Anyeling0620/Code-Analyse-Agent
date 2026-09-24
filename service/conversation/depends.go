@@ -4,6 +4,7 @@ import (
 	"context"
 	"edu.agent.code/adaptor"
 	"edu.agent.code/adaptor/repo/approval"
+	"edu.agent.code/adaptor/repo/checkpoint"
 	"edu.agent.code/adaptor/repo/profile"
 	"edu.agent.code/adaptor/repo/session"
 	"edu.agent.code/config"
@@ -28,7 +29,7 @@ type conversationTools struct {
 }
 
 type serviceRepos struct {
-	approvals       approval.Approval
+	approvals       approval.IApproval
 	checkPointStore adk.CheckPointStore
 	profiles        profile.IProfile
 	sessions        session.ISession
@@ -54,7 +55,7 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps
 	agentHandlers := []adk.ChatModelAgentMiddleware{}
 
 	tools := conversationTools{}
-	repo := serviceRepos{}
+	repo := buildRepo(a)
 	composeRunner, err := buildComposeRunner(
 		chatModel,
 		tools,
@@ -75,6 +76,15 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps
 		cost:          cost.NewService(a),
 		rag:           nil,
 	}, nil
+}
+
+func buildRepo(adaptor adaptor.IAdaptor) serviceRepos {
+	return serviceRepos{
+		approvals:       approval.NewApproval(adaptor),
+		profiles:        profile.NewProfile(adaptor),
+		sessions:        session.NewSession(adaptor),
+		checkPointStore: checkpoint.NewCheckPoint(adaptor),
+	}
 }
 
 func buildComposeRunner(chatModel model.ToolCallingChatModel,

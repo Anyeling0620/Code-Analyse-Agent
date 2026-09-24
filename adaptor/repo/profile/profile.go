@@ -12,7 +12,7 @@ import (
 
 type IProfile interface {
 	GetByUserID(ctx context.Context, userId int64) (*do.Profile, error)
-	Upsert(ctx context.Context, profile *do.Profile) (*do.Profile, error)
+	Upsert(ctx context.Context, profile *do.Profile) error
 }
 
 type Profile struct {

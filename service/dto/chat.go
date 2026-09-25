@@ -37,11 +37,12 @@ type SessionContext struct {
 }
 
 type ChatResult struct {
-	Answer    string          `json:"answer"`
-	SessionID string          `json:"session_id"`
-	UsedTools []string        `json:"used_tools"`
-	Profile   *Profile        `json:"profile"`
-	Session   *SessionContext `json:"session"`
+	Answer           string          `json:"answer"`
+	ReasoningContent string          `json:"reasoning_content"`
+	SessionID        string          `json:"session_id"`
+	UsedTools        []string        `json:"used_tools"`
+	Profile          *Profile        `json:"profile"`
+	Session          *SessionContext `json:"session"`
 }
 
 type ChatStreamEvent struct {
@@ -91,7 +92,9 @@ type ChatRunState struct {
 	UserID            string                   `json:"user_id"`
 	TraceID           string                   `json:"trace_id"`
 	SessionID         string                   `json:"session_id"`
+	Question          string                   `json:"question"`
 	Answer            string                   `json:"answer"`
+	ReasoningContent  string                   `json:"reasoning_content"`
 	UsedTools         []string                 `json:"used_tools"`
 	ToolCallMap       map[string]ToolCallState `json:"tool_call_map"`
 	RenderEvents      []ChatStreamEvent        `json:"render_events"`

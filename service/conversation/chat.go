@@ -19,22 +19,31 @@ import (
 
 type ChatEmit func(event dto.ChatStreamEvent) error
 
-func (s *Service) ChatStream(
-	ctx context.Context,
-	req dto.ChatRequest,
-	emit ChatEmit) error {
+// ChatCompletion 非流式
+func (s *Service) ChatCompletion(ctx context.Context, req dto.ChatRequest) (*dto.ChatResult, error) {
+	return s.executeChat(ctx, req, nil)
+}
+
+// ChatStream 流式
+func (s *Service) ChatStream(ctx context.Context, req dto.ChatRequest, emit ChatEmit) error {
+	_, err := s.executeChat(ctx, req, emit)
+	return err
+}
+
+// 核心消息处理
+func (s *Service) executeChat(ctx context.Context, req dto.ChatRequest, emit ChatEmit) (*dto.ChatResult, error) {
 	startedAt := time.Now()
 	userID := req.UserID
 	profile, err := s.prepareProfile(ctx, userID, req.Profile)
 	if err != nil {
 		logger.Error("prepareProfile failed", zap.Error(err), zap.Any("req", req))
-		return err
+		return nil, err
 	}
 
 	session, err := s.prepareSession(ctx, userID, req.SessionID)
 	if err != nil {
 		logger.Error("prepareSession failed", zap.Error(err), zap.Any("req", req))
-		return err
+		return nil, err
 	}
 
 	updateProjectContextFromMessage(session, req.Message)
@@ -49,18 +58,19 @@ func (s *Service) ChatStream(
 		})
 		if err != nil {
 			logger.Error("emit failed", zap.Error(err), zap.Any("req", req))
-			return err
+			return nil, err
 		}
 	}
 
 	messages, err := s.buildMessageWithHistory(ctx, userID, session, profile, req.Message)
 	if err != nil {
 		logger.Error("buildMessageWithHistory failed", zap.Error(err), zap.Any("req", req))
-		return err
+		return nil, err
 	}
 	runState := &dto.ChatRunState{
 		UserID:      userID,
 		TraceID:     req.TraceID,
+		Question:    req.Message,
 		SessionID:   session.SessionID,
 		ToolCallMap: map[string]dto.ToolCallState{},
 	}
@@ -68,13 +78,45 @@ func (s *Service) ChatStream(
 	checkPointID := fmt.Sprintf("session:%s turn:%s", session.SessionID, common.GetUUIDHex())
 	ctx = common.WithCheckPointID(ctx, checkPointID)
 	iter := s.composeRunner.Run(ctx, messages, adk.WithCheckPointID(checkPointID))
+	// 不管是否成功 都需要保存会话
+	defer func() {
+		err = s.persistSession(ctx, session, runState)
+		if err != nil {
+			logger.Error("persistSession failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
+		}
+	}()
+
 	err = s.consumeAgentEvents(ctx, iter, runState, emit)
 	// TODO 保存会话 就算中断报错了 也要把 runState 存起来
 	if err != nil {
 		logger.Error("run failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
+		return nil, err
 	}
-	fmt.Println(time.Since(startedAt))
-	return nil
+	// 跑到这说明没有消息输出了
+	result := &dto.ChatResult{
+		Answer:           runState.Answer,
+		ReasoningContent: runState.ReasoningContent,
+		SessionID:        session.SessionID,
+		UsedTools:        runState.UsedTools,
+		Profile:          profile,
+		Session:          session,
+	}
+	if emit != nil {
+		err = emit(dto.ChatStreamEvent{
+			Type:       consts.SseEventTypeDone,
+			TraceID:    runState.TraceID,
+			SessionID:  runState.SessionID,
+			ElapseMS:   time.Since(startedAt).Milliseconds(),
+			Timestamp:  time.Now().Format(time.DateTime),
+			Visibility: "user",
+			Result:     result,
+		})
+		if err != nil {
+			logger.Error("ChatStream emit failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
+			return nil, err
+		}
+	}
+	return result, nil
 }
 
 func (s *Service) buildMessageWithHistory(ctx context.Context, userID string,

@@ -152,7 +152,7 @@ func (s *Session) AppendMessage(ctx context.Context, msg *do.ChatMessageRecord) 
 		RenderEvents: gconv.String(msg.RenderEvents),
 		CreatedAt:    msg.CreatedAt,
 	}
-	return s.db.WithContext(ctx).Create(row).Error
+	return s.db.WithContext(ctx).Create(&row).Error
 }
 
 func (s *Session) Upsert(ctx context.Context, session *do.SessionContext) error {
@@ -167,7 +167,7 @@ func (s *Session) Upsert(ctx context.Context, session *do.SessionContext) error 
 		CurrentProjectName: session.CurrentProjectName,
 		UpdatedAt:          time.Now(),
 	}
-	return s.db.WithContext(ctx).Save(row).Error
+	return s.db.WithContext(ctx).Save(&row).Error
 }
 
 // Delete 删除Session再删除ChatMessage有异议， 可能顺序反了

@@ -3,9 +3,13 @@ package conversation
 import (
 	"context"
 	"edu.agent.code/common"
+	"edu.agent.code/service/do"
 	"edu.agent.code/service/dto"
 	"edu.agent.code/utils/logger"
+	"github.com/cloudwego/eino/schema"
 	"github.com/jinzhu/copier"
+	"go.uber.org/zap"
+	"time"
 )
 
 func (s *Service) DeleteSession(ctx context.Context, userID, sessionID string) error {
@@ -58,4 +62,52 @@ func (s *Service) GetSessionInfo(ctx context.Context, userID string, req *dto.Ge
 		Total:   total,
 	}, err
 
+}
+
+func (s *Service) persistSession(ctx context.Context, session *dto.SessionContext, runState *dto.ChatRunState) error {
+	if runState == nil {
+		return nil
+	}
+	if runState.Question != "" {
+		err := s.sessions.AppendMessage(ctx, &do.ChatMessageRecord{
+			SessionID: session.SessionID,
+			UserID:    session.UserID,
+			Role:      string(schema.User),
+			Content:   runState.Question,
+			CreatedAt: time.Now(),
+		})
+		if err != nil {
+			logger.Error("persistSession AppendMessage error", zap.Any("session", session), zap.Any("runState", runState))
+			return err
+		}
+		if runState.Answer != "" {
+			renderEvents := make([]do.ChatStreamEvent, 0, len(runState.RenderEvents))
+			_ = copier.Copy(&renderEvents, &runState.RenderEvents)
+			err = s.sessions.AppendMessage(ctx, &do.ChatMessageRecord{
+				SessionID:    session.SessionID,
+				UserID:       session.UserID,
+				Role:         string(schema.Assistant),
+				Content:      runState.Answer,
+				RenderEvents: renderEvents,
+				CreatedAt:    time.Now(),
+			})
+			if err != nil {
+				logger.Error("persistSession AppendMessage error", zap.Any("session", session), zap.Any("runState", runState), zap.Any("renderEvents", renderEvents))
+				return err
+			}
+		}
+	}
+	session.SessionID = runState.SessionID
+	session.LastUserMessage = runState.Question
+	session.LastAssistantMsg = runState.Answer
+	session.Summary = summarySession(runState.Question, runState.Answer)
+
+	doSession := do.SessionContext{}
+	_ = copier.Copy(&doSession, session)
+
+	if err := s.sessions.Upsert(ctx, &doSession); err != nil {
+		logger.Error("persistSession Upsert error", zap.Any("session", session), zap.Any("runState", runState), zap.Any("doSession", doSession))
+		return err
+	}
+	return nil
 }

@@ -8,6 +8,9 @@ import (
 )
 
 func appendIfMissing(slice []string, s string) []string {
+	if len(s) == 0 {
+		return slice
+	}
 	for _, ele := range slice {
 		if ele == s {
 			return slice
@@ -71,4 +74,14 @@ func toolResultFormat(toolName, content string) string {
 		content += "\n\n ***内容过长已截断，完整内容已经提交模型继续写处理*"
 	}
 	return content
+}
+
+func summarySession(question, answer string) string {
+	// TODO 后续修改不应直接截断，可以使用 LLM 进行总结
+	text := fmt.Sprintf("上次用户提问:%s, 系统回答:%s", question, answer)
+	runes := []rune(text)
+	if len(runes) > 1000 {
+		return string(runes[:1000]) + "..."
+	}
+	return string(runes)
 }

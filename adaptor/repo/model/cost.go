@@ -3,7 +3,7 @@ package model
 import "time"
 
 type CostRecord struct {
-	ID               string `gorm:"primary_key;AUTO_INCREMENT"`
+	ID               int64  `gorm:"primaryKey;autoIncrement"` // Check 主键需为整型自增才能匹配物理列 cost_records.id(integer PRIMARY KEY AUTOINCREMENT)；原 string + 未被解析的 AUTO_INCREMENT 会让 GORM 以空串写入 id，触发 datatype mismatch
 	UserID           string `gorm:"size:128;index"`
 	SessionID        string `gorm:"size:128;index"`
 	Model            string `gorm:"size:32"`

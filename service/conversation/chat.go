@@ -186,7 +186,7 @@ func appendProfileLine(b *strings.Builder, label, value string) {
 }
 
 func buildHistoryMessages(records []do.ChatMessageRecord) ([]*schema.Message, error) {
-	messages := make([]*schema.Message, len(records))
+	messages := make([]*schema.Message, 0, len(records)) // Check 原为 len(records)，随后 append 会在历史消息前留下 len(records) 个 nil 元素传给模型
 	for _, record := range records {
 		switch record.Role {
 		case string(schema.User):
@@ -238,10 +238,12 @@ func (s *Service) prepareProfile(ctx context.Context,
 	if doProfile == nil {
 		doProfile = &do.Profile{UserID: userID}
 	}
-	// 不为空才写入 和PPT不同
-	if inputProfile == nil {
-		copier.Copy(&profile, inputProfile)
-		copier.Copy(&doProfile, &inputProfile)
+	// Check 原条件反了：只有入参 profile 非空时才应复制并落库，原先永远不会写入
+	// TODO 较大异议
+	if inputProfile != nil {
+		_ = copier.Copy(&profile, inputProfile)
+		_ = copier.Copy(&doProfile, &inputProfile)
+		doProfile.UserID = userID
 		err = s.profiles.Upsert(ctx, doProfile)
 		if err != nil {
 			logger.Error("upsert profile failed", zap.Error(err))

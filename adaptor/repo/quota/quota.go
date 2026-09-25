@@ -29,7 +29,7 @@ func (q *Quota) Increment(ctx context.Context, userID, day string) (int64, error
 			insert into quota_usage (user_id, day, count) values (?, ?, 1)
 			on conflict (user_id, day) do update set count = count + 1`,
 			userID, day)
-	if tx != nil {
+	if tx.Error != nil { // Check 原为 tx != nil 恒为真，成功时也提前 return 0，导致配额计数永远是 0
 		return 0, tx.Error
 	}
 	return q.QueryByToday(ctx, userID, day)

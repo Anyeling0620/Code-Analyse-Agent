@@ -27,10 +27,10 @@ func NewService(adaptor adaptor.IAdaptor) *Service {
 
 // Track TODO: 价格计算按高峰期计算，没有分时期
 func (s *Service) Track(ctx context.Context, userID, sessionID, modelName, toolName string, prompt, completion int64) error {
-	if prompt < 0 && completion < 0 {
+	if prompt < 0 || completion < 0 { // Check 原为 && 导致只屏蔽"双负数"，任一为负都应视为无效用量
 		return nil
 	}
-	rate, ok := s.lookupRate(modelName)
+	rate, ok := s.lookupRate(modelName) // TODO 可能的缺陷:prompt_tokens 含 prompt cache 命中部分（实测 1152/1364），缓存命中单价更低，统一按 prompt 单价算会高估成本
 	if !ok {
 		err := fmt.Errorf("model %s not found", modelName)
 		logger.Warn("cost:%v, fallback=%s", err, s.price.FallbackModel)

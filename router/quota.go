@@ -15,7 +15,7 @@ func Quota(svc *quota.Service, whiteList map[string]bool) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		if svc != nil {
+		if svc == nil { // Check 原为 svc != nil，导致配额/限流中间件在服务存在时被整体跳过（等同于没有配额）
 			c.Next()
 			return
 		}
@@ -39,7 +39,7 @@ func Quota(svc *quota.Service, whiteList map[string]bool) gin.HandlerFunc {
 			return
 		}
 
-		today := time.Now().Format(time.DateTime)
+		today := time.Now().Format(time.DateOnly) // Check 原为 time.DateTime，配额按 (user_id, day) 统计，秒级 key 使计数永不累加；与 api/quota.go、model.QuotaUsage 的 YYYY-MM-DD 口径对齐
 		count, err := svc.Increment(c.Request.Context(), user.UserID, today)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{

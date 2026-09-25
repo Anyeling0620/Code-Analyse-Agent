@@ -81,3 +81,17 @@ type ChatMessageRecord struct {
 	RenderEvents []ChatStreamEvent `json:"render_events"`
 	CreatedAt    time.Time         `json:"created_at"`
 }
+
+type ToolCallState struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type ChatRunState struct {
+	Answer            string                   `json:"answer"`
+	UsedTools         []string                 `json:"used_tools"`
+	ToolCallMap       map[string]ToolCallState `json:"tool_call_map"`
+	RenderEvents      []ChatStreamEvent        `json:"render_events"`
+	PendingApprovalID string                   `json:"pending_approval_id"`
+	Interrupted       bool                     `json:"interrupted"`
+}

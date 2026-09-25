@@ -11,7 +11,7 @@ import (
 )
 
 type IProfile interface {
-	GetByUserID(ctx context.Context, userId int64) (*do.Profile, error)
+	GetByUserID(ctx context.Context, userId string) (*do.Profile, error)
 	Upsert(ctx context.Context, profile *do.Profile) error
 }
 
@@ -25,7 +25,7 @@ func NewProfile(adaptor adaptor.IAdaptor) *Profile {
 	}
 }
 
-func (p *Profile) GetByUserID(ctx context.Context, userId int64) (*do.Profile, error) {
+func (p *Profile) GetByUserID(ctx context.Context, userId string) (*do.Profile, error) {
 	var profile model.Profile
 	err := p.db.WithContext(ctx).
 		Where("user_id = ?", userId).

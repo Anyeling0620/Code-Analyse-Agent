@@ -43,9 +43,9 @@ func (s *Service) GetSessionInfo(ctx context.Context, userID string, req *dto.Ge
 		logger.Warn("GetSessionInfo GetByID this session not own user=%s req=%+v", userID, req)
 		return nil, nil
 	}
-	messages, total, err := s.sessions.ListMessage(ctx, userID, req.SessionID, req.Pager)
+	messages, total, err := s.sessions.ListMessages(ctx, userID, req.SessionID, req.Pager)
 	if err != nil {
-		logger.Error("GetSessionInfo ListMessage error=%v user=%s req=%+v", err, userID, req)
+		logger.Error("GetSessionInfo ListMessages error=%v user=%s req=%+v", err, userID, req)
 		return nil, err
 	}
 	resultSession := &dto.SessionContext{}

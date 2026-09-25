@@ -93,6 +93,7 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps
 		nil,
 	)
 	if err != nil {
+		_ = err.Error()
 		logger.Error("buildComposeRunner err:", err)
 		return serviceDeps{}, err
 	}
@@ -160,6 +161,7 @@ func buildComposeRunner(chatModel model.ToolCallingChatModel,
 		WithRagTool(ragTool).Build()
 
 	if err != nil {
+		_ = err.Error()
 		logger.Error("build compose runner error:", err)
 		return nil, fmt.Errorf("build compose runner error: %w", err)
 	}

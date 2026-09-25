@@ -17,7 +17,7 @@ import (
 type ISession interface {
 	GetByID(ctx context.Context, sessionID string) (*do.SessionContext, error)
 	ListByUser(ctx context.Context, userID string, pager dto.Pager) ([]*do.SessionContext, int64, error)
-	ListMessage(ctx context.Context, userID, sessionID string, pager dto.Pager) ([]do.ChatMessageRecord, int64, error)
+	ListMessages(ctx context.Context, userID, sessionID string, pager dto.Pager) ([]do.ChatMessageRecord, int64, error)
 	AppendMessage(ctx context.Context, msg *do.ChatMessageRecord) error
 	Upsert(ctx context.Context, session *do.SessionContext) error
 	Delete(ctx context.Context, userID, sessionID string) error
@@ -98,9 +98,9 @@ func (s *Session) ListByUser(cx context.Context, userID string, pager dto.Pager)
 	return results, count, err
 }
 
-func (s *Session) ListMessage(ctx context.Context, userID, sessionID string, pager dto.Pager) ([]do.ChatMessageRecord, int64, error) {
+func (s *Session) ListMessages(ctx context.Context, userID, sessionID string, pager dto.Pager) ([]do.ChatMessageRecord, int64, error) {
 	var rows []*model.ChatMessage
-	tx := s.db.WithContext(ctx).
+	tx := s.db.WithContext(ctx).Model(&model.ChatMessage{}).
 		Where("user_id = ? AND session_id = ?", userID, sessionID)
 	var count int64
 	if err := tx.Count(&count).Error; err != nil {

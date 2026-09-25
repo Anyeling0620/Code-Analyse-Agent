@@ -29,7 +29,7 @@ type Service struct {
 	toolProvider provider.IProvider
 
 	profiles  profile.IProfile
-	approvals approval.Approval
+	approvals approval.IApproval
 
 	cost *cost.Service
 	rag  *rag.Service
@@ -46,10 +46,10 @@ func NewService(ctx context.Context, adaptor adaptor.IAdaptor) (*Service, error)
 		conf:          conf,
 		toolProvider:  deps.toolProvider,
 		composeRunner: deps.composeRunner,
-		visibleTools:  nil,
-		profiles:      nil,
-		sessions:      nil,
-		approvals:     approval.Approval{},
+		visibleTools:  deps.visibleTools,
+		profiles:      profile.NewProfile(adaptor),
+		sessions:      session.NewSession(adaptor),
+		approvals:     approval.NewApproval(adaptor),
 		cost:          deps.cost,
 		rag:           nil,
 	}, nil

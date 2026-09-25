@@ -37,7 +37,8 @@ func (l *LocalLoader) Load(ctx context.Context) (Groups, error) {
 		Direct:   directTools,
 		Analysis: analysisTools,
 		QA:       qaTools,
-		Report:   nil,
+		// TODO Repost Tool 未实现，定义为 qaTool
+		Report: qaTools,
 	}, nil
 }
 

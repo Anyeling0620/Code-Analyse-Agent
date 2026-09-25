@@ -118,6 +118,11 @@ func (s *Service) handleMessage(
 		return nil
 	}
 	// TODO 记录 token 消耗
+	err := s.trackUsage(ctx, runState, msg, event.AgentName)
+	if err != nil {
+		logger.Error("handleMessage trackUsage error", zap.Any("runState", runState), zap.Any("err", err))
+		// 不要中断
+	}
 	if len(msg.ToolCalls) > 0 {
 		return s.handleToolCall(emit, runState, event, msg)
 	}

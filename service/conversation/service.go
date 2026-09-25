@@ -8,10 +8,14 @@ import (
 	"edu.agent.code/adaptor/repo/session"
 	"edu.agent.code/config"
 	"edu.agent.code/service/cost"
+	"edu.agent.code/service/dto"
 	"edu.agent.code/service/rag"
 	"edu.agent.code/service/tool/provider"
+	"edu.agent.code/utils/logger"
 	"errors"
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/schema"
+	"go.uber.org/zap"
 )
 
 type Service struct {
@@ -65,4 +69,27 @@ func (s *Service) Close() error {
 		err = errors.Join(err, closeErr)
 	}
 	return err
+}
+
+func (s *Service) trackUsage(
+	ctx context.Context,
+	runState *dto.ChatRunState,
+	msg *schema.Message,
+	agentName string) error {
+	if s.modelName == "" || msg == nil || runState == nil || msg.ResponseMeta == nil || msg.ResponseMeta.Usage == nil {
+		return nil
+	}
+	usage := msg.ResponseMeta.Usage
+	prompt, completion := int64(usage.PromptTokens), int64(usage.CompletionTokens)
+	err := s.cost.Track(ctx, runState.UserID, runState.SessionID, s.modelName, agentName, prompt, completion)
+	if err != nil {
+		logger.Error("cost.Track err",
+			zap.Any("modelName", s.modelName),
+			zap.Any("agentName", agentName),
+			zap.Any("runState", runState),
+			zap.Any("msg", msg),
+			zap.Error(err))
+		return err
+	}
+	return nil
 }

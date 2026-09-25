@@ -3,21 +3,24 @@ package provider
 import (
 	"context"
 	"edu.agent.code/config"
+	"edu.agent.code/service/tool/db_report"
 	"edu.agent.code/service/tool/http_request"
 	"edu.agent.code/service/tool/project_scan"
 	"edu.agent.code/service/tool/project_search"
 	"edu.agent.code/service/tool/read_files"
 	"edu.agent.code/service/tool/terminal"
+	"edu.agent.code/utils/logger"
+	"errors"
 	"github.com/cloudwego/eino/components/tool"
 )
 
 type LocalLoader struct {
-	conf *config.Config
-	// TODO 后续可加入MySQL
+	conf       *config.Config
+	dbReporter *db_report.DBReport
 }
 
 func NewLocalLoader(conf *config.Config) *LocalLoader {
-	return &LocalLoader{conf}
+	return &LocalLoader{conf: conf}
 }
 
 func (l *LocalLoader) Load(ctx context.Context) (Groups, error) {
@@ -33,16 +36,35 @@ func (l *LocalLoader) Load(ctx context.Context) (Groups, error) {
 	if err != nil {
 		return Groups{}, err
 	}
+
+	dbReportTools, dbReporter, err := newReportTools(l.conf)
+	if err != nil {
+		if dbReporter != nil {
+			closeErr := dbReporter.Close()
+			if closeErr != nil {
+				logger.Error("close LocalLoader failed", closeErr)
+			}
+		}
+		return Groups{}, err
+	}
+	l.dbReporter = dbReporter
+
 	return Groups{
 		Direct:   directTools,
 		Analysis: analysisTools,
 		QA:       qaTools,
-		// TODO Repost Tool 未实现，定义为 qaTool
-		Report: qaTools,
+		Report:   dbReportTools,
 	}, nil
 }
 
 func (l *LocalLoader) Close() error {
+	if l.dbReporter != nil {
+		closeErr := l.dbReporter.Close()
+		if closeErr != nil {
+			logger.Error("close loader failed", closeErr)
+			return closeErr
+		}
+	}
 	return nil
 }
 
@@ -88,4 +110,23 @@ func newDirectTools() ([]tool.BaseTool, error) {
 		return nil, err
 	}
 	return []tool.BaseTool{terminalTool, httpRequestTool}, nil
+}
+
+func newReportTools(conf *config.Config) ([]tool.BaseTool, *db_report.DBReport, error) {
+	if conf == nil || conf.DatabaseReport.Enable == false {
+		return []tool.BaseTool{}, nil, nil
+	}
+	reporter, err := db_report.NewDBReport(conf.DatabaseReport)
+	if err != nil {
+		return nil, nil, err
+	}
+	tools, err := db_report.NewTools(reporter)
+	if err != nil {
+		closeErr := reporter.Close()
+		if closeErr != nil {
+			logger.Error("close reporter failed", closeErr)
+		}
+		return nil, nil, errors.Join(err, closeErr)
+	}
+	return tools, reporter, nil
 }

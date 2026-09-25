@@ -10,6 +10,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"go.uber.org/zap"
 	"io"
+	"time"
 )
 
 func (s *Service) consumeAgentEvents(
@@ -43,22 +44,15 @@ func (s *Service) consumeAgentEvents(
 		output := event.Output.MessageOutput
 		if output.IsStreaming && output.MessageStream != nil {
 			// 处理流式内容
-			stream := output.MessageStream
-			fullMsg := ""
-			for {
-				msg, err := stream.Recv()
-
-				if errors.Is(err, io.EOF) {
-					break
+			err := s.consumeMessageStream(ctx, output, event, runState, emit)
+			if err != nil {
+				logger.Error("consumeAgentEvents consumeMessageStream error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+				err = emitMarkDownBlock(emit, runState, consts.SseEventTypeError, event.AgentName, err.Error())
+				if err != nil {
+					logger.Error("consumeAgentEvents emitMarkDownBlock error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
 				}
-				fullMsg = fullMsg + msg.Content
-
+				return err
 			}
-			emit(dto.ChatStreamEvent{
-				Type:  consts.SseEventTypeProgress,
-				Delta: fullMsg,
-			})
-
 			continue
 		}
 		// 如果不是流式
@@ -73,6 +67,45 @@ func (s *Service) consumeAgentEvents(
 	return nil
 }
 
+func (s *Service) consumeMessageStream(
+	ctx context.Context,
+	output *adk.TypedMessageVariant[*schema.Message],
+	event *adk.AgentEvent,
+	runState *dto.ChatRunState,
+	emit ChatEmit,
+) error {
+	if output.IsStreaming && output.MessageStream != nil {
+		// 处理流式内容
+		stream := output.MessageStream
+		defer stream.Close()
+
+		fullMsg := ""
+		for {
+			msg, err := stream.Recv()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					logger.Info("consumeMessageStream EOF",
+						zap.Any("event", event),
+						zap.Any("runState", runState),
+						zap.Any("message", fullMsg))
+					break
+				}
+				return err
+			}
+			fullMsg = fullMsg + msg.Content
+			err = s.handleMessage(ctx, msg, output, event, runState, emit)
+			if err != nil {
+				logger.Error("consumeMessageStream handleMessage")
+			}
+			return err
+
+		}
+		return nil
+	}
+
+	return nil
+}
+
 func (s *Service) handleMessage(
 	ctx context.Context,
 	msg *schema.Message,
@@ -81,5 +114,97 @@ func (s *Service) handleMessage(
 	runState *dto.ChatRunState,
 	emit ChatEmit,
 ) error {
-	return nil
+	if msg == nil {
+		return nil
+	}
+	// TODO 记录 token 消耗
+	if len(msg.ToolCalls) > 0 {
+		err := emitMarkDownBlock(
+			emit,
+			runState,
+			consts.SseEventTypeProgress,
+			event.AgentName,
+			msg.Content)
+		if err != nil {
+			logger.Error("handleMessage emitMarkdownBlock error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+
+			return err
+		}
+
+		// 调用工具
+		for _, call := range msg.ToolCalls {
+			toolName := call.Function.Name
+			runState.UsedTools = appendIfMissing(runState.UsedTools, toolName)
+			if call.ID != "" {
+				runState.ToolCallMap[call.ID] = dto.ToolCallState{
+					Name:      toolName,
+					Arguments: call.Function.Arguments,
+				}
+			}
+			emitEvent := dto.ChatStreamEvent{
+				Type:          consts.SseEventTypeToolCall,
+				TraceID:       runState.TraceID,
+				SessionID:     runState.SessionID,
+				ToolName:      toolName,
+				ToolCallID:    call.ID,
+				ToolArguments: call.Function.Arguments,
+				ContentKind:   "tool",
+				RenderMode:    "append_tool",
+				Visibility:    "user",
+				Timestamp:     time.Now().UTC().Format(time.DateTime),
+			}
+
+			recordRenderEvent(runState, emitEvent)
+
+			if emit != nil {
+				if err := emit(emitEvent); err != nil {
+					logger.Error("handleMessage emitEvent error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+					return err
+				}
+			}
+
+		}
+		return nil
+	}
+	// 工具调用
+	if msg.Role == schema.Tool {
+		toolName := msg.ToolName
+		if toolName == "" && msg.ToolCallID != "" {
+			toolName = runState.ToolCallMap[msg.ToolCallID].Name
+		}
+		runState.UsedTools = appendIfMissing(runState.UsedTools, toolName)
+		emitEvent := dto.ChatStreamEvent{
+			Type:        consts.SseEventTypeToolCall,
+			TraceID:     runState.TraceID,
+			SessionID:   runState.SessionID,
+			ToolName:    toolName,
+			ToolCallID:  msg.ToolCallID,
+			ToolResult:  toolResultFormat(toolName, msg.Content),
+			ContentKind: "tool",
+			RenderMode:  "append_tool",
+			Visibility:  "user",
+			Timestamp:   time.Now().UTC().Format(time.DateTime),
+		}
+
+		recordRenderEvent(runState, emitEvent)
+
+		if emit != nil {
+			if err := emit(emitEvent); err != nil {
+				logger.Error("handleMessage emitEvent error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+				return err
+			}
+		}
+		return nil
+	}
+	// 如果只是流式输出 跳过
+	isAssistantText := msg.Role == schema.Assistant || (output.IsStreaming && msg.Role == "")
+	if !isAssistantText {
+		return nil
+	}
+	if output.IsStreaming {
+		runState.Answer = runState.Answer + msg.Content
+		return emitMarkDownBlock(emit, runState, consts.SseEventTypeDelta, event.AgentName, msg.Content)
+	}
+	// TODO 如果不是流式呢？疑惑
+	return emitMarkDownBlock(emit, runState, consts.SseEventTypeProgress, event.AgentName, msg.Content)
 }

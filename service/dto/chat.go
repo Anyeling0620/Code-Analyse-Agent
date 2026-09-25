@@ -88,6 +88,9 @@ type ToolCallState struct {
 }
 
 type ChatRunState struct {
+	UserID            string                   `json:"user_id"`
+	TraceID           string                   `json:"trace_id"`
+	SessionID         string                   `json:"session_id"`
 	Answer            string                   `json:"answer"`
 	UsedTools         []string                 `json:"used_tools"`
 	ToolCallMap       map[string]ToolCallState `json:"tool_call_map"`

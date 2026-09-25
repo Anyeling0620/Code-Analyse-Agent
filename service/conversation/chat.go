@@ -59,15 +59,19 @@ func (s *Service) ChatStream(
 		return err
 	}
 	runState := &dto.ChatRunState{
+		UserID:      userID,
+		TraceID:     req.TraceID,
+		SessionID:   session.SessionID,
 		ToolCallMap: map[string]dto.ToolCallState{},
 	}
 
 	checkPointID := fmt.Sprintf("session:%s turn:%s", session.SessionID, common.GetUUIDHex())
 	ctx = common.WithCheckPointID(ctx, checkPointID)
 	iter := s.composeRunner.Run(ctx, messages, adk.WithCheckPointID(checkPointID))
-	for event, ok := iter.Next(); ok; event, ok = iter.Next() {
-		fmt.Println(event)
-		fmt.Println(runState)
+	err = s.consumeAgentEvents(ctx, iter, runState, emit)
+	// TODO 保存会话 就算中断报错了 也要把 runState 存起来
+	if err != nil {
+		logger.Error("run failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
 	}
 	fmt.Println(time.Since(startedAt))
 	return nil

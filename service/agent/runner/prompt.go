@@ -1,8 +1,6 @@
 package runner
 
 import (
-	"context"
-	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/prompt"
 	"github.com/cloudwego/eino/schema"
 )
@@ -40,11 +38,3 @@ var mainChatTemplate = prompt.FromMessages(
 	schema.SystemMessage(RemoteGitRepositoryWorkflowInstruction),
 	schema.MessagesPlaceholder("history", true),
 )
-
-func genMainModelInputWithHistory(ctx context.Context, _ string, input *adk.AgentInput) ([]adk.Message, error) {
-	var history []adk.Message
-	if input != nil {
-		history = input.Messages
-	}
-	return mainChatTemplate.Format(ctx, map[string]any{"history": history})
-}

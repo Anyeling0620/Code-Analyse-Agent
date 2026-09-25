@@ -1,8 +1,6 @@
 package project_qa
 
 import (
-	"context"
-	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/prompt"
 	"github.com/cloudwego/eino/schema"
 )
@@ -44,13 +42,3 @@ var projectQAChatTemplate = prompt.FromMessages(
 	schema.SystemMessage(ProjectQAInstruction),
 	schema.MessagesPlaceholder("history", true),
 )
-
-func genProjectQAInput(ctx context.Context, _ string, input *adk.AgentInput) ([]adk.Message, error) {
-	var history []adk.Message
-	if input != nil {
-		history = input.Messages
-	}
-	return projectQAChatTemplate.Format(ctx, map[string]any{
-		"history": history,
-	})
-}

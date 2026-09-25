@@ -27,14 +27,15 @@ var (
 
 //goland:noinspection SpellCheckingInspection
 type Config struct {
-	Server     Server     `yaml:"server"`
-	SQLite     SQLite     `yaml:"sqlite"`
-	DeepSeek   DeepSeek   `yaml:"deepseek"`
-	OTel       OTel       `yaml:"otel"`
-	MCP        MCP        `yaml:"mcp"`
-	Agents     Agents     `yaml:"agents"`
-	ModelPrice ModelPrice `yaml:"model_price"`
-	WorkSpace  WorkSpace  `yaml:"workspace"`
+	Server         Server         `yaml:"server"`
+	SQLite         SQLite         `yaml:"sqlite"`
+	DeepSeek       DeepSeek       `yaml:"deepseek"`
+	OTel           OTel           `yaml:"otel"`
+	MCP            MCP            `yaml:"mcp"`
+	DatabaseReport DatabaseReport `yaml:"database_report"`
+	Agents         Agents         `yaml:"agents"`
+	ModelPrice     ModelPrice     `yaml:"model_price"`
+	WorkSpace      WorkSpace      `yaml:"workspace"`
 }
 
 type Server struct {
@@ -46,6 +47,16 @@ type Server struct {
 
 type SQLite struct {
 	Path string `yaml:"path"`
+}
+
+type DatabaseReport struct {
+	Enable          bool   `yaml:"enable"`
+	Driver          string `yaml:"driver"`
+	DSN             string `yaml:"dsn"`
+	Database        string `yaml:"database"`
+	MaxRows         int    `yaml:"max_rows"`
+	MaxCellRunes    int    `yaml:"max_cell_runes"`
+	QueryTimeoutSec int    `yaml:"query_timeout_sec"`
 }
 
 type MCP struct {

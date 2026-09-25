@@ -2,6 +2,8 @@ package runner
 
 import (
 	"context"
+	"edu.agent.code/service/agent"
+	"edu.agent.code/service/agent/db_report"
 	"edu.agent.code/service/agent/project_qa"
 	"edu.agent.code/service/agent/repo_analyzer"
 	"edu.agent.code/service/consts"
@@ -139,6 +141,7 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 创建 SubAgent 并封装为工具
 	repoAnalyzerTool, err := c.buildAnalyzerAgent()
 	if err != nil {
 		return nil, err
@@ -147,10 +150,16 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 	if err != nil {
 		return nil, err
 	}
+	dbReportTool, err := c.buildDBReportAgent()
+	if err != nil {
+		return nil, err
+	}
 
-	agentTools := []tool.BaseTool{repoAnalyzerTool, projectQaTool}
+	agentTools := []tool.BaseTool{repoAnalyzerTool, projectQaTool, dbReportTool}
 	returnDirectly := map[string]bool{
-		RepoAnalyzerAgentName: true,
+		repo_analyzer.Name: true,
+		project_qa.Name:    true,
+		db_report.Name:     true,
 	}
 	agentTools = append(agentTools, c.directTool...)
 
@@ -174,7 +183,7 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 				ReturnDirectly:     returnDirectly,
 				EmitInternalEvents: true,
 			},
-			GenModelInput: genMainModelInputWithHistory,
+			GenModelInput: agent.GetGenModelInputFunc(mainChatTemplate),
 			MaxIterations: c.maxIterations.Compose,
 			Handlers:      handlers,
 		},
@@ -218,4 +227,20 @@ func (c *ComposeRunner) buildProjectQaAgent() (tool.BaseTool, error) {
 		return nil, err
 	}
 	return adk.NewAgentTool(c.ctx, projectQA, adk.WithFullChatHistoryAsInput()), nil
+}
+
+func (c *ComposeRunner) buildDBReportAgent() (tool.BaseTool, error) {
+	dbReport, err := db_report.NewDBReportAgentWithOptions(
+		c.ctx,
+		c.chatModel,
+		c.reportTool,
+		c.toolMiddleWare,
+		db_report.Options{
+			MaxIterations: c.maxIterations.DBReport,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return adk.NewAgentTool(c.ctx, dbReport, adk.WithFullChatHistoryAsInput()), nil
 }

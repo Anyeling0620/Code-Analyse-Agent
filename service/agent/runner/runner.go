@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"edu.agent.code/service/agent/project_qa"
 	"edu.agent.code/service/agent/repo_analyzer"
 	"edu.agent.code/service/consts"
 	"fmt"
@@ -142,8 +143,12 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 	if err != nil {
 		return nil, err
 	}
+	projectQaTool, err := c.buildProjectQaAgent()
+	if err != nil {
+		return nil, err
+	}
 
-	agentTools := []tool.BaseTool{repoAnalyzerTool}
+	agentTools := []tool.BaseTool{repoAnalyzerTool, projectQaTool}
 	returnDirectly := map[string]bool{
 		RepoAnalyzerAgentName: true,
 	}
@@ -197,4 +202,20 @@ func (c *ComposeRunner) buildAnalyzerAgent() (tool.BaseTool, error) {
 	}
 	return adk.NewAgentTool(c.ctx, analyzer), nil
 
+}
+
+func (c *ComposeRunner) buildProjectQaAgent() (tool.BaseTool, error) {
+	projectQA, err := project_qa.NewQaAgentWithOptions(
+		c.ctx,
+		c.chatModel,
+		c.qaTool,
+		c.toolMiddleWare,
+		project_qa.Options{
+			MaxIterations: c.maxIterations.ProjectQA,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return adk.NewAgentTool(c.ctx, projectQA, adk.WithFullChatHistoryAsInput()), nil
 }

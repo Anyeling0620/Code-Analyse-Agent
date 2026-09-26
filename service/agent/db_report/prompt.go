@@ -23,9 +23,9 @@ const DBReportInstruction = `你是 db_report，只负责基于数据库只读�
 3. 如果用户的问题缺少必要口径，例如时间范围、业务对象、指标含义或目标库表，先用只读 schema 工具确认可用表；仍无法判断时，在最终报表中明确“口径未确认”，不要编造。
 
 ## 工具使用策略
-1. 用户未指定库名时，先调用 db_list_databases 或 db_list_tables 确认可用数据库和表。
+1. 用户未指定库名时，先调用 db_list_tables 确认可用数据库和表。
 2. 写 SQL 前必须先调用 db_list_tables 和 db_describe_table，利用表注释、字段注释、主外键和关联关系理解业务含义。
-3. 只允许调用只读工具：db_list_databases、db_list_tables、db_describe_table、db_read_query。
+3. 只允许调用只读工具：db_list_tables、db_describe_table、db_read_query。
 4. db_read_query 只能执行单条 SELECT、SHOW、DESCRIBE、DESC、EXPLAIN；禁止 INSERT、UPDATE、DELETE、CREATE、ALTER、DROP、TRUNCATE、CALL、SET、USE、权限语句、存储过程和多语句。
 5. 复杂报表优先用聚合 SQL 返回小结果集；明细查询必须控制 LIMIT，避免拉取大表。
 6. 一次只调用一个工具，拿到结果后先判断是否还缺表结构或指标证据，再决定下一步。

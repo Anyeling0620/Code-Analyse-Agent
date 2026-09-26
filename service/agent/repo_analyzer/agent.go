@@ -46,10 +46,9 @@ func NewAnalyzerWithOptions(
 		TaskToolDescriptionGenerator: repoAnalyzerTaskToolDescription,
 		Handlers: []adk.ChatModelAgentMiddleware{
 			force_answer.NewForceAnswerHandler(force_answer.Config{
-				MaxIterations:  opts.MaxIterations,
-				ActiveKey:      repoAnalyzerForceReportActiveKey,
-				Instruction:    repoAnalyzerForceReportInstruction,
-				FallbackAnswer: "", // TODO 未实现兜底提示词
+				MaxIterations: opts.MaxIterations,
+				ActiveKey:     repoAnalyzerForceReportActiveKey,
+				Instruction:   repoAnalyzerForceReportInstruction,
 			}),
 		},
 	})

@@ -41,10 +41,9 @@ func NewQaAgentWithOptions(
 		// 因为要强制出报告 需要做一个中间件强制出
 		Handlers: []adk.ChatModelAgentMiddleware{
 			force_answer.NewForceAnswerHandler(force_answer.Config{
-				MaxIterations:  opts.MaxIterations,
-				ActiveKey:      projectQAForceAnswerActiveKey,
-				Instruction:    projectQAForceAnswerInstruction,
-				FallbackAnswer: "", // TODO 未实现兜底提示词
+				MaxIterations: opts.MaxIterations,
+				ActiveKey:     projectQAForceAnswerActiveKey,
+				Instruction:   projectQAForceAnswerInstruction,
 			}),
 		},
 	})

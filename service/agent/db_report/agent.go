@@ -41,10 +41,9 @@ func NewDBReportAgentWithOptions(
 		// 因为要强制出报告 需要做一个中间件强制出
 		Handlers: []adk.ChatModelAgentMiddleware{
 			force_answer.NewForceAnswerHandler(force_answer.Config{
-				MaxIterations:  opts.MaxIterations,
-				ActiveKey:      dbReportForceAnswerActiveKey,
-				Instruction:    dbReportForceAnswerInstruction,
-				FallbackAnswer: dbReportForcedFallbackAnswer,
+				MaxIterations: opts.MaxIterations,
+				ActiveKey:     dbReportForceAnswerActiveKey,
+				Instruction:   dbReportForceAnswerInstruction,
 			}),
 		},
 	})

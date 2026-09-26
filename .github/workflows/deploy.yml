@@ -43,11 +43,29 @@ jobs:
           file code-analyse-agent
           file code-analyse-agent | grep -q "ELF 64-bit" || (echo "not linux elf" && exit 1)
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build Frontend
+        run: |
+          cd web
+          npm ci
+          npm run build
+
+      - name: Package Frontend
+        run: tar -czf web-dist.tar.gz -C web/dist .
+
       - name: Publish Binary
         uses: softprops/action-gh-release@v2
         with:
           tag_name: deploy-latest
-          files: code-analyse-agent
+          files: |
+            code-analyse-agent
+            web-dist.tar.gz
           fail_on_unmatched_files: true
 
       - name: Deploy on Server
@@ -59,8 +77,10 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -eu
-            cd /home/github/Code-Analyse-Agent
-            URL="https://github.com/${{ github.repository }}/releases/download/deploy-latest/code-analyse-agent"
+
+            # ---- 后端 ----
+            cd /www/server/analyse.jxutcm.top
+            URL="https://ghfast.top/https://github.com/${{ github.repository }}/releases/download/deploy-latest/code-analyse-agent"
             rm -f code-analyse-agent.new
             curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 -o code-analyse-agent.new "$URL" \
               || curl -fsSL --noproxy '*' --retry 3 --connect-timeout 10 -o code-analyse-agent.new "$URL"
@@ -70,3 +90,21 @@ jobs:
             systemctl restart code-analyse-agent
             sleep 2
             systemctl status code-analyse-agent --no-pager
+            curl -fsS --max-time 5 http://127.0.0.1:8088/healthz && echo "backend healthz ok"
+
+            # ---- 前端 ----
+            cd /www/wwwroot/analyse.jxutcm.top
+            WEB_URL="https://ghfast.top/https://github.com/${{ github.repository }}/releases/download/deploy-latest/web-dist.tar.gz"
+            rm -rf .incoming
+            mkdir -p .incoming
+            curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 -o .incoming/dist.tar.gz "$WEB_URL" \
+              || curl -fsSL --noproxy '*' --retry 3 --connect-timeout 10 -o .incoming/dist.tar.gz "$WEB_URL"
+            test -s .incoming/dist.tar.gz
+            tar -xzf .incoming/dist.tar.gz -C .incoming
+            test -f .incoming/index.html
+            rm -f .incoming/dist.tar.gz
+            rm -rf assets index.html
+            cp -a .incoming/. .
+            rm -rf .incoming
+            chmod -R a+rX . 2>/dev/null || true
+            ls -1

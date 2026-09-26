@@ -23,7 +23,7 @@ function TableWithDownload({ children }: { children: React.ReactNode }) {
     if (!table) return;
 
     const rows: string[][] = [];
-    const collectCells = (cellList: HTMLCollectionOf<HTMLTableCellElement>) => {
+    const collectCells = (cellList: NodeListOf<HTMLTableCellElement>) => {
       const cells: string[] = [];
       cellList.forEach((cell) => cells.push(cell.textContent?.trim() ?? ''));
       return cells;
@@ -33,9 +33,9 @@ function TableWithDownload({ children }: { children: React.ReactNode }) {
       const ths = tr.querySelectorAll('th');
       const tds = tr.querySelectorAll('td');
       if (ths.length > 0) {
-        rows.push(collectCells(ths as any));
+        rows.push(collectCells(ths));
       } else if (tds.length > 0) {
-        rows.push(collectCells(tds as any));
+        rows.push(collectCells(tds));
       }
     });
 

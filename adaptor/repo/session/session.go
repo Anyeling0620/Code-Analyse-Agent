@@ -65,7 +65,7 @@ func truncateContent(text string) string {
 
 func (s *Session) ListByUser(cx context.Context, userID string, pager dto.Pager) ([]*do.SessionContext, int64, error) {
 	var rows []*model.Session
-	tx := s.db.WithContext(cx).
+	tx := s.db.Model(&model.Session{}).WithContext(cx).
 		Where("user_id = ?", userID)
 	var count int64
 	if err := tx.Count(&count).Error; err != nil {

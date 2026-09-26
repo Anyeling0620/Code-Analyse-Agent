@@ -9,9 +9,23 @@ import (
 	"time"
 )
 
-func (h *Handler) ChatCompletion(c *gin.Context) {
-	fmt.Println("chat finish")
-	return
+func (h *Handler) ChatCompletion(ctx *gin.Context) {
+	var req dto.ChatRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		h.writeResp(ctx, nil, common.ParamError.WithError(err))
+		return
+	}
+	user := h.authUser(ctx)
+	req.UserID = user.UserID
+	traceID := h.traceIDFrom(ctx)
+	req.TraceID = traceID
+	ctx.Set(common.CtxKeyTraceID, traceID)
+	resp, err := h.session.ChatCompletion(ctx, req)
+	if err != nil {
+		h.writeResp(ctx, nil, common.ServerError.WithError(err))
+		return
+	}
+	h.writeResp(ctx, resp, common.OK)
 }
 
 func (h *Handler) ChatStream(ctx *gin.Context) {

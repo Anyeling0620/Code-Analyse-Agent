@@ -3,3 +3,8 @@ agent_code_local.yml
 data/edu.agent.code.db
 main
 main.exe
+
+web/node_modules
+
+
+

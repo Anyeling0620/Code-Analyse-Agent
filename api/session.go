@@ -23,7 +23,7 @@ func (h *Handler) ListSessions(ctx *gin.Context) {
 }
 func (h *Handler) DeleteSession(ctx *gin.Context) {
 	user := h.authUser(ctx)
-	sessionID := ctx.Param("session_id")
+	sessionID := ctx.Query("session_id")
 	err := h.session.DeleteSession(ctx.Request.Context(), user.UserID, sessionID)
 	if err != nil {
 		h.writeResp(ctx, nil, common.ServerError.WithError(err))

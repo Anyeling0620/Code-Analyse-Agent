@@ -59,6 +59,9 @@ jobs:
       - name: Package Frontend
         run: tar -czf web-dist.tar.gz -C web/dist .
 
+      - name: Compress Binary
+        run: gzip -9 -k code-analyse-agent
+
       - name: Upload Artifacts
         uses: appleboy/scp-action@v1.0.0
         with:
@@ -66,12 +69,12 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           port: ${{ secrets.SSH_PORT }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "code-analyse-agent,web-dist.tar.gz"
+          source: "code-analyse-agent.gz,web-dist.tar.gz"
           target: "/tmp/analyse-deploy"
           rm: true
           overwrite: true
           timeout: 120s
-          command_timeout: 10m
+          command_timeout: 15m
 
       - name: Publish Binary
         uses: softprops/action-gh-release@v2
@@ -95,8 +98,9 @@ jobs:
 
             # ---- 后端 ----
             cd /www/server/analyse.jxutcm.top
-            test -s "$UPLOAD/code-analyse-agent"
-            cp -f "$UPLOAD/code-analyse-agent" code-analyse-agent.new
+            test -s "$UPLOAD/code-analyse-agent.gz"
+            gzip -t "$UPLOAD/code-analyse-agent.gz"
+            gzip -dc "$UPLOAD/code-analyse-agent.gz" > code-analyse-agent.new
             chmod +x code-analyse-agent.new
             mv -f code-analyse-agent.new code-analyse-agent
             systemctl restart code-analyse-agent

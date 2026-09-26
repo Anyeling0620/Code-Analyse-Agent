@@ -104,7 +104,7 @@ func (r *DBReport) Close() error {
 func (r *DBReport) ListTables(ctx context.Context, input ListTablesInput) (string, error) {
 	database, err := r.resolveDatabase(ctx, input.Database)
 	if err != nil {
-		return "", err
+		return err.Error(), nil
 	}
 	// 需要知道引擎？
 	query := `SELECT TABLE_NAME AS table_name,
@@ -115,7 +115,7 @@ func (r *DBReport) ListTables(ctx context.Context, input ListTablesInput) (strin
 			  FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME`
 	rows, err := r.queryRows(ctx, query, database)
 	if err != nil {
-		return "", err
+		return err.Error(), nil
 	}
 	var b strings.Builder
 	_, _ = fmt.Fprintf(&b, "database=%s tables=%d\n\n", database, len(rows.rows))
@@ -217,10 +217,10 @@ func (r *DBReport) resolveDatabase(ctx context.Context, inputDBName string) (str
 	}
 	result, err := r.queryRows(ctx, "SELECT DATABASE() AS database_name")
 	if err != nil {
-		return "", err
+		return err.Error(), nil
 	}
 	if len(result.rows) == 0 || len(result.rows[0]) == 0 {
-		return "", errors.New("database not found")
+		return "Database not found", nil
 	}
 	return result.rows[0][0], nil
 }

@@ -8,6 +8,11 @@ import (
 const (
 	dbReportForceAnswerActiveKey   = "db_report_force_answer_active"
 	dbReportForceAnswerInstruction = `系统已达到本轮数据库报表最大查询轮次。现在不要再调用任何工具，请基于已确认的表结构、字段业务含义和查询结果，直接输出最终中文 Markdown 报表；证据不足的字段用“未确认”标注。`
+	dbReportForcedFallbackAnswer   = `
+		| 状态 | 说明 |
+		| --- | --- |
+		| 未完成 | 已达到本轮数据库报表最大查询轮次，且模型没有按要求输出最终报表。 |
+		| 建议 | 缩小统计口径后重试，例如指定业务时间范围、目标表、指标字段或分组维度。 |`
 )
 
 const DBReportInstruction = `你是 db_report，只负责基于数据库只读查询生成中文 Markdown 报表。

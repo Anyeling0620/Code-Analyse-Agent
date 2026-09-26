@@ -3,6 +3,7 @@ package db_report
 import (
 	"context"
 	"edu.agent.code/service/agent"
+	"edu.agent.code/service/agent/force_answer"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
@@ -38,6 +39,13 @@ func NewDBReportAgentWithOptions(
 		GenModelInput: agent.GetGenModelInputFunc(dbReportChatTemplate),
 		MaxIterations: opts.MaxIterations,
 		// 因为要强制出报告 需要做一个中间件强制出
-		Handlers: []adk.ChatModelAgentMiddleware{},
+		Handlers: []adk.ChatModelAgentMiddleware{
+			force_answer.NewForceAnswerHandler(force_answer.Config{
+				MaxIterations:  opts.MaxIterations,
+				ActiveKey:      dbReportForceAnswerActiveKey,
+				Instruction:    dbReportForceAnswerInstruction,
+				FallbackAnswer: dbReportForcedFallbackAnswer,
+			}),
+		},
 	})
 }

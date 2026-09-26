@@ -87,7 +87,7 @@ func (s *Service) executeChat(ctx context.Context, req dto.ChatRequest, emit Cha
 	}()
 
 	err = s.consumeAgentEvents(ctx, iter, runState, emit)
-	// TODO 保存会话 就算中断报错了 也要把 runState 存起来
+	// 保存会话 就算中断报错了 也要把 runState 存起来
 	if err != nil {
 		logger.Error("run failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
 		return nil, err

@@ -2,6 +2,7 @@ package repo_analyzer
 
 import (
 	"context"
+	"edu.agent.code/service/agent/force_answer"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/prebuilt/deep"
 	"github.com/cloudwego/eino/components/model"
@@ -43,7 +44,14 @@ func NewAnalyzerWithOptions(
 		WithoutGeneralSubAgent:       true,
 		MaxIteration:                 opts.MaxIterations,
 		TaskToolDescriptionGenerator: repoAnalyzerTaskToolDescription,
-		Handlers:                     []adk.ChatModelAgentMiddleware{},
+		Handlers: []adk.ChatModelAgentMiddleware{
+			force_answer.NewForceAnswerHandler(force_answer.Config{
+				MaxIterations:  opts.MaxIterations,
+				ActiveKey:      repoAnalyzerForceReportActiveKey,
+				Instruction:    repoAnalyzerForceReportInstruction,
+				FallbackAnswer: "", // TODO 未实现兜底提示词
+			}),
+		},
 	})
 }
 

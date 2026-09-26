@@ -156,7 +156,7 @@ func buildComposeRunner(chatModel model.ToolCallingChatModel,
 		WithDirectTool(tools.direct).
 		WithReportTool(tools.report).
 		WithCheckPoint(repo.checkPointStore).
-		WithMaxIterations(buildIterationLimits(conf.Agents.MazIterations)).
+		WithMaxIterations(buildIterationLimits(conf.Agents.MaxIterations)).
 		WithAgentHandler(agentHandler).
 		WithRagTool(ragTool).Build()
 
@@ -173,8 +173,8 @@ func buildIterationLimits(conf config.AgentMaxIterations) runner.IterationLimits
 	return runner.IterationLimits{
 		Compose:              conf.Compose,
 		ProjectQA:            conf.ProjectQA,
-		RepoAnalyzer:         conf.ReportAnalyzer,
-		RepoAnalyzerSubAgent: conf.RepAnalyzerSubAgent,
+		RepoAnalyzer:         conf.RepoAnalyzer,
+		RepoAnalyzerSubAgent: conf.RepoAnalyzerSubAgent,
 		DBReport:             conf.DBReport,
 	}
 }

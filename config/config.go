@@ -110,15 +110,15 @@ type ModelPriceCNY struct {
 
 type Agents struct {
 	EnableChinese bool               `yaml:"enable_cn"`
-	MazIterations AgentMaxIterations `yaml:"maz_iterations"`
+	MaxIterations AgentMaxIterations `yaml:"max_iterations"`
 }
 
 type AgentMaxIterations struct {
-	Compose             int `yaml:"compose"`
-	ProjectQA           int `yaml:"project_qa"`
-	ReportAnalyzer      int `yaml:"report_analyzer"`
-	RepAnalyzerSubAgent int `yaml:"rep_analyzer_sub_agent"`
-	DBReport            int `yaml:"db_report"`
+	Compose              int `yaml:"compose"`
+	ProjectQA            int `yaml:"project_qa"`
+	RepoAnalyzer         int `yaml:"repo_analyzer"`
+	RepoAnalyzerSubAgent int `yaml:"repo_analyzer_sub_agent"`
+	DBReport             int `yaml:"db_report"`
 }
 
 func init() {

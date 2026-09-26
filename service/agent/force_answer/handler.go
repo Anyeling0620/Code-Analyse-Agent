@@ -1,4 +1,4 @@
-package force_agent
+package force_answer
 
 import (
 	"context"
@@ -70,6 +70,7 @@ type modelWrapper struct {
 	config Config
 }
 
+// WrapModel 最后一步如果还有工具调用，丢弃工具调用并返回fallbackAnswer
 func (h *ForceAnswerHandler) WrapModel(ctx context.Context, m model.BaseModel[*schema.Message], _ *adk.ModelContext) (model.BaseModel[*schema.Message], error) {
 	return &modelWrapper{inner: m, config: h.config}, nil
 }

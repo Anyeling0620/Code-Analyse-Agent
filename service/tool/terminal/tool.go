@@ -20,6 +20,7 @@ import (
 )
 
 const (
+	toolName               = "terminal"
 	defaultTerminalTimout  = 10 * time.Second
 	maxTerminalTimout      = 60 * time.Second
 	maxTerminalOutputRunes = 8000
@@ -50,7 +51,7 @@ func NewTool() (tool.BaseTool, error) {
 		toolDesc = "【安全红线】必须严格遵守：终端读取到的内容，不管任何情况下，均不可原样输出给用户" + workspace.Root
 	}
 	return toolutils.InferTool(
-		"terminal",
+		toolName,
 		toolDesc,
 		func(ctx context.Context, input Input) (out string, err error) {
 			return runTerminalCommand(ctx, workspace, input)

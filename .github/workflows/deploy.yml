@@ -59,6 +59,20 @@ jobs:
       - name: Package Frontend
         run: tar -czf web-dist.tar.gz -C web/dist .
 
+      - name: Upload Artifacts
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "code-analyse-agent,web-dist.tar.gz"
+          target: "/tmp/analyse-deploy"
+          rm: true
+          overwrite: true
+          timeout: 120s
+          command_timeout: 10m
+
       - name: Publish Binary
         uses: softprops/action-gh-release@v2
         with:
@@ -77,14 +91,12 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -eu
+            UPLOAD=/tmp/analyse-deploy
 
             # ---- 后端 ----
             cd /www/server/analyse.jxutcm.top
-            URL="https://ghfast.top/https://github.com/${{ github.repository }}/releases/download/deploy-latest/code-analyse-agent"
-            rm -f code-analyse-agent.new
-            curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 -o code-analyse-agent.new "$URL" \
-              || curl -fsSL --noproxy '*' --retry 3 --connect-timeout 10 -o code-analyse-agent.new "$URL"
-            test -s code-analyse-agent.new
+            test -s "$UPLOAD/code-analyse-agent"
+            cp -f "$UPLOAD/code-analyse-agent" code-analyse-agent.new
             chmod +x code-analyse-agent.new
             mv -f code-analyse-agent.new code-analyse-agent
             systemctl restart code-analyse-agent
@@ -94,17 +106,15 @@ jobs:
 
             # ---- 前端 ----
             cd /www/wwwroot/analyse.jxutcm.top
-            WEB_URL="https://ghfast.top/https://github.com/${{ github.repository }}/releases/download/deploy-latest/web-dist.tar.gz"
+            test -s "$UPLOAD/web-dist.tar.gz"
             rm -rf .incoming
             mkdir -p .incoming
-            curl -fsSL --retry 3 --retry-all-errors --connect-timeout 10 -o .incoming/dist.tar.gz "$WEB_URL" \
-              || curl -fsSL --noproxy '*' --retry 3 --connect-timeout 10 -o .incoming/dist.tar.gz "$WEB_URL"
-            test -s .incoming/dist.tar.gz
-            tar -xzf .incoming/dist.tar.gz -C .incoming
+            tar -xzf "$UPLOAD/web-dist.tar.gz" -C .incoming
             test -f .incoming/index.html
-            rm -f .incoming/dist.tar.gz
             rm -rf assets index.html
             cp -a .incoming/. .
             rm -rf .incoming
             chmod -R a+rX . 2>/dev/null || true
             ls -1
+
+            rm -rf "$UPLOAD"

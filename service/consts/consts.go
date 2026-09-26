@@ -27,3 +27,11 @@ const (
 	SseEventTypeDone       = "done"
 	SseEventTypeError      = "error"
 )
+
+const (
+	PendingStatusPending   = "pending"
+	PendingStatusApproval  = "approved"
+	PendingStatusRejected  = "rejected"
+	PendingStatusCancelled = "executed"
+	PendingStatusFailed    = "failed"
+)

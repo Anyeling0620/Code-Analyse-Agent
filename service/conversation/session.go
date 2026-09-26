@@ -31,9 +31,10 @@ func (s *Service) ListSession(ctx context.Context,
 	results := make([]*dto.SessionContext, 0, len(items))
 	_ = copier.Copy(&results, &items)
 	return &dto.ListSessionResp{
-		Total: total,
-		List:  results,
-		Pager: req.Pager,
+		Total:   total,
+		List:    results,
+		HasMore: int64(req.GetOffset()+len(items)) < total,
+		Pager:   req.Pager,
 	}, nil
 }
 

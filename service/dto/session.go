@@ -5,8 +5,9 @@ type ListSession struct {
 }
 
 type ListSessionResp struct {
-	Total int64             `json:"total"`
-	List  []*SessionContext `json:"list"`
+	Total   int64             `json:"total"`
+	List    []*SessionContext `json:"list"`
+	HasMore bool              `json:"has_more"`
 	Pager
 }
 

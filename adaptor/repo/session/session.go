@@ -107,7 +107,7 @@ func (s *Session) ListMessages(ctx context.Context, userID, sessionID string, pa
 		return nil, 0, err
 	}
 	err := tx.
-		Order("created_at, id DESC").
+		Order("created_at DESC, id DESC").
 		Offset(pager.GetOffset()).
 		Limit(pager.GetLimit()).
 		Find(&rows).Error
@@ -116,6 +116,12 @@ func (s *Session) ListMessages(ctx context.Context, userID, sessionID string, pa
 			return nil, 0, nil
 		}
 		return nil, 0, err
+	}
+
+	// 分页按时间倒序取"最新的一页"，返回前在本页内反转回时间升序：
+	// 保证第一页就是最新的一页，且页内旧消息在前、最新消息在后。
+	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+		rows[i], rows[j] = rows[j], rows[i]
 	}
 
 	unmarshalRenderEventFun := func(row string) []do.ChatStreamEvent {

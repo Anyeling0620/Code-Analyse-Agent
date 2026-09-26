@@ -78,18 +78,15 @@ func (s *Service) executeChat(ctx context.Context, req dto.ChatRequest, emit Cha
 	checkPointID := fmt.Sprintf("session:%s turn:%s", session.SessionID, common.GetUUIDHex())
 	ctx = common.WithCheckPointID(ctx, checkPointID)
 	iter := s.composeRunner.Run(ctx, messages, adk.WithCheckPointID(checkPointID))
-	// 不管是否成功 都需要保存会话
-	defer func() {
-		err = s.persistSession(ctx, session, runState)
-		if err != nil {
-			logger.Error("persistSession failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
-		}
-	}()
 
 	err = s.consumeAgentEvents(ctx, iter, runState, emit)
 	// 保存会话 就算中断报错了 也要把 runState 存起来
 	if err != nil {
 		logger.Error("run failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
+		err = s.persistSession(ctx, session, runState)
+		if err != nil {
+			logger.Error("persistSession failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
+		}
 		return nil, err
 	}
 	// 跑到这说明没有消息输出了
@@ -100,6 +97,12 @@ func (s *Service) executeChat(ctx context.Context, req dto.ChatRequest, emit Cha
 		UsedTools:        runState.UsedTools,
 		Profile:          profile,
 		Session:          session,
+	}
+
+	// 不管是否成功 都需要保存会话
+	err = s.persistSession(ctx, session, runState)
+	if err != nil {
+		logger.Error("persistSession failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
 	}
 	if emit != nil {
 		err = emit(dto.ChatStreamEvent{
@@ -116,6 +119,7 @@ func (s *Service) executeChat(ctx context.Context, req dto.ChatRequest, emit Cha
 			return nil, err
 		}
 	}
+
 	return result, nil
 }
 
@@ -141,7 +145,10 @@ func (s *Service) buildMessageWithHistory(ctx context.Context, userID string,
 
 	// 构建用户画像到消息
 	if profile != nil {
-		messages = append(messages, buildProfileMessage(profile))
+		msg := buildProfileMessage(profile)
+		if msg != nil {
+			messages = append(messages, buildProfileMessage(profile))
+		}
 	}
 	// 构建提示词
 	tpl := prompt.FromMessages(schema.FString,

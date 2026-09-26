@@ -107,7 +107,7 @@ func (s *Session) ListMessages(ctx context.Context, userID, sessionID string, pa
 		return nil, 0, err
 	}
 	err := tx.
-		Order("created_at DESC").
+		Order("created_at, id DESC").
 		Offset(pager.GetOffset()).
 		Limit(pager.GetLimit()).
 		Find(&rows).Error

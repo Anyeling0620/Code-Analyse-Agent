@@ -56,19 +56,19 @@ func runHTTPRequest(ctx context.Context, input HTTPRequestInput) (string, error)
 		method = http.MethodGet
 	}
 	if !isAllowedMethod(method) {
-		return "", fmt.Errorf("http method %s not allowed", method)
+		return fmt.Sprintf("http method %s not allowed", method), nil
 	}
 
 	targetURL := strings.TrimSpace(input.URL)
 	if targetURL == "" {
-		return "", fmt.Errorf("url couldn't be empty")
+		return "url couldn't be empty", nil
 	}
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
-		return "", fmt.Errorf("url parse error: %w", err)
+		return fmt.Sprintf("url parse error: %v", err), nil
 	}
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return "", fmt.Errorf("url scheme must be http or https")
+		return "url scheme must be http or https", nil
 	}
 	timeout := defaultHTTPTimeout
 	if input.TimeoutSec > 0 {
@@ -82,7 +82,7 @@ func runHTTPRequest(ctx context.Context, input HTTPRequestInput) (string, error)
 
 	req, err := http.NewRequestWithContext(reqCtx, method, parsedURL.String(), strings.NewReader(input.Body))
 	if err != nil {
-		return "", fmt.Errorf("build request error: %w", err)
+		return fmt.Sprintf("build request error: %v", err), nil
 	}
 	for key, value := range input.Headers {
 		req.Header.Set(key, value)
@@ -95,14 +95,14 @@ func runHTTPRequest(ctx context.Context, input HTTPRequestInput) (string, error)
 	resp, err := client.Do(req)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return "", fmt.Errorf("http request timeout")
+			return "http request timeout", nil
 		}
-		return "", fmt.Errorf("http request error: %w", err)
+		return fmt.Sprintf("http request error: %v", err), nil
 	}
 	defer resp.Body.Close()
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("http response body read error: %w", err)
+		return fmt.Sprintf("http response body read error: %v", err), nil
 	}
 	elapsed := time.Since(startedAt)
 	return formatHTTPRequestResult(resp, string(respBody), elapsed), nil

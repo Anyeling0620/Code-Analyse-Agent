@@ -42,21 +42,21 @@ func doReadFiles(ctx context.Context, input ReadFiles) (string, error) {
 	logger.Debug("doReadFiles", gconv.String(input))
 	root, err := pathutil.NormalizeExistingRoot(input.Root)
 	if err != nil {
-		return "", fmt.Errorf("invalid read_files argument: root 必须是项目根路径, files必须是相对路径字符串数组"+
+		return fmt.Sprintf("invalid read_files argument: root 必须是项目根路径, files必须是相对路径字符串数组"+
 			"正确示例: {\"root\": \"D:/workers/project\", \"files\": [\"route/route.go\"]};"+
 			"错误示例 : root=true, files=false;"+
-			"本次错误原因：%w", err)
+			"本次错误原因：%s", err), nil
 	}
 	if len(input.Files) == 0 {
-		return "", fmt.Errorf("invailid read_files arguments: files 不能为空, 必须指定相对路径的文件")
+		return fmt.Sprintf("invailid read_files arguments: files 不能为空, 必须指定相对路径的文件"), nil
 	}
-	if input.StartLine < 0 || input.EndLine < 0 || (input.StartLine > 0 && input.EndLine > 0 && input.StartLine > input.EndLine) {
-		return "", fmt.Errorf("invalid read_files argumentts start_line/end_line 必须非负，且start_line<end_line")
+	if input.StartLine <= 0 || input.EndLine <= 0 || (input.StartLine > 0 && input.EndLine > 0 && input.StartLine > input.EndLine) {
+		return fmt.Sprintf("invalid read_files argumentts start_line/end_line 必须非负，且start_line<end_line"), nil
 	}
 	requested := len(input.Files)
 	targets := input.Files
 	if len(targets) > maxReadFilesPerCall {
-		targets = targets[:maxReadExceptRunes]
+		targets = targets[:maxReadFilesPerCall]
 	}
 	var b strings.Builder
 	readCount := 0

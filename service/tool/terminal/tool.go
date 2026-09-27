@@ -76,10 +76,11 @@ func runTerminalCommand(ctx context.Context, workspace config.WorkSpace, input I
 	}
 	workDir, err := resolveExecutionWorkdir(workspace.Root, input.Workdir, commandText)
 	if err != nil {
-		return err.Error(), err
+		// workdir 不合法属于可修正的用法问题，作为提示文本回给模型，不让 ToolsNode 中断
+		return err.Error(), nil
 	}
 	if err := pathutil.EnsureAllowedByRoot(workDir, workspace.Root, workspace.EnableEscaped); err != nil {
-		return err.Error(), err
+		return err.Error(), nil
 	}
 	timeout := defaultTerminalTimout
 	if input.TimeoutSec > 0 {

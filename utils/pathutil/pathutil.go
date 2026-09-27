@@ -53,7 +53,7 @@ func SafeJoinUnderRoot(root, rel string) (string, error) {
 	rootClean := filepath.Clean(rootAbs)
 	pathClean := filepath.Clean(pathAbs)
 	prefix := rootClean + string(os.PathSeparator)
-	if pathClean != rootClean && strings.HasPrefix(pathClean, prefix) {
+	if pathClean != rootClean && !strings.HasPrefix(pathClean, prefix) {
 		return "", fmt.Errorf("path escape root: %s", rel)
 	}
 	return pathClean, nil

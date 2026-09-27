@@ -7,8 +7,9 @@ import (
 	"errors"
 	"fmt"
 	openaiembedding "github.com/cloudwego/eino-ext/components/embedding/openai"
-	milvusindexer "github.com/cloudwego/eino-ext/components/indexer/milvus"
-	milvusretriever "github.com/cloudwego/eino-ext/components/retriever/milvus"
+	milvusindexer "github.com/cloudwego/eino-ext/components/indexer/milvus2"
+	milvusretriever "github.com/cloudwego/eino-ext/components/retriever/milvus2"
+	"github.com/cloudwego/eino-ext/components/retriever/milvus2/search_mode"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 	"strings"
 	"time"
@@ -21,14 +22,14 @@ const (
 	defaultMetricType        = "COSINE"
 
 	fieldID      = "id"
-	filedContent = "content"
+	fieldContent = "content"
 )
 
 type Milvus struct {
 	client     *milvusclient.Client
 	collection string
 	indexer    *milvusindexer.Indexer
-	retriever  *milvusretriever.Client
+	retriever  *milvusretriever.Retriever
 	// TODO 如果知道是哪个模块 可以直接传一个模块 “更快更准？”
 }
 
@@ -91,7 +92,7 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 	}
 	client := adaptor.GetMilvusClient()
 	if client == nil {
-		return nil, fmt.Errorf("NewMilvus create embedder failed: client is nil")
+		return nil, fmt.Errorf("NewMilvus client is nil")
 	}
 	milvusOpt := &MilvusOption{}
 	for _, opt := range opts {
@@ -99,9 +100,18 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 	}
 	metricType := parseMetricType(conf.Milvus.MetricsType)
 	partition := strings.TrimSpace(conf.Milvus.Partition)
+	retrieverConfig := buildRetrieverConfig(client, conf, conf.Milvus.Collection, partition, metricType, embedder)
+	newRetriever, err := milvusretriever.NewRetriever(ctx, retrieverConfig)
+	if err != nil {
+		return nil, fmt.Errorf("NewMilvus create retriever failed: %w", err)
+	}
 	if !milvusOpt.initCollection {
 		// TODO 这里处理召回初始化
-		return nil, nil
+		return &Milvus{
+			client:     client,
+			collection: conf.Milvus.Collection,
+			retriever:  newRetriever,
+		}, nil
 	}
 	// 处理索引的逻辑
 	if conf.Milvus.DropBeforeIndex {
@@ -116,20 +126,7 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 			}
 		}
 	}
-	indexer, err := milvusindexer.NewIndexer(ctx, &milvusindexer.IndexerConfig{
-		Client:              client,
-		Collection:          conf.Milvus.Collection,
-		Description:         "",
-		PartitionNum:        0,
-		PartitionName:       "",
-		Fields:              nil,
-		SharedNum:           0,
-		ConsistencyLevel:    0,
-		EnableDynamicSchema: false,
-		DocumentConverter:   nil,
-		MetricType:          "",
-		Embedding:           nil,
-	})
+	indexer, err := milvusindexer.NewIndexer(ctx, buildIndexerConfig(client, conf, conf.Milvus.Collection, partition, metricType, embedder))
 	if err != nil {
 		return nil, fmt.Errorf("NewMilvus create indexer failed: %w", err)
 	}
@@ -137,7 +134,86 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 		client:     client,
 		collection: conf.Milvus.Collection,
 		indexer:    indexer,
-		retriever:  nil,
+		// TODO
+		retriever: newRetriever,
 	}
 	return m, nil
+}
+
+func partitionList(value string) []string {
+	if value == "" {
+		return nil
+	}
+	return []string{value}
+}
+
+func buildRetrieverConfig(
+	cli *milvusclient.Client,
+	conf config.RAG,
+	collection, partition string,
+	metricType milvusindexer.MetricType,
+	embedder *openaiembedding.Embedder) *milvusretriever.RetrieverConfig {
+	retrieverConfig := &milvusretriever.RetrieverConfig{
+		Client:       cli,
+		Collection:   collection,
+		Partitions:   partitionList(partition),
+		VectorField:  defaultVectorFiled,
+		OutputFields: []string{fieldID, fieldContent, defaultMetadataFiled},
+		TopK:         conf.TopK,
+		SearchMode:   search_mode.NewApproximate(milvusretriever.MetricType(metricType)),
+		Embedding:    embedder,
+	}
+	if conf.Milvus.HybridEnabled {
+		retrieverConfig.SparseVectorField = defaultSparseVectorFiled
+		retrieverConfig.SearchMode = search_mode.NewHybrid(milvusclient.NewRRFReranker(),
+			&search_mode.SubRequest{
+				VectorField: defaultVectorFiled,
+				MetricType:  milvusretriever.MetricType(metricType),
+				TopK:        conf.TopK,
+				VectorType:  milvusretriever.DenseVector,
+			},
+			&search_mode.SubRequest{
+				VectorField: defaultSparseVectorFiled,
+				MetricType:  milvusretriever.BM25,
+				TopK:        conf.TopK,
+				VectorType:  milvusretriever.SparseVector,
+			},
+		)
+	}
+	return retrieverConfig
+}
+
+func buildIndexerConfig(
+	cli *milvusclient.Client,
+	conf config.RAG,
+	collection, partition string,
+	metricType milvusindexer.MetricType,
+	embedder *openaiembedding.Embedder) *milvusindexer.IndexerConfig {
+	indexerConfig := &milvusindexer.IndexerConfig{
+		Client:        cli,
+		Collection:    collection,
+		Description:   "docs knowledge",
+		PartitionName: partition,
+		Vector: &milvusindexer.VectorConfig{
+			Dimension:   int64(conf.Embedding.Dimensions),
+			MetricType:  metricType,
+			VectorField: defaultVectorFiled,
+		},
+		Embedding: embedder,
+	}
+	if conf.Milvus.HybridEnabled {
+		indexerConfig.Sparse = &milvusindexer.SparseVectorConfig{
+			VectorField: defaultSparseVectorFiled,
+			MetricType:  milvusindexer.BM25,
+			Method:      milvusindexer.SparseMethodAuto,
+		}
+		// TODO 怎么去验证他用中文进行稀疏向量后的结果
+		indexerConfig.FieldParams = map[string]map[string]string{
+			fieldContent: {
+				"enable_analyzer": "true",
+				"analyzer_params": `{"type": "chinese"}`,
+			},
+		}
+	}
+	return indexerConfig
 }

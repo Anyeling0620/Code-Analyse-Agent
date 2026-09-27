@@ -25,6 +25,8 @@ func routeRegister(app *gin.Engine, h *api.Handler) {
 	app.GET("/api/sessions/info", h.GetSessionInfo)     // 获取会话详情
 	app.DELETE("/api/sessions/delete", h.DeleteSession) // 删除会话
 
+	app.POST("/api/rag/retriever", h.Retriever)
+
 	chatQuota := Quota(h.GetQuotaService(), nil)
 	chatRoot := app.Group("/api/chat", chatQuota)
 	chatRoot.POST("/completion", h.ChatCompletion) //阻塞等待一次性输出

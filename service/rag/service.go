@@ -5,7 +5,9 @@ import (
 	"crypto/sha1"
 	"edu.agent.code/adaptor"
 	"edu.agent.code/adaptor/vector"
+	"edu.agent.code/common"
 	"edu.agent.code/config"
+	"edu.agent.code/service/dto"
 	"edu.agent.code/utils/logger"
 	"edu.agent.code/utils/sensitive"
 	"encoding/hex"
@@ -16,7 +18,9 @@ import (
 	recursplitter "github.com/cloudwego/eino-ext/components/document/transformer/splitter/recursive"
 	"github.com/cloudwego/eino/components/document"
 	einoparser "github.com/cloudwego/eino/components/document/parser"
+	"github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
+	"github.com/gogf/gf/v2/util/gconv"
 	"github.com/samber/lo"
 	"io/fs"
 	"os"
@@ -333,4 +337,29 @@ func shouldSkipDir(name string) bool {
 	default:
 		return false
 	}
+}
+
+func (s *Service) Retriever(ctx context.Context, req *dto.RetrieverReq) ([]*dto.RetrieverChunkDto, common.Errno) {
+	if s.store == nil {
+		return nil, common.OK
+	}
+	chunks, err := s.store.Retrieve(ctx, req.Query, retriever.WithTopK(req.TopK))
+	if err != nil {
+		logger.Error("failed to retrieve chunks: %v", err)
+		return nil, common.ServerError.WithError(err)
+	}
+	retChunks := make([]*dto.RetrieverChunkDto, 0, len(chunks))
+	lo.ForEach(chunks, func(chunk *schema.Document, _ int) {
+		retChunks = append(retChunks, &dto.RetrieverChunkDto{
+			ID:         chunk.ID,
+			Score:      chunk.Score(),
+			Content:    chunk.Content,
+			Header:     gconv.String(chunk.MetaData["header"]),
+			ChunkIndex: gconv.Int(chunk.MetaData["chunk_index"]),
+			ChunkSize:  gconv.Int(chunk.MetaData["chunk_size"]),
+			FileSize:   gconv.Int(chunk.MetaData["file_size"]),
+		})
+	})
+
+	return retChunks, common.OK
 }

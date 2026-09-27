@@ -32,6 +32,7 @@ func (a *Approval) Insert(ctx context.Context, req *do.PendingApproval) error {
 		return errors.New("nil request")
 	}
 	row := model.Approval{
+		ID:           req.ID,
 		UserID:       req.UserID,
 		SessionID:    req.SessionID,
 		Tool:         req.Tool,

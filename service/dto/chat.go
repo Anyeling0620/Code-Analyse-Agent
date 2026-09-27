@@ -101,3 +101,11 @@ type ChatRunState struct {
 	PendingApprovalID string                   `json:"pending_approval_id"`
 	Interrupted       bool                     `json:"interrupted"`
 }
+
+type ChatResumeRequest struct {
+	UserID    string `json:"user_id"`
+	TraceID   string `json:"trace_id"`
+	SessionID string `json:"session_id"`
+	PendingID string `json:"pending_id"`
+	Approved  bool   `json:"approval"`
+}

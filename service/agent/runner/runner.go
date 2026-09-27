@@ -155,7 +155,7 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 		return nil, err
 	}
 
-	agentTools := []tool.BaseTool{repoAnalyzerTool, projectQaTool, dbReportTool}
+	agentTools := []tool.BaseTool{c.ragRegister, repoAnalyzerTool, projectQaTool, dbReportTool}
 	returnDirectly := map[string]bool{
 		repo_analyzer.Name: true,
 		project_qa.Name:    true,

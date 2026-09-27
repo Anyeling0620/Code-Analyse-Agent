@@ -10,7 +10,6 @@ import (
 	"edu.agent.code/config"
 	"edu.agent.code/service/agent/runner"
 	"edu.agent.code/service/cost"
-	"edu.agent.code/service/rag"
 	"edu.agent.code/service/tool/provider"
 	"edu.agent.code/service/tool/terminal"
 	"edu.agent.code/utils/dsml"
@@ -45,7 +44,6 @@ type serviceDeps struct {
 	composeRunner *adk.Runner
 	visibleTools  map[string]bool
 	cost          *cost.Service
-	rag           *rag.Service
 }
 
 func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps, err error) {
@@ -84,7 +82,12 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps
 	var agentHandlers []adk.ChatModelAgentMiddleware
 	// 数据层
 	repo := buildRepo(a)
-	// TODO RAG 工具
+	// RAG
+	ragTool, err := toolProvider.RetrieverTool(ctx)
+	if err != nil {
+		logger.Error("buildServiceDeps RetrieverTool err", err)
+		return serviceDeps{}, err
+	}
 	// 主agent + adk Runner
 	composeRunner, err := buildComposeRunner(
 		chatModel,
@@ -92,7 +95,7 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps
 		repo,
 		conf,
 		agentHandlers,
-		nil,
+		ragTool,
 	)
 	if err != nil {
 		_ = err.Error()
@@ -107,7 +110,6 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps
 		composeRunner: composeRunner,
 		visibleTools:  visibleToolSet,
 		cost:          cost.NewService(a),
-		rag:           nil,
 	}, nil
 }
 

@@ -10,6 +10,8 @@ import (
 	milvusindexer "github.com/cloudwego/eino-ext/components/indexer/milvus2"
 	milvusretriever "github.com/cloudwego/eino-ext/components/retriever/milvus2"
 	"github.com/cloudwego/eino-ext/components/retriever/milvus2/search_mode"
+	"github.com/cloudwego/eino/components/retriever"
+	"github.com/cloudwego/eino/schema"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 	"strings"
 	"time"
@@ -30,6 +32,7 @@ type Milvus struct {
 	collection string
 	indexer    *milvusindexer.Indexer
 	retriever  *milvusretriever.Retriever
+	conf       config.RAG
 	// TODO 如果知道是哪个模块 可以直接传一个模块 “更快更准？”
 }
 
@@ -136,6 +139,7 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 		indexer:    indexer,
 		// TODO
 		retriever: newRetriever,
+		conf:      conf,
 	}
 	return m, nil
 }
@@ -216,4 +220,49 @@ func buildIndexerConfig(
 		}
 	}
 	return indexerConfig
+}
+
+func (m *Milvus) Store(ctx context.Context, docs []*schema.Document) ([]string, error) {
+	if m == nil || m.indexer == nil {
+		return nil, nil
+	}
+	ids, err := m.indexer.Store(ctx, docs)
+	if err != nil {
+		return nil, fmt.Errorf("Milvus Store failed: %w ", err)
+	}
+	return ids, nil
+}
+
+func (m *Milvus) Retrieve(ctx context.Context, query string, opts ...retriever.Option) ([]*schema.Document, error) {
+	if m == nil || m.retriever == nil {
+		return nil, nil
+	}
+	docs, err := m.retriever.Retrieve(ctx, query, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("Milvus_Retrieve: %w", err)
+	}
+	return docs, nil
+}
+func (m *Milvus) Close() error {
+	if m == nil || m.client == nil {
+		return nil
+	}
+	return m.client.Close(context.Background())
+}
+
+func (m *Milvus) Health(ctx context.Context) error {
+	if m == nil {
+		return nil
+	}
+	if !m.conf.Enabled {
+		return nil
+	}
+	if m.client == nil {
+		return fmt.Errorf("Milvus_Health: client is nil")
+	}
+	_, err := m.client.HasCollection(ctx, milvusclient.NewHasCollectionOption(m.collection))
+	if err != nil {
+		return fmt.Errorf("Milvus_Health: %w", err)
+	}
+	return nil
 }

@@ -89,7 +89,7 @@ func (a *Adaptor) GetMilvusClient() *milvusclient.Client {
 }
 
 func (a *Adaptor) openMilvusClient() error {
-	if a != nil {
+	if a.milvusClient != nil {
 		return nil
 	}
 	cli, err := milvusclient.New(context.Background(), &milvusclient.ClientConfig{

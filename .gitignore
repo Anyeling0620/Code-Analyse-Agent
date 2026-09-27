@@ -9,3 +9,5 @@ web/node_modules
 
 
 .ai-memory
+
+logs/

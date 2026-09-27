@@ -1,9 +1,12 @@
 package adaptor
 
 import (
+	"context"
 	"edu.agent.code/adaptor/repo/model"
 	"edu.agent.code/config"
 	"fmt"
+	"github.com/milvus-io/milvus/client/v2/milvusclient"
+
 	// 下面这个驱动可能有问题 如果报错换成 "github.com/glebarez/sqlite"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -16,11 +19,13 @@ import (
 type IAdaptor interface {
 	GetConfig() *config.Config
 	GetDB() *gorm.DB
+	GetMilvusClient() *milvusclient.Client
 }
 
 type Adaptor struct {
-	conf *config.Config
-	db   *gorm.DB
+	conf         *config.Config
+	db           *gorm.DB
+	milvusClient *milvusclient.Client
 }
 
 func NewAdaptor(conf *config.Config) (IAdaptor, error) {
@@ -74,4 +79,27 @@ func (adaptor *Adaptor) GetConfig() *config.Config {
 
 func (adaptor *Adaptor) GetDB() *gorm.DB {
 	return adaptor.db
+}
+
+func (a *Adaptor) GetMilvusClient() *milvusclient.Client {
+	if !a.conf.RAG.Enabled {
+		return nil
+	}
+	return a.milvusClient
+}
+
+func (a *Adaptor) openMilvusClient() error {
+	if a != nil {
+		return nil
+	}
+	cli, err := milvusclient.New(context.Background(), &milvusclient.ClientConfig{
+		Address:  a.conf.RAG.Milvus.Address,
+		Username: a.conf.RAG.Milvus.UserName,
+		Password: a.conf.RAG.Milvus.Password,
+	})
+	if err != nil {
+		return fmt.Errorf("Adaptor create milvus client: %v", err)
+	}
+	a.milvusClient = cli
+	return nil
 }

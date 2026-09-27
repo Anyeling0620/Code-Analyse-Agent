@@ -36,6 +36,7 @@ type Config struct {
 	Agents         Agents         `yaml:"agents"`
 	ModelPrice     ModelPrice     `yaml:"model_price"`
 	WorkSpace      WorkSpace      `yaml:"workspace"`
+	RAG            RAG            `yaml:"rag"`
 }
 
 type Server struct {
@@ -80,6 +81,41 @@ type MCPServer struct {
 	Required       bool              `yaml:"required"`         // true 表示该 Server 加载失败时服务启动失败。
 	InitTimeoutSec int               `yaml:"init_timeout_sec"` // 初始化超时秒数。
 }
+
+type RAG struct {
+	Enabled            bool      `yaml:"enabled"`
+	DocsRoot           string    `yaml:"docs_root"`
+	AutoIndexOnStartup bool      `yaml:"auto_index_on_startup"`
+	ChunkSize          int       `yaml:"chunk_size"`
+	ChunkOverlap       int       `yaml:"chunk_overlap"`
+	MaxFileBytes       int       `yaml:"max_file_bytes"`
+	MaxContextRunes    int       `yaml:"max_context_runes"`
+	TopK               int       `yaml:"top_k"`
+	ScoreThreshold     int       `yaml:"score_threshold"` // 混合检索 一般0-0.5  向量检索0-1.0
+	Embedding          Embedding `yaml:"embedding"`
+	Milvus             Milvus    `yaml:"milvus"`
+}
+
+type Embedding struct {
+	BaseUrl    string `yaml:"base_url"`
+	APIKey     string `yaml:"api_key"`
+	Model      string `yaml:"model"`
+	Dimensions int    `yaml:"dimensions"`
+	TimeoutSec int    `yaml:"timeout_sec"`
+}
+
+type Milvus struct {
+	Address         string `yaml:"address"`
+	UserName        string `yaml:"username"`
+	Password        string `yaml:"password"`
+	Collection      string `yaml:"collection"`
+	Partition       string `yaml:"partition"`
+	MetricsType     string `yaml:"metric_type"`
+	HybridEnabled   bool   `yaml:"hybrid_enabled"`
+	DropBeforeIndex bool   `yaml:"drop_before_index"`
+	TimeoutSec      int    `yaml:"timeout_sec"`
+}
+
 type DeepSeek struct {
 	APIKey  string `yaml:"api_key"`
 	BaseURL string `yaml:"base_url"`

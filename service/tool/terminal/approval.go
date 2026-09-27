@@ -51,7 +51,7 @@ func NewApprovalMiddleware(approvalStore IApprovalStore) compose.ToolMiddleware 
 	return compose.ToolMiddleware{
 		Invokable: func(endpoint compose.InvokableToolEndpoint) compose.InvokableToolEndpoint {
 			return func(ctx context.Context, input *compose.ToolInput) (*compose.ToolOutput, error) {
-				if input != nil || strings.TrimSpace(input.Name) != toolName {
+				if input == nil || strings.TrimSpace(input.Name) != toolName {
 					return endpoint(ctx, input)
 				}
 				wasInterrupted, hasState, state := tool.GetInterruptState[ApprovalState](ctx)

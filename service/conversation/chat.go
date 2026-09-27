@@ -45,7 +45,7 @@ func (s *Service) executeChat(ctx context.Context, req dto.ChatRequest, emit Cha
 		logger.Error("prepareSession failed", zap.Error(err), zap.Any("req", req))
 		return nil, err
 	}
-
+	ctx = common.WithUserAndSession(ctx, userID, session.SessionID)
 	updateProjectContextFromMessage(session, req.Message)
 
 	if emit != nil {

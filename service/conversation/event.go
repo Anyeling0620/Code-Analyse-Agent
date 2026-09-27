@@ -256,7 +256,7 @@ func (s *Service) handleInterruptedEvent(
 		if interruptCtx == nil || !interruptCtx.IsRootCause {
 			continue
 		}
-		info, ok := infoFromInterruptFunc(interruptCtx)
+		info, ok := infoFromInterruptFunc(interruptCtx.Info)
 		if !ok {
 			continue
 		}

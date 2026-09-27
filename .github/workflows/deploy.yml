@@ -1,4 +1,7 @@
-name: Build and Deploy
+name: Build and Release
+
+# 只负责「构建 + 发布产物」：构建后把产物发到 Release（tag: deploy-latest），
+# 不再从 Runner 反向 SSH/SCP 推送到服务器；服务器侧定时拉取该 Release 完成部署。
 
 on:
   push:
@@ -6,16 +9,17 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-main
+  group: release-main
   cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
-  build-and-deploy:
+  build-and-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,7 +33,7 @@ jobs:
       - name: Install Gcc
         run: sudo apt-get update && sudo apt-get install -y gcc
 
-      - name: Build
+      - name: Build Backend
         env:
           CGO_ENABLED: "1"
           GOOS: linux
@@ -56,69 +60,71 @@ jobs:
           npm ci
           npm run build
 
-      - name: Package Frontend
-        run: tar -czf web-dist.tar.gz -C web/dist .
+      - name: Package Artifacts
+        run: |
+          set -euo pipefail
+          gzip -9 -f -k code-analyse-agent
+          tar -czf web-dist.tar.gz -C web/dist .
+          ls -lh code-analyse-agent.gz web-dist.tar.gz
 
-      - name: Compress Binary
-        run: gzip -9 -k code-analyse-agent
+      - name: Write version.json
+        run: |
+          set -euo pipefail
+          BIN_SHA="$(sha256sum code-analyse-agent.gz | awk '{print $1}')"
+          WEB_SHA="$(sha256sum web-dist.tar.gz | awk '{print $1}')"
+          cat > version.json <<EOF
+          {
+            "repository": "${{ github.repository }}",
+            "commit": "${{ github.sha }}",
+            "run": "${{ github.run_number }}",
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "assets": {
+              "code-analyse-agent.gz": { "sha256": "$BIN_SHA", "size": $(stat -c%s code-analyse-agent.gz) },
+              "web-dist.tar.gz": { "sha256": "$WEB_SHA", "size": $(stat -c%s web-dist.tar.gz) }
+            }
+          }
+          EOF
+          cat version.json
 
-      - name: Upload Artifacts
-        uses: appleboy/scp-action@v1.0.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          port: ${{ secrets.SSH_PORT }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "code-analyse-agent.gz,web-dist.tar.gz"
-          target: "/tmp/analyse-deploy"
-          rm: true
-          overwrite: true
-          timeout: 120s
-          command_timeout: 15m
-
-      - name: Publish Binary
+      - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: deploy-latest
+          name: deploy-latest
+          body: |
+            commit: ${{ github.sha }}
+            run: ${{ github.run_number }}
           files: |
-            code-analyse-agent
+            code-analyse-agent.gz
             web-dist.tar.gz
+            version.json
           fail_on_unmatched_files: true
 
-      - name: Deploy on Server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          port: ${{ secrets.SSH_PORT }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            set -eu
-            UPLOAD=/tmp/analyse-deploy
+      - name: Remove stale release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          api="https://api.github.com/repos/${{ github.repository }}/releases/tags/deploy-latest"
+          ids="$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "$api" \
+                 | jq -r '.assets[] | select(.name=="code-analyse-agent") | .id' || true)"
+          for id in $ids; do
+            echo "deleting stale asset id=$id"
+            curl -fsSL -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/assets/$id" || true
+          done
 
-            # ---- 后端 ----
-            cd /www/server/analyse.jxutcm.top
-            test -s "$UPLOAD/code-analyse-agent.gz"
-            gzip -t "$UPLOAD/code-analyse-agent.gz"
-            gzip -dc "$UPLOAD/code-analyse-agent.gz" > code-analyse-agent.new
-            chmod +x code-analyse-agent.new
-            mv -f code-analyse-agent.new code-analyse-agent
-            systemctl restart code-analyse-agent
-            sleep 2
-            systemctl status code-analyse-agent --no-pager
-            curl -fsS --max-time 5 http://127.0.0.1:8088/healthz && echo "backend healthz ok"
-
-            # ---- 前端 ----
-            cd /www/wwwroot/analyse.jxutcm.top
-            test -s "$UPLOAD/web-dist.tar.gz"
-            rm -rf .incoming
-            mkdir -p .incoming
-            tar -xzf "$UPLOAD/web-dist.tar.gz" -C .incoming
-            test -f .incoming/index.html
-            rm -rf assets index.html
-            cp -a .incoming/. .
-            rm -rf .incoming
-            chmod -R a+rX . 2>/dev/null || true
-            ls -1
-
-            rm -rf "$UPLOAD"
+      - name: Summary
+        run: |
+          {
+            echo "### 产物已发布到 Release \`deploy-latest\`"
+            echo
+            echo "| 文件 | 大小 | sha256 |"
+            echo "| --- | --- | --- |"
+            echo "| code-analyse-agent.gz | $(stat -c%s code-analyse-agent.gz) | \`$(sha256sum code-analyse-agent.gz | awk '{print $1}')\` |"
+            echo "| web-dist.tar.gz | $(stat -c%s web-dist.tar.gz) | \`$(sha256sum web-dist.tar.gz | awk '{print $1}')\` |"
+            echo
+            echo "commit: \`${{ github.sha }}\`"
+            echo
+            echo "服务器端会在 1 分钟内自动拉取并部署这些产物。"
+          } >> "$GITHUB_STEP_SUMMARY"

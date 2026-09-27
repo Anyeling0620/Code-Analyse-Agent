@@ -8,6 +8,7 @@ import (
 	"edu.agent.code/router"
 	"edu.agent.code/utils/logger"
 	"edu.agent.code/utils/tracing"
+	"errors"
 	"fmt"
 	"github.com/cloudwego/eino/adk"
 	"net/http"
@@ -70,9 +71,9 @@ func main() {
 	go func() {
 		logger.Info(fmt.Sprintf("http server listening at %s", srv.Addr))
 		err := srv.ListenAndServe()
-		if err != nil {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErrors <- err
-			os.Exit(1)
+			return
 		}
 		serverErrors <- nil
 	}()
@@ -84,17 +85,18 @@ func main() {
 			os.Exit(1)
 		}
 	case <-ctx.Done():
-
-		logger.Info("shutdown timeout ")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// 收到 SIGTERM/SIGINT：先优雅关闭 HTTP 服务，再关 tracing。
+		// 注意：必须在超时后仍然退出，否则 systemd 只能等 90s 后 SIGKILL，
+		// 会让每次部署的 restart 卡住两分钟。
+		logger.Info("shutdown signal received, shutting down gracefully")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			logger.Error(fmt.Sprintf("shutdown http server error: %v", err))
+		}
 		if err := shutdownFun(shutdownCtx); err != nil {
-			logger.Error(fmt.Sprintf("shutdown timeout after %s", conf.Server.HTTPAddr))
-			os.Exit(1)
+			logger.Error(fmt.Sprintf("shutdown tracing error: %v", err))
 		}
-		if err := <-serverErrors; err != nil {
-			logger.Error(fmt.Sprintf("shutdown server error: %v", err))
-			os.Exit(1)
-		}
+		logger.Info("shutdown done")
 	}
 }

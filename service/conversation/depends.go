@@ -12,6 +12,7 @@ import (
 	"edu.agent.code/service/cost"
 	"edu.agent.code/service/rag"
 	"edu.agent.code/service/tool/provider"
+	"edu.agent.code/service/tool/terminal"
 	"edu.agent.code/utils/dsml"
 	"edu.agent.code/utils/logger"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
 	"time"
 )
 
@@ -155,6 +157,9 @@ func buildComposeRunner(chatModel model.ToolCallingChatModel,
 		WithQaTool(tools.qa).
 		WithDirectTool(tools.direct).
 		WithReportTool(tools.report).
+		WithToolMiddleware([]compose.ToolMiddleware{
+			terminal.NewApprovalMiddleware(repo.approvals),
+		}).
 		WithCheckPoint(repo.checkPointStore).
 		WithMaxIterations(buildIterationLimits(conf.Agents.MaxIterations)).
 		WithAgentHandler(agentHandler).

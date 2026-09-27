@@ -4,6 +4,7 @@ import (
 	"context"
 	"edu.agent.code/service/consts"
 	"edu.agent.code/service/dto"
+	"edu.agent.code/service/tool/terminal"
 	"edu.agent.code/utils/logger"
 	"errors"
 	"github.com/cloudwego/eino/adk"
@@ -36,7 +37,7 @@ func (s *Service) consumeAgentEvents(
 		logger.Info("consumeAgentEvents start", zap.Any("event", iter), zap.Any("runState", runState))
 		if event.Action != nil && event.Action.Interrupted != nil {
 			// TODO 这里发生了中断 需要进入中断处理 恢复可以返回
-			return nil
+			return s.handleInterruptedEvent(ctx, event, runState, emit)
 		}
 		if event.Output == nil || event.Output.MessageOutput == nil {
 			continue
@@ -229,6 +230,91 @@ func (s *Service) handleToolCall(emit ChatEmit, runState *dto.ChatRunState, even
 			}
 		}
 
+	}
+	return nil
+}
+
+func (s *Service) handleInterruptedEvent(
+	ctx context.Context,
+	event *adk.AgentEvent,
+	runState *dto.ChatRunState,
+	emit ChatEmit) error {
+	if event == nil || event.Action == nil || event.Action.Interrupted == nil {
+		return nil
+	}
+
+	infoFromInterruptFunc := func(interruptInfo any) (terminal.ApprovalInfo, bool) {
+		switch info := interruptInfo.(type) {
+		case terminal.ApprovalInfo:
+			return info, true
+		default:
+			return terminal.ApprovalInfo{}, false
+		}
+	}
+
+	for _, interruptCtx := range event.Action.Interrupted.InterruptContexts {
+		if interruptCtx == nil || !interruptCtx.IsRootCause {
+			continue
+		}
+		info, ok := infoFromInterruptFunc(interruptCtx)
+		if !ok {
+			continue
+		}
+		if s.approvals != nil {
+			err := s.approvals.BindInterrupt(ctx, info.PendingID, info.CheckpointID, interruptCtx.ID)
+			if err != nil {
+				logger.Error("handleInterrupt error", zap.Any("event", event), zap.Any("runState", runState), zap.Any("info", info), zap.Error(err))
+				return err
+			}
+		}
+		runState.Interrupted = true
+		runState.PendingApprovalID = info.PendingID
+		if info.Tool != "" {
+			runState.UsedTools = appendIfMissing(runState.UsedTools, info.Tool)
+		}
+		interruptEvent := dto.ChatStreamEvent{
+			Type:              consts.SseEventTypeInterrupt,
+			TraceID:           runState.TraceID,
+			SessionID:         runState.SessionID,
+			ToolName:          info.Tool,
+			ToolCallID:        info.ToolCallID,
+			Message:           "检测到需要用户确认的操作",
+			PendingApprovalID: info.PendingID,
+			PendingCommand:    info.Command,
+			PendingRiskReason: info.Reason,
+			PendingRiskLevel:  info.RiskLevel,
+			PendingWorkDir:    info.Workdir,
+			PendingTimeoutSec: info.TimeoutSec,
+		}
+		recordRenderEvent(runState, interruptEvent)
+		if emit != nil {
+			err := emit(interruptEvent)
+			if err != nil {
+				logger.Error("handleInterruptedEvent interruptedEvent emit error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+				return err
+			}
+		}
+		pauseEvent := dto.ChatStreamEvent{
+			Type:        consts.SseEventTypeToolResult,
+			TraceID:     runState.TraceID,
+			SessionID:   runState.SessionID,
+			ToolName:    info.Tool,
+			ToolCallID:  info.ToolCallID,
+			ContentKind: "tool",
+			RenderMode:  "append_tool",
+			Visibility:  "user",
+			Timestamp:   time.Now().Format(time.DateTime),
+			ToolResult:  "命令需要用户确认审批，已暂停执行",
+		}
+		recordRenderEvent(runState, pauseEvent)
+		if emit != nil {
+			err := emit(pauseEvent)
+			if err != nil {
+				logger.Error("handleInterruptedEvent pauseEvent emit error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+				return err
+			}
+		}
+		return nil
 	}
 	return nil
 }

@@ -60,10 +60,11 @@ func (s *Service) ResumeChat(ctx context.Context, req *dto.ChatResumeRequest, em
 		return err
 	}
 	runState := dto.ChatRunState{
-		UserID:    req.UserID,
-		TraceID:   req.TraceID,
-		SessionID: req.SessionID,
-		UsedTools: []string{pending.Tool},
+		UserID:      req.UserID,
+		TraceID:     req.TraceID,
+		SessionID:   req.SessionID,
+		UsedTools:   []string{pending.Tool},
+		ToolCallMap: make(map[string]dto.ToolCallState),
 	}
 	err = s.consumeAgentEvents(ctx, iter, &runState, emit)
 	if err != nil {

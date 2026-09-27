@@ -108,7 +108,7 @@ func (h *Handler) ChatResume(ctx *gin.Context) {
 		return
 	}
 	err = h.session.ResumeChat(ctx.Request.Context(),
-		req,
+		&req,
 		func(event dto.ChatStreamEvent) error {
 			return writer.write(event.Type, event)
 		},

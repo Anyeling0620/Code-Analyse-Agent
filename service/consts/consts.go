@@ -29,9 +29,9 @@ const (
 )
 
 const (
-	PendingStatusPending   = "pending"
-	PendingStatusApproval  = "approved"
-	PendingStatusRejected  = "rejected"
-	PendingStatusCancelled = "executed"
-	PendingStatusFailed    = "failed"
+	PendingStatusPending  = "pending"
+	PendingStatusApproval = "approved"
+	PendingStatusRejected = "rejected"
+	PendingStatusExecuted = "executed"
+	PendingStatusFailed   = "failed"
 )

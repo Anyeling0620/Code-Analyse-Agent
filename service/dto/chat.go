@@ -107,5 +107,5 @@ type ChatResumeRequest struct {
 	TraceID   string `json:"trace_id"`
 	SessionID string `json:"session_id"`
 	PendingID string `json:"pending_id"`
-	Approved  bool   `json:"approval"`
+	Approved  bool   `json:"approved"`
 }

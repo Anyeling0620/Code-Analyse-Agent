@@ -49,26 +49,24 @@ type ApprovalDecision struct {
 
 func NewApprovalMiddleware(approvalStore IApprovalStore) compose.ToolMiddleware {
 	return compose.ToolMiddleware{
-		Invokable: func(endpoint compose.InvokableToolEndpoint) compose.InvokableToolEndpoint {
+		Invokable: func(next compose.InvokableToolEndpoint) compose.InvokableToolEndpoint {
 			return func(ctx context.Context, input *compose.ToolInput) (*compose.ToolOutput, error) {
 				if input == nil || strings.TrimSpace(input.Name) != toolName {
-					return endpoint(ctx, input)
+					return next(ctx, input)
 				}
 				wasInterrupted, hasState, state := tool.GetInterruptState[ApprovalState](ctx)
 				if wasInterrupted {
-					fmt.Println(hasState, state)
-					// TODO 恢复
-					return endpoint(ctx, input)
+					return resumeTerminalApproval(ctx, approvalStore, next, input, hasState, state)
 				}
 				var args Input
 				if err := json.Unmarshal([]byte(input.Arguments), &args); err != nil {
-					return endpoint(ctx, input)
+					return next(ctx, input)
 				}
 
 				command := strings.TrimSpace(args.Command)
 				risk := InspectTerminalCommand(command)
 				if command == "" || !risk.Destructive {
-					return endpoint(ctx, input)
+					return next(ctx, input)
 				}
 				if approvalStore == nil {
 					return nil, fmt.Errorf(`approval store is nil`)
@@ -130,4 +128,70 @@ func NewApprovalMiddleware(approvalStore IApprovalStore) compose.ToolMiddleware 
 		EnhancedInvokable:  nil,
 		EnhancedStreamable: nil,
 	}
+}
+
+func resumeTerminalApproval(
+	ctx context.Context,
+	approvalStore IApprovalStore,
+	next compose.InvokableToolEndpoint,
+	input *compose.ToolInput,
+	hasState bool,
+	state ApprovalState,
+) (*compose.ToolOutput, error) {
+	if !hasState {
+		return nil, fmt.Errorf(`hasState is false`)
+	}
+	isTarget, hasData, decision := tool.GetResumeContext[ApprovalDecision](ctx)
+	if !isTarget {
+		return nil, tool.StatefulInterrupt(ctx, state.ApprovalInfo, state)
+	}
+	if !hasData {
+		return nil, fmt.Errorf(`hasData is false`)
+	}
+	if decision.PendingID != "" && decision.PendingID != state.PendingID {
+		return nil, fmt.Errorf(`decision pendingID is %s`, decision.PendingID)
+	}
+	if !decision.Approved {
+		err := approvalStore.Resolve(ctx, state.PendingID, consts.PendingStatusRejected)
+		if err != nil {
+			return nil, err
+		}
+		return &compose.ToolOutput{Result: "用户拒绝了执行"}, nil
+	}
+	if err := approvalStore.Resolve(ctx, state.PendingID, consts.PendingStatusApproval); err != nil {
+		return nil, err
+	}
+	approvedToolInput, err := buildApprovedToolInput(input, state)
+	if err != nil {
+		_ = approvalStore.Resolve(ctx, state.PendingID, consts.PendingStatusFailed)
+		return nil, err
+	}
+	out, err := next(ctx, approvedToolInput)
+	if err != nil {
+		_ = approvalStore.Resolve(ctx, state.PendingID, consts.PendingStatusFailed)
+		return nil, err
+	}
+	err = approvalStore.Resolve(ctx, state.PendingID, consts.PendingStatusExecuted)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func buildApprovedToolInput(input *compose.ToolInput, state ApprovalState) (*compose.ToolInput, error) {
+	var args Input
+	if err := json.Unmarshal([]byte(input.Arguments), &args); err != nil {
+		return nil, err
+	}
+	args.Command = state.Command
+	args.Workdir = state.Workdir
+	args.TimeoutSec = state.TimeoutSec
+	args.AllowDestructive = true
+	data, err := json.Marshal(args)
+	if err != nil {
+		return nil, err
+	}
+	approved := *input
+	approved.Arguments = string(data)
+	return &approved, nil
 }

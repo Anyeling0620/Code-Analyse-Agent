@@ -53,7 +53,7 @@ func (a *Approval) Insert(ctx context.Context, req *do.PendingApproval) error {
 
 func (a *Approval) GetByID(ctx context.Context, pendingId string) (*do.PendingApproval, error) {
 	var row model.Approval
-	err := a.db.WithContext(ctx).First(&row, "pending_id = ?", pendingId).Error
+	err := a.db.WithContext(ctx).First(&row, "id = ?", pendingId).Error
 	if err != nil {
 		return nil, err
 	}

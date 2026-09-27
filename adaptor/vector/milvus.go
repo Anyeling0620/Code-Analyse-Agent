@@ -104,12 +104,13 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 	metricType := parseMetricType(conf.Milvus.MetricsType)
 	partition := strings.TrimSpace(conf.Milvus.Partition)
 	retrieverConfig := buildRetrieverConfig(client, conf, conf.Milvus.Collection, partition, metricType, embedder)
-	newRetriever, err := milvusretriever.NewRetriever(ctx, retrieverConfig)
-	if err != nil {
-		return nil, fmt.Errorf("NewMilvus create retriever failed: %w", err)
-	}
+
 	if !milvusOpt.initCollection {
 		// TODO 这里处理召回初始化
+		newRetriever, err := milvusretriever.NewRetriever(ctx, retrieverConfig)
+		if err != nil {
+			return nil, fmt.Errorf("NewMilvus create retriever failed: %w", err)
+		}
 		return &Milvus{
 			client:     client,
 			collection: conf.Milvus.Collection,
@@ -133,13 +134,16 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 	if err != nil {
 		return nil, fmt.Errorf("NewMilvus create indexer failed: %w", err)
 	}
+	newRetriever, err := milvusretriever.NewRetriever(ctx, retrieverConfig)
+	if err != nil {
+		return nil, fmt.Errorf("NewMilvus index create retriever failed: %w", err)
+	}
 	m := &Milvus{
 		client:     client,
 		collection: conf.Milvus.Collection,
 		indexer:    indexer,
-		// TODO
-		retriever: newRetriever,
-		conf:      conf,
+		retriever:  newRetriever,
+		conf:       conf,
 	}
 	return m, nil
 }

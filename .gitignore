@@ -11,3 +11,7 @@ web/node_modules
 .ai-memory
 
 logs/
+
+docs
+scripts
+deploy

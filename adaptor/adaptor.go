@@ -34,6 +34,11 @@ func NewAdaptor(conf *config.Config) (IAdaptor, error) {
 	if err != nil {
 		return nil, err
 	}
+	if conf.RAG.Enabled {
+		if err := adaptor.openMilvusClient(); err != nil {
+			return nil, err
+		}
+	}
 	return adaptor, nil
 }
 

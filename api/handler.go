@@ -27,12 +27,16 @@ func NewHandler(ctx context.Context, adaptor adaptor.IAdaptor) (*Handler, error)
 	if err != nil {
 		return nil, err
 	}
+	ragSvc, err := rag.NewService(ctx, adaptor)
+	if err != nil {
+		return nil, err
+	}
 	return &Handler{
 		adaptor: adaptor,
 		cost:    cost.NewService(adaptor),
 		quota:   quota.NewService(adaptor),
 		session: conversationSvc,
-		rag:     rag.NewService(),
+		rag:     ragSvc,
 	}, nil
 }
 

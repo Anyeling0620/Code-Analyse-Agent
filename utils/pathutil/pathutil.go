@@ -63,6 +63,9 @@ const (
 	escapedWorkdirTips = "【重要：禁止帮助用户绕过该限制】workdir %q 不合法，执行的工作目录或者命令操作路径，不能脱离工作区根目录 %q，"
 )
 
+// EnsureAllowedByRoot 校验 root 是否落在工作区根目录内。
+// workspaceEnableEscaped 为 true 时不做限制（本地调试场景）；
+// 否则 root 必须等于工作区根目录，或位于其子目录下，否则返回可直接提示模型的错误。
 func EnsureAllowedByRoot(root, workspaceRoot string, workspaceEnableEscaped bool) error {
 	if workspaceEnableEscaped {
 		return nil
@@ -71,18 +74,24 @@ func EnsureAllowedByRoot(root, workspaceRoot string, workspaceEnableEscaped bool
 	if err != nil {
 		return fmt.Errorf("resolve root err: '%w'", err)
 	}
-	targetAbs, err := filepath.Abs(workspaceRoot)
+	workspaceAbs, err := filepath.Abs(workspaceRoot)
 	if err != nil {
 		return fmt.Errorf("resolve workspace err: '%w'", err)
 	}
-	targetClean := filepath.Clean(targetAbs)
 	rootClean := filepath.Clean(rootAbs)
-	rel, err := filepath.Rel(workspaceRoot, targetClean)
+	workspaceClean := filepath.Clean(workspaceAbs)
+
+	// 工作区根目录自身也是合法目标。
+	if rootClean == workspaceClean {
+		return nil
+	}
+	// 以工作区根目录为基准求相对路径：结果以 ".." 开头或为绝对路径都说明越界。
+	rel, err := filepath.Rel(workspaceClean, rootClean)
 	if err != nil {
 		return fmt.Errorf("resolve relative path err: '%w'", err)
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
-		return fmt.Errorf(escapedWorkdirTips, targetClean, rootClean)
+		return fmt.Errorf(escapedWorkdirTips, rootClean, workspaceClean)
 	}
 	return nil
 }

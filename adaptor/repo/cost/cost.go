@@ -54,31 +54,27 @@ func (c *Cost) DailyTotal(ctx context.Context, date time.Time) (float64, error) 
 	return total, err
 }
 
+// GroupByUser 按用户聚合区间内的总 token 与成本。 。
 func (c *Cost) GroupByUser(ctx context.Context, from, to time.Time) ([]do.CostByUser, error) {
 	rows := []do.CostByUser{}
 	err := c.db.WithContext(ctx).Model(&model.CostRecord{}).
 		Where("occurred_at >= ? AND occurred_at < ?", from, to).
-		Select("" + // TODO 可能的缺陷:生成的 SQL 缺逗号且括号不匹配（user_id SUM(...)），ORDER BY cny 的列不存在，/api/cost/by_user 会报语法错误
-			"user_id SUM(total_tokens) AS total_tokens, " +
-			"SUM(estimated_cny) AS estimated_cny)").
+		Select("user_id, SUM(total_tokens) AS tokens, SUM(estimated_cny) AS cny").
 		Group("user_id").
 		Order("cny DESC").
 		Scan(&rows).Error
 	return rows, err
 }
 
+// GroupByTool 按工具聚合区间内的总 token 与成本，空 tool_name 归入 (direct)。
 func (c *Cost) GroupByTool(ctx context.Context, from, to time.Time) ([]do.CostByTool, error) {
+	const toolExpr = "COALESCE(NULLIF(tool_name, ''), '(direct)')"
 	rows := []do.CostByTool{}
 	err := c.db.WithContext(ctx).Model(&model.CostRecord{}).
 		Where("occurred_at >= ? AND occurred_at < ?", from, to).
-		Select("" + // TODO 可能的缺陷:SUM(...) 之间缺逗号、COLLAPSE 不是 SQL 函数且括号不匹配，ORDER BY cny 的列不存在，/api/cost/by_tool 会报语法错误
-			"COLLAPSE(NULLIF(tool_name, ''), '(direct)') AS tool_name, " +
-			"SUM(total_tokens) AS total_tokens" +
-			"SUM(estimated_cny) AS estimated_cny)",
-		).
-		Group("tool_name").
+		Select(toolExpr + " AS tool_name, SUM(total_tokens) AS tokens, SUM(estimated_cny) AS cny").
+		Group(toolExpr).
 		Order("cny DESC").
 		Scan(&rows).Error
 	return rows, err
-
 }

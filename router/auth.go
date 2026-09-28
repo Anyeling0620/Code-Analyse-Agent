@@ -14,6 +14,8 @@ var authWhitelist = map[string]bool{
 	"/healthz":        true,
 	"/api/version":    true,
 	"/api/auth/login": true,
+	// 只读分享是公开链接：拿到令牌即可查看，不要求登录。
+	"/api/sessions/shared/info": true,
 }
 
 // Auth 校验 Authorization: Bearer <token>，并把登录用户写入 gin.Context，

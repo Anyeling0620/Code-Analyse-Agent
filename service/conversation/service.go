@@ -34,6 +34,8 @@ type Service struct {
 
 	profiles  profile.IProfile
 	approvals approval.IApproval
+	// shares 负责会话只读分享：快照落库、按令牌读取、撤销。
+	shares session.IShare
 
 	cost *cost.Service
 	rag  *rag.Service
@@ -58,6 +60,7 @@ func NewService(ctx context.Context, adaptor adaptor.IAdaptor, projectIndexer *r
 		profiles:       profile.NewProfile(adaptor),
 		sessions:       session.NewSession(adaptor),
 		approvals:      approval.NewApproval(adaptor),
+		shares:         session.NewShare(adaptor),
 		cost:           deps.cost,
 		rag:            nil,
 		projectIndexer: projectIndexer,

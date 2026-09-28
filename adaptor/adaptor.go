@@ -77,6 +77,7 @@ func (a *Adaptor) openDB(path string) error {
 		&model.QuotaUsage{},
 		&model.Approval{},
 		&model.AgentCheckpoint{},
+		&model.SessionShare{},
 	)
 	if err != nil {
 		return fmt.Errorf("auto migrate: %v", err)

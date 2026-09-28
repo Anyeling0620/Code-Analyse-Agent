@@ -179,21 +179,21 @@ go run ./eval/rag -smoke                      # -> eval/rag/results.smoke.json
 <!-- BEGIN AUTO:arm-comparison -->
 ## 附：候选池 / RRF-only / 查询改写 对照（自动生成）
 
-- 生成时间：2026-09-29T00:12:21+08:00
+- 生成时间：2026-09-29T00:21:57+08:00
 - collection：`edu_agent_code_docs_p1c6a6a726a49c9a8`，题目数：45
 - 候选池：dense_top_k=40 / sparse_top_k=40 / candidate_k=40，重排后保留 final=20 条
 - 查询改写臂模型：deepseek-flash
 
 | arm | F@1 | F@5 | F@10 | F@20 | S@1 | S@5 | S@10 | S@20 | MRR | avg_ms | p50_ms | p95_ms | rw_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `dense_zh` | 0.3556 | 0.8222 | 0.8444 | 0.9556 | 0.3333 | 0.6667 | 0.7111 | 0.8667 | 0.5310 | 301.9 | 296.0 | 379.0 | 0.0 |
-| `dense_en` | 0.6000 | 0.8667 | 0.9333 | 0.9556 | 0.5556 | 0.8667 | 0.9333 | 0.9333 | 0.7205 | 271.4 | 277.0 | 321.0 | 1244.9 |
-| `sparse_zh` | 0.1556 | 0.2889 | 0.4000 | 0.4000 | 0.1556 | 0.2222 | 0.2889 | 0.4000 | 0.2249 | 38.7 | 33.0 | 55.0 | 0.0 |
-| `hybrid_zh` | 0.5333 | 0.8889 | 0.9556 | 0.9556 | 0.4444 | 0.8444 | 0.8889 | 0.8889 | 0.6771 | 726.6 | 731.0 | 848.0 | 0.0 |
-| `hybrid_en` | 0.6444 | 0.8667 | 0.9778 | 1.0000 | 0.5778 | 0.8889 | 0.9778 | 1.0000 | 0.7482 | 786.2 | 777.0 | 862.0 | 1244.9 |
-| `hybrid_zh_norerank` | 0.2444 | 0.4444 | 0.5333 | 0.8667 | 0.2444 | 0.4000 | 0.4444 | 0.7333 | 0.3365 | 295.6 | 295.0 | 340.0 | 0.0 |
-| `hybrid_en_norerank` | 0.3778 | 0.6667 | 0.7778 | 0.9556 | 0.3556 | 0.6889 | 0.7556 | 0.9778 | 0.5016 | 273.6 | 269.0 | 320.0 | 1244.9 |
-| `rewrite_hybrid_zh` | 0.5111 | 0.9111 | 0.9778 | 1.0000 | 0.4222 | 0.9111 | 0.9556 | 0.9778 | 0.6751 | 3571.9 | 3109.0 | 5716.0 | 2056.8 |
+| `dense_zh` | 0.2667 | 0.6889 | 0.8000 | 0.8667 | 0.4000 | 0.7111 | 0.7556 | 0.9556 | 0.4349 | 330.1 | 321.0 | 368.0 | 0.0 |
+| `dense_en` | 0.5556 | 0.8222 | 0.8889 | 0.9333 | 0.6222 | 0.8222 | 0.8667 | 0.9556 | 0.6932 | 298.9 | 287.0 | 366.0 | 1290.2 |
+| `sparse_zh` | 0.0000 | 0.1778 | 0.2444 | 0.3778 | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.0969 | 41.0 | 47.0 | 55.0 | 0.0 |
+| `hybrid_zh` | 0.3333 | 0.8000 | 0.9333 | 0.9333 | 0.7111 | 0.9556 | 1.0000 | 1.0000 | 0.5345 | 847.2 | 847.0 | 962.0 | 0.0 |
+| `hybrid_en` | 0.2000 | 0.7778 | 0.9556 | 0.9556 | 0.6667 | 0.8889 | 0.9556 | 0.9556 | 0.4772 | 832.3 | 828.0 | 959.0 | 1290.2 |
+| `hybrid_zh_norerank` | 0.0667 | 0.3111 | 0.4889 | 0.8000 | 0.6444 | 0.8667 | 0.9778 | 1.0000 | 0.2072 | 309.8 | 312.0 | 341.0 | 0.0 |
+| `hybrid_en_norerank` | 0.3333 | 0.6667 | 0.8444 | 0.8889 | 0.3556 | 0.6667 | 0.7333 | 0.8444 | 0.4887 | 292.8 | 290.0 | 351.0 | 1290.2 |
+| `rewrite_hybrid_zh` | 0.0889 | 0.8667 | 0.9556 | 0.9778 | 0.6889 | 0.9111 | 0.9778 | 0.9778 | 0.4164 | 3844.6 | 3203.0 | 4842.0 | 2229.2 |
 
 F = 文件级 Recall，S = 符号级 Recall；rw_ms = 该臂平均改写耗时（0 表示该臂不涉及改写）。
 
@@ -201,32 +201,32 @@ F = 文件级 Recall，S = 符号级 Recall；rw_ms = 该臂平均改写耗时�
 
 | difficulty | arm | n | F@5 | S@5 | MRR |
 | --- | --- | --- | --- | --- | --- |
-| descriptive | `dense_zh` | 16 | 0.8750 | 0.6875 | 0.6333 |
-| descriptive | `dense_en` | 16 | 0.8125 | 0.8750 | 0.6385 |
-| descriptive | `sparse_zh` | 16 | 0.3125 | 0.3125 | 0.2545 |
-| descriptive | `hybrid_zh` | 16 | 0.8125 | 0.8125 | 0.5506 |
-| descriptive | `hybrid_en` | 16 | 0.8125 | 0.8750 | 0.6652 |
-| descriptive | `hybrid_zh_norerank` | 16 | 0.5625 | 0.5000 | 0.4461 |
-| descriptive | `hybrid_en_norerank` | 16 | 0.4375 | 0.6875 | 0.3092 |
-| descriptive | `rewrite_hybrid_zh` | 16 | 0.8750 | 0.8750 | 0.6652 |
-| explaining | `dense_zh` | 28 | 0.7857 | 0.6429 | 0.4737 |
-| explaining | `dense_en` | 28 | 0.8929 | 0.8571 | 0.7573 |
-| explaining | `sparse_zh` | 28 | 0.2500 | 0.1429 | 0.1803 |
-| explaining | `hybrid_zh` | 28 | 0.9286 | 0.8571 | 0.7378 |
-| explaining | `hybrid_en` | 28 | 0.8929 | 0.8929 | 0.7866 |
-| explaining | `hybrid_zh_norerank` | 28 | 0.3571 | 0.3214 | 0.2502 |
-| explaining | `hybrid_en_norerank` | 28 | 0.7857 | 0.6786 | 0.6205 |
-| explaining | `rewrite_hybrid_zh` | 28 | 0.9286 | 0.9286 | 0.6692 |
-| locating | `dense_zh` | 1 | 1.0000 | 1.0000 | 0.5000 |
-| locating | `dense_en` | 1 | 1.0000 | 1.0000 | 1.0000 |
-| locating | `sparse_zh` | 1 | 1.0000 | 1.0000 | 1.0000 |
+| descriptive | `dense_zh` | 16 | 0.7500 | 0.8125 | 0.5920 |
+| descriptive | `dense_en` | 16 | 0.8750 | 0.8750 | 0.6640 |
+| descriptive | `sparse_zh` | 16 | 0.1250 | 1.0000 | 0.0815 |
+| descriptive | `hybrid_zh` | 16 | 0.7500 | 0.9375 | 0.4783 |
+| descriptive | `hybrid_en` | 16 | 0.7500 | 0.9375 | 0.4766 |
+| descriptive | `hybrid_zh_norerank` | 16 | 0.3750 | 0.8750 | 0.2441 |
+| descriptive | `hybrid_en_norerank` | 16 | 0.3750 | 0.6875 | 0.3153 |
+| descriptive | `rewrite_hybrid_zh` | 16 | 0.8750 | 0.8750 | 0.4057 |
+| explaining | `dense_zh` | 28 | 0.6429 | 0.6429 | 0.3535 |
+| explaining | `dense_en` | 28 | 0.7857 | 0.7857 | 0.7168 |
+| explaining | `sparse_zh` | 28 | 0.1786 | 1.0000 | 0.0913 |
+| explaining | `hybrid_zh` | 28 | 0.8214 | 0.9643 | 0.5500 |
+| explaining | `hybrid_en` | 28 | 0.7857 | 0.8571 | 0.4768 |
+| explaining | `hybrid_zh_norerank` | 28 | 0.2500 | 0.8571 | 0.1756 |
+| explaining | `hybrid_en_norerank` | 28 | 0.8214 | 0.6429 | 0.5695 |
+| explaining | `rewrite_hybrid_zh` | 28 | 0.8571 | 0.9286 | 0.4196 |
+| locating | `dense_zh` | 1 | 1.0000 | 1.0000 | 0.2000 |
+| locating | `dense_en` | 1 | 1.0000 | 1.0000 | 0.5000 |
+| locating | `sparse_zh` | 1 | 1.0000 | 1.0000 | 0.5000 |
 | locating | `hybrid_zh` | 1 | 1.0000 | 1.0000 | 1.0000 |
-| locating | `hybrid_en` | 1 | 1.0000 | 1.0000 | 1.0000 |
-| locating | `hybrid_zh_norerank` | 1 | 1.0000 | 1.0000 | 1.0000 |
-| locating | `hybrid_en_norerank` | 1 | 1.0000 | 1.0000 | 0.2500 |
-| locating | `rewrite_hybrid_zh` | 1 | 1.0000 | 1.0000 | 1.0000 |
+| locating | `hybrid_en` | 1 | 1.0000 | 1.0000 | 0.5000 |
+| locating | `hybrid_zh_norerank` | 1 | 1.0000 | 1.0000 | 0.5000 |
+| locating | `hybrid_en_norerank` | 1 | 1.0000 | 1.0000 | 1.0000 |
+| locating | `rewrite_hybrid_zh` | 1 | 1.0000 | 1.0000 | 0.5000 |
 
-_（本节由 `go run ./eval/rag -report eval/rag/REPORT.md` 自动生成于 2026-09-29T00:17:04+08:00，重跑即覆盖。）_
+_（本节由 `go run ./eval/rag -report eval/rag/REPORT.md` 自动生成于 2026-09-29T00:27:04+08:00，重跑即覆盖。）_
 <!-- END AUTO:arm-comparison -->
 
 ---
@@ -309,3 +309,68 @@ go run ./eval/rag -rewrite-arm=false        # rewrite_hybrid_zh 会被标注跳�
 - rerank、embedding、改写都走外部服务，数字有网络抖动；本表是单次运行。
 - `rewrite_hybrid_zh` 的耗时包含一次改写 LLM 调用与多路检索，未做并发优化；若要上线需按体验权衡
   （例如只在首轮/低置信时改写）。
+
+## 8. 第三轮：候选池修复 + 重建索引后的复跑（2026-09-29）
+
+### 8.1 本轮做了什么
+
+1. **修 hybrid 候选池**：新增 `rag.milvus.dense_top_k / sparse_top_k / candidate_k`（默认 40），
+   两路各自召回后 RRF 融合，融合结果不再被截回 `top_k`。修掉"hybrid F@20 反而低于 dense 单路"。
+2. **`Rerank.Enabled` 真正生效**，可以关掉重排做 RRF-only 对照。
+3. **新增中文查询改写**（`service/rag/rewrite.go`）：一次 LLM 调用产出
+   `{rewritten_en, keywords[], subqueries[]}`，作为并行补充路径，不替换原查询；默认关闭，失败降级。
+4. **重建项目索引**：commit `c3ea49d` → `ae3de77`，包含本轮新增的代码文件。
+
+重建命令（一次性 e2e 用例，文件被 `.gitignore` 忽略）：
+
+```powershell
+$env:RAG_E2E=1; $env:REBUILD_ROOT="<clone 路径>"; $env:REBUILD_PID="p1c6a6a726a49c9a8"
+$env:REBUILD_COMMIT="ae3de773dc69b79b0f9266ca2768204d36a27b66"
+go test ./e2e -tags e2e -run TestRebuildProjectIndex -v -count=1
+```
+
+### 8.2 重建后的索引构成
+
+| 指标 | 重建前 | 重建后 |
+| --- | --- | --- |
+| 条数 | 828 | **1248** |
+| commit | c3ea49d | ae3de77 |
+| 锁文件块 | 272（25%） | **0** |
+| `kind=text` | 44（5.3%） | 81（6.5%） |
+| 元数据 `kind/symbol/line_start` | 有 | 有 |
+
+重建后 `kind` 分布：`func` 492 / `method` 221 / `struct` 167 / `file_summary` 122 / `text` 81 /
+`const` 58 / `block` 43 / `var` 41 / `interface` 14 / `type` 9。
+扩展名分布：`.go` 997 / `.tsx` 107 / `.ts` 65 / `.md` 25 / `.json` 20 / `.ps1` 12 / `.mod` 11 /
+`.yml` 9 / `.html` 1 / `.yaml` 1。
+
+重建耗时 21.2s（1248 条，云端 embedding）。评测集目标核对：**45 题中 42 题完全命中，路径缺失 1、符号缺失 3**。
+
+### 8.3 本轮指标（45 题兜底集，重建后的索引）
+
+见文件顶部"附：候选池 / RRF-only / 查询改写 对照（自动生成）"一节。四条主要结论：
+
+1. **候选池修复生效**：`hybrid_zh` F@20 = 0.9333 ≥ `dense_zh` 0.8667，旧版"融合后低于单路"消失。
+2. **rerank 净收益很大**：`hybrid_zh` F@1 0.3333 vs `hybrid_zh_norerank` 0.0667（**+26.7pp**），
+   F@5 0.8000 vs 0.3111（**+48.9pp**）。上一版"分数饱和所以重排没用"的怀疑不成立。
+3. **改写臂的召回最好、排序最差**：`rewrite_hybrid_zh` F@5 0.8667、S@5 0.9111（本轮最高），
+   但 F@1 仅 0.0889，且 P50 延迟 3.2s（改写平均 2.2s）。
+4. **文件级 F@1 相比上一轮整体下降**（`hybrid_zh` 0.5333 → 0.3333）。原因见 8.4，暂不能归因于单项改动。
+
+### 8.4 三条必须知道的口径限制
+
+1. **S@ 列不可信，只看 F@。** `eval/rag/main.go` 的符号命中判定是
+   `symbol == want || strings.Contains(doc.Content, want)`——符号名出现在任意 chunk 正文里就算命中，
+   不校验文件。因此会出现 `sparse_zh` S@1 = 1.0000 而 F@1 = 0.0000、`hybrid_zh` S@1 = 0.7111 > F@1 = 0.3333
+   这类"符号命中率高于文件命中率"的矛盾。**S@ 应加上文件约束后再用**。
+2. **跨轮不可比。** 本轮同时换了索引（828 → 1248 条、盲切改符号切分）和 harness 语义
+   （`*_en` 臂改为运行时改写，`rw_ms≈1290ms`；上一轮是预置英文题面）。只有同轮内各臂横向对比有效。
+3. **评测集仍是兜底集。** 45 题由 LLM 依据旧索引生成，独立评测集 `eval/rag/queryset.json` 至今缺位，
+   绝对数值只能当方向性证据。
+
+### 8.5 本轮新增待办
+
+- 修 `S@` 口径（符号命中需限定在同一文件内）。
+- 生成独立评测集，替换兜底集。
+- 归因文件级 F@1 的下降：怀疑与"符号级小块数量翻倍、单块语义变窄"有关，
+  建议做一次"盲切 vs 符号切分"的同集 A/B，而不是继续在同一索引上换参数。

@@ -13,7 +13,8 @@ func (h *Handler) CostDaily(c *gin.Context) {
 		return
 	}
 
-	item, err := h.cost.DailyUsage(c.Request.Context(), day)
+	user := h.authUser(c)
+	item, err := h.cost.DailyUsage(c.Request.Context(), user.UserID, day)
 	if err != nil {
 		h.writeResp(c, nil, common.ServerError.WithError(err))
 		return

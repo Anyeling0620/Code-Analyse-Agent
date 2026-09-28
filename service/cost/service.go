@@ -99,11 +99,11 @@ func (s *Service) DailyTotal(ctx context.Context, day time.Time) (float64, error
 	return total, nil
 }
 
-// DailyUsage 返回某天的用量与成本汇总，含缓存命中 / 未命中拆分，供前端展示。
-func (s *Service) DailyUsage(ctx context.Context, day time.Time) (dto.CostDailyTotal, error) {
-	row, err := s.cost.DailyUsage(ctx, day)
+// DailyUsage 返回某天、某个用户的用量与成本汇总，含缓存命中 / 未命中拆分，供前端展示。
+func (s *Service) DailyUsage(ctx context.Context, userID string, day time.Time) (dto.CostDailyTotal, error) {
+	row, err := s.cost.DailyUsage(ctx, userID, day)
 	if err != nil {
-		logger.Error("cost.DailyUsage days=%s err=%v", day.Format(time.DateTime), err)
+		logger.Error("cost.DailyUsage user=%s days=%s err=%v", userID, day.Format(time.DateTime), err)
 		return dto.CostDailyTotal{}, err
 	}
 	return dto.CostDailyTotal{

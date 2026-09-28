@@ -274,50 +274,23 @@ func makeChunk(content string, fset *token.FileSet, start, end token.Pos, symbol
 
 // ---------- 大括号语言：按顶层 { } 配对切块 ----------
 
+// spanRange 是一个顶层块在原文里的区间；openIdx/closeIdx 是界定它的那对花括号，
+// 容器成员抽取需要用它来确定 body 边界，避免再扫一遍。
+type spanRange struct{ start, end, openIdx, closeIdx int }
+
 // splitBraceSymbols 用"深度归零"定位顶层代码块，
 // 不依赖各语言的声明关键字，扫描时跳过字符串与注释，避免被其中的花括号带偏。
 func splitBraceSymbols(content string) []codeChunk {
 	li := newLineIndex(content)
-	type span struct{ start, end int }
-	var spans []span
+	var spans []spanRange
 
 	depth, blockStart, openIdx := 0, 0, 0
 	for i := 0; i < len(content); {
+		if next, ok := skipNonCode(content, i); ok {
+			i = next
+			continue
+		}
 		switch content[i] {
-		case '/':
-			if i+1 < len(content) && content[i+1] == '/' {
-				for i < len(content) && content[i] != '\n' {
-					i++
-				}
-				continue
-			}
-			if i+1 < len(content) && content[i+1] == '*' {
-				i += 2
-				for i+1 < len(content) && !(content[i] == '*' && content[i+1] == '/') {
-					i++
-				}
-				if i+1 < len(content) {
-					i += 2
-				} else {
-					i = len(content)
-				}
-				continue
-			}
-			i++
-		case '"', '\'', '`':
-			quote := content[i]
-			i++
-			for i < len(content) {
-				if content[i] == '\\' && quote != '`' {
-					i += 2
-					continue
-				}
-				if content[i] == quote {
-					i++
-					break
-				}
-				i++
-			}
 		case '{':
 			if depth == 0 {
 				blockStart = blockStartOffset(content, i, li)
@@ -330,7 +303,7 @@ func splitBraceSymbols(content string) []codeChunk {
 				depth--
 				if depth == 0 {
 					if start, end, ok := braceBlockSpan(content, blockStart, openIdx, i, li); ok {
-						spans = append(spans, span{start, end})
+						spans = append(spans, spanRange{start: start, end: end, openIdx: openIdx, closeIdx: i})
 					}
 				}
 			}
@@ -354,6 +327,14 @@ func splitBraceSymbols(content string) []codeChunk {
 			s.start = lastEnd
 		}
 		if s.start >= s.end {
+			continue
+		}
+		// 类 / 结构体这类容器：把内部方法抽成独立块。
+		// 否则整个类是一个块，超长后会被行窗二次切成一堆 symbol 相同的碎片，
+		// 方法级的检索（"某个方法实现在哪"）就无从命中。
+		if members := splitContainerMembers(content, s, li); len(members) > 0 {
+			chunks = append(chunks, members...)
+			lastEnd = s.end
 			continue
 		}
 		text := strings.TrimRight(content[s.start:s.end], " \t\r\n")
@@ -411,6 +392,294 @@ func isImportBrace(content string, openIdx, closeIdx int, li *lineIndex) bool {
 		return strings.HasPrefix(rest, "from")
 	}
 	return false
+}
+
+// ---------- 容器成员抽取：把类/结构体/impl 的方法抽成独立块 ----------
+
+// containerKinds 把容器关键字映射到块类型。
+var containerKinds = map[string]string{
+	"class":     kindType,
+	"record":    kindType,
+	"enum":      kindType,
+	"object":    kindType,
+	"impl":      kindType,
+	"struct":    kindStruct,
+	"interface": kindInterface,
+	"trait":     kindInterface,
+}
+
+var containerRe = regexp.MustCompile(`\b(class|interface|enum|record|trait|impl|object|struct)\s+([A-Za-z_$][\w$]*)`)
+
+// 方法型成员的两种签名形态：常规方法 "名字(params)"、箭头函数属性 "名字 = (...) =>"。
+var (
+	methodCallRe  = regexp.MustCompile(`([A-Za-z_$#][\w$#]*)\s*\(`)
+	methodArrowRe = regexp.MustCompile(`([A-Za-z_$#][\w$#]*)\s*=`)
+)
+
+// nonMethodKeywords 是"长得像方法调用、其实是控制流或表达式"的前缀关键字。
+var nonMethodKeywords = map[string]bool{
+	"if": true, "for": true, "while": true, "switch": true, "catch": true,
+	"do": true, "else": true, "try": true, "finally": true, "return": true,
+	"new": true, "typeof": true, "case": true, "with": true, "delete": true,
+	"void": true, "await": true, "yield": true, "throw": true, "function": true,
+	"super": true, "this": true,
+}
+
+// containerDeclMaxPrefix 限制容器关键字允许出现的位置：
+// 太靠后说明匹配到的多半是注释或字符串里的某个词，不是真的声明。
+const containerDeclMaxPrefix = 64
+
+// splitContainerMembers 把一个"容器块"（类 / 结构体 / impl / object）
+// 拆成"头部块 + 每个方法一块"。
+//
+// 各块之间严格铺满：成员 i 的区间是 [成员 i 起点, 成员 i+1 起点)，
+// 最后一个成员到容器末尾。这样既不丢字段声明，也不产生重叠，
+// 而且每块内容仍是原文的连续片段，引用行号依然可靠。
+//
+// 返回 nil 表示这不是容器、或内部没识别出方法成员，调用方保持原行为。
+func splitContainerMembers(content string, s spanRange, li *lineIndex) []codeChunk {
+	// 前一块与本块重叠时，调用方会把 s.start 往后夹到上一块的末尾。
+	// 一旦夹过开括号，说明本块头部已被上一块吸收，容器拆分不再可靠，
+	// 此时保持原来的整块行为，避免用越界区间切片。
+	if s.start >= s.openIdx || s.openIdx >= len(content) || s.closeIdx > len(content) {
+		return nil
+	}
+	name, kind, ok := detectContainer(content[s.start:s.openIdx])
+	if !ok {
+		return nil
+	}
+
+	type member struct {
+		start int
+		name  string
+	}
+	var members []member
+	depth := 0
+	for i := s.openIdx + 1; i < s.closeIdx && i < len(content); {
+		if next, ok := skipNonCode(content, i); ok {
+			i = next
+			continue
+		}
+		switch content[i] {
+		case '{':
+			if depth == 0 {
+				if start, mname, ok := memberCandidate(content, i, s.start, li); ok {
+					members = append(members, member{start: start, name: mname})
+				}
+			}
+			depth++
+			i++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+			i++
+		default:
+			i++
+		}
+	}
+	if len(members) == 0 {
+		return nil
+	}
+
+	out := make([]codeChunk, 0, len(members)+1)
+	// 头部块：容器声明到第一个成员之前，保留容器注释与字段声明。
+	if headerEnd := members[0].start; headerEnd > s.start {
+		if text := strings.TrimRight(content[s.start:headerEnd], " \t\r\n"); strings.TrimSpace(text) != "" {
+			out = append(out, codeChunk{
+				Content:   text,
+				Symbol:    name,
+				Kind:      kind,
+				LineStart: li.lineOf(s.start),
+				LineEnd:   li.lineOf(headerEnd - 1),
+				startByte: s.start,
+				endByte:   headerEnd,
+			})
+		}
+	}
+	for i, m := range members {
+		end := s.end
+		if i+1 < len(members) {
+			end = members[i+1].start
+		}
+		if m.start < s.start || m.start >= end || end > len(content) {
+			continue
+		}
+		text := strings.TrimRight(content[m.start:end], " \t\r\n")
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		out = append(out, codeChunk{
+			Content:   text,
+			Symbol:    name + "." + m.name,
+			Kind:      kindMethod,
+			Parent:    name,
+			LineStart: li.lineOf(m.start),
+			LineEnd:   li.lineOf(end - 1),
+			startByte: m.start,
+			endByte:   end,
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// memberCandidate 判断容器内某个花括号是不是"方法成员的函数体"，
+// 命中时返回成员起点（回溯到声明行并并入紧邻注释）与方法名。
+func memberCandidate(content string, braceIdx, containerStart int, li *lineIndex) (int, string, bool) {
+	start := blockStartOffset(content, braceIdx, li)
+	if start < containerStart {
+		start = containerStart
+	}
+	if start >= braceIdx {
+		return 0, "", false
+	}
+	name, ok := methodMemberName(content[start:braceIdx])
+	if !ok {
+		return 0, "", false
+	}
+	return start, name, true
+}
+
+// methodMemberName 判断一段签名前缀是否像方法成员，命中时返回方法名。
+// 认不出来就当普通成员（字段、对象字面量）跳过：宁可漏，也不误判。
+func methodMemberName(prefix string) (string, bool) {
+	cleaned := collapseSpaces(stripLeadingCommentLines(prefix))
+	if cleaned == "" || strings.Contains(cleaned, ";") {
+		return "", false
+	}
+	if !parensBalanced(cleaned) {
+		return "", false
+	}
+	var name string
+	if strings.Contains(cleaned, "=>") {
+		m := methodArrowRe.FindStringSubmatch(cleaned)
+		if len(m) < 2 {
+			return "", false
+		}
+		name = m[1]
+	} else {
+		all := methodCallRe.FindAllStringSubmatch(cleaned, -1)
+		if len(all) == 0 {
+			return "", false
+		}
+		// 取最后一个 "名字("：可以跳过 async/static/public 这类修饰符。
+		name = all[len(all)-1][1]
+	}
+	if nonMethodKeywords[name] {
+		return "", false
+	}
+	return name, true
+}
+
+// detectContainer 从"声明前缀"里识别容器及其名字。第二个返回值是块类型。
+func detectContainer(decl string) (string, string, bool) {
+	cleaned := collapseSpaces(stripLeadingCommentLines(decl))
+	if cleaned == "" {
+		return "", "", false
+	}
+	loc := containerRe.FindStringSubmatchIndex(cleaned)
+	if loc == nil || loc[0] > containerDeclMaxPrefix {
+		return "", "", false
+	}
+	if before := cleaned[:loc[0]]; strings.ContainsAny(before, "{};") {
+		return "", "", false
+	}
+	kind, ok := containerKinds[cleaned[loc[2]:loc[3]]]
+	if !ok {
+		return "", "", false
+	}
+	return cleaned[loc[4]:loc[5]], kind, true
+}
+
+// stripLeadingCommentLines 去掉开头的注释行，让声明前缀直接以代码开头。
+func stripLeadingCommentLines(s string) string {
+	lines := strings.Split(s, "\n")
+	i := 0
+	for i < len(lines) {
+		t := strings.TrimSpace(lines[i])
+		if t == "" || strings.HasPrefix(t, "//") || strings.HasPrefix(t, "/*") ||
+			strings.HasPrefix(t, "*") {
+			i++
+			continue
+		}
+		break
+	}
+	return strings.Join(lines[i:], "\n")
+}
+
+func collapseSpaces(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// parensBalanced 统计圆括号是否配平，扫描时跳过字符串与注释，
+// 避免 foo(")") 这类字面量把计数带偏。
+func parensBalanced(s string) bool {
+	depth := 0
+	for i := 0; i < len(s); {
+		if next, ok := skipNonCode(s, i); ok {
+			i = next
+			continue
+		}
+		switch s[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth < 0 {
+				return false
+			}
+		}
+		i++
+	}
+	return depth == 0
+}
+
+// skipNonCode 识别注释与字符串字面量，返回跳过之后的位置；
+// 第二个返回值为 false 表示当前位置不是注释或字符串，按普通字符处理。
+func skipNonCode(content string, i int) (int, bool) {
+	if i >= len(content) {
+		return i, false
+	}
+	switch content[i] {
+	case '/':
+		if i+1 < len(content) && content[i+1] == '/' {
+			for i < len(content) && content[i] != '\n' {
+				i++
+			}
+			return i, true
+		}
+		if i+1 < len(content) && content[i+1] == '*' {
+			i += 2
+			for i+1 < len(content) && !(content[i] == '*' && content[i+1] == '/') {
+				i++
+			}
+			if i+1 < len(content) {
+				i += 2
+			} else {
+				i = len(content)
+			}
+			return i, true
+		}
+	case '"', '\'', '`':
+		quote := content[i]
+		i++
+		for i < len(content) {
+			if content[i] == '\\' && quote != '`' {
+				i += 2
+				continue
+			}
+			if content[i] == quote {
+				i++
+				break
+			}
+			i++
+		}
+		return i, true
+	}
+	return i, false
 }
 
 var braceSymbolPatterns = []struct {

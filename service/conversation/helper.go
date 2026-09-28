@@ -1,6 +1,8 @@
 package conversation
 
 import (
+	"edu.agent.code/config"
+	"edu.agent.code/service/agent/compress"
 	"edu.agent.code/service/dto"
 	"fmt"
 	"github.com/cloudwego/eino/schema"
@@ -93,6 +95,10 @@ const sessionSummaryPrefix = "以下是本次会话较早轮次的压缩摘要�
 // sessionSummaryMaxRunes 是滚动摘要的长度上限。
 const sessionSummaryMaxRunes = 2000
 
+// historyWindowSize 与 buildMessageWithHistory 里 ListMessages 的 Limit 保持一致：
+// 模型每轮只看到最近这么多条历史消息，更早的内容只能靠摘要带过去。
+const historyWindowSize = 20
+
 // buildSessionSummaryMessage 把会话摘要转换成模型可见的 system 消息。
 // 摘要为空时返回 nil，保证未启用压缩的会话行为与改造前一致。
 func buildSessionSummaryMessage(session *dto.SessionContext) *schema.Message {
@@ -104,6 +110,33 @@ func buildSessionSummaryMessage(session *dto.SessionContext) *schema.Message {
 		return nil
 	}
 	return schema.SystemMessage(sessionSummaryPrefix + "\n" + summary)
+}
+
+// resolveSessionSummaryMessage 决定"这一轮要不要把跨轮摘要注入模型输入"。
+//
+// 两个条件缺一不可：
+//  1. 压缩开关打开。Enabled=false 时必须与改造前完全一致——既不注入摘要，
+//     也不累积摘要（累积在 persistSession 里同样按开关门控）。
+//  2. 历史的确被窗口截断过（totalMessages > fetchedMessages）。否则摘要里写的就是
+//     prompt 中已经存在的近期问答，注入等于把同一段内容重复计费。
+func resolveSessionSummaryMessage(conf config.ContextCompact, session *dto.SessionContext,
+	totalMessages int64, fetchedMessages int) *schema.Message {
+	if !compress.Enabled(conf) {
+		return nil
+	}
+	if totalMessages <= int64(fetchedMessages) {
+		return nil
+	}
+	return buildSessionSummaryMessage(session)
+}
+
+// compactConf 返回压缩配置，并在 Service 未注入配置时（例如单测里的最小构造）
+// 退回零值配置。零值即 Enabled=false，语义与"改造前"一致，不会 nil 解引用。
+func (s *Service) compactConf() config.ContextCompact {
+	if s == nil || s.conf == nil {
+		return config.ContextCompact{}
+	}
+	return s.conf.ContextCompact
 }
 
 // mergeSessionSummary 生成滚动摘要：在上一轮摘要上追加本轮问答，

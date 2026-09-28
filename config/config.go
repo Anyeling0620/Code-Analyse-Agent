@@ -50,7 +50,8 @@ type Config struct {
 // 每当准备调用模型时统计当前 prompt（历史消息 + 工具 schema）的 token 用量，
 // 超过阈值就把较早的对话折叠成一条结构化摘要，从而避免上下文窗口被打满。
 type ContextCompact struct {
-	// Enabled 为 false 时完全不注册压缩中间件，行为与改造前一致。
+	// Enabled 为 false 时完全不注册压缩中间件，也不注入/累积跨轮摘要，
+	// 行为与改造前完全一致。
 	Enabled bool `yaml:"enabled"`
 	// WindowTokens 是模型上下文窗口大小（token），用于按比例推导触发阈值。
 	WindowTokens int `yaml:"window_tokens"`
@@ -60,7 +61,8 @@ type ContextCompact struct {
 	TriggerTokens int `yaml:"trigger_tokens"`
 	// TriggerMessages 是消息条数兜底阈值；<=0 时使用默认值。
 	TriggerMessages int `yaml:"trigger_messages"`
-	// Model 是生成摘要使用的模型；为空时沿用 DeepSeek.Model。
+	// Model 是生成摘要使用的模型；为空或与 DeepSeek.Model 相同时沿用主链路模型，
+	// 配置成别的模型名则用同一个 DeepSeek 端点单独构造摘要模型。
 	Model string `yaml:"model"`
 	// Instruction 是自定义摘要指令；为空时使用内置中文指令。
 	Instruction string `yaml:"instruction"`

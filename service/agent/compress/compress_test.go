@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"edu.agent.code/config"
 
@@ -26,6 +27,20 @@ func (f *fakeSummaryModel) Generate(_ context.Context, _ []*schema.Message, _ ..
 
 func (f *fakeSummaryModel) Stream(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.StreamReader[*schema.Message], error) {
 	return nil, errors.New("stream is not supported by fakeSummaryModel")
+}
+
+// failingSummaryModel 永远返回错误，用来模拟摘要模型 429/超时/5xx。
+type failingSummaryModel struct {
+	calls int
+}
+
+func (f *failingSummaryModel) Generate(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.Message, error) {
+	f.calls++
+	return nil, errors.New("summarization model unavailable")
+}
+
+func (f *failingSummaryModel) Stream(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	return nil, errors.New("stream is not supported by failingSummaryModel")
 }
 
 // recordingModel 记录每次模型调用收到的消息，用来证明压缩发生在"真正调用模型之前"。
@@ -123,10 +138,8 @@ func TestSummarizeFoldsHistoryAndKeepsPinnedContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build middleware: %v", err)
 	}
-	concrete, ok := middleware.(*summarization.TypedMiddleware[*schema.Message])
-	if !ok {
-		t.Fatalf("middleware type = %T, want *summarization.TypedMiddleware[*schema.Message]", middleware)
-	}
+	// New 返回的是带降级保护的包装层，真正的压缩逻辑在内层。
+	concrete := unwrapSummarizationMiddleware(t, middleware)
 
 	state := &adk.ChatModelAgentState{Messages: []*schema.Message{
 		schema.SystemMessage("安全约束：不得执行破坏性命令"),
@@ -265,4 +278,101 @@ func estimateTokens(messages []*schema.Message) int {
 		return 0
 	}
 	return runes/4 + 1
+}
+
+func intPtr(v int) *int { return &v }
+
+// unwrapSummarizationMiddleware 取出 New 返回的降级包装层里的真正中间件。
+//
+// New 现在返回 *safeMiddleware（压缩失败降级为"本轮不压缩"），因此想直接调用
+// Eino 的 Summarize 等能力时，必须先剥掉这一层。
+func unwrapSummarizationMiddleware(t *testing.T, middleware adk.ChatModelAgentMiddleware) *summarization.TypedMiddleware[*schema.Message] {
+	t.Helper()
+	if safe, ok := middleware.(*safeMiddleware); ok {
+		if safe.inner == nil {
+			t.Fatal("safeMiddleware has no inner middleware")
+		}
+		middleware = safe.inner
+	}
+	concrete, ok := middleware.(*summarization.TypedMiddleware[*schema.Message])
+	if !ok {
+		t.Fatalf("middleware type = %T, want *summarization.TypedMiddleware[*schema.Message]", middleware)
+	}
+	return concrete
+}
+
+// TestNewConfiguresRetryForSummaryCalls 锁定"摘要调用必须带重试"。
+//
+// Eino 的 generateWithRetry 在 Retry 为 nil 时只调用一次摘要模型，
+// 一次 429/超时就会让整轮对话失败；这里直接检查真正传给 Eino 的配置。
+func TestNewConfiguresRetryForSummaryCalls(t *testing.T) {
+	original := newSummarization
+	defer func() { newSummarization = original }()
+
+	var captured *summarization.Config
+	newSummarization = func(ctx context.Context, cfg *summarization.Config) (adk.ChatModelAgentMiddleware, error) {
+		captured = cfg
+		return original(ctx, cfg)
+	}
+
+	if _, err := New(context.Background(), config.ContextCompact{Enabled: true, TriggerMessages: 5},
+		&fakeSummaryModel{summary: "摘要"}); err != nil {
+		t.Fatalf("build middleware: %v", err)
+	}
+	if captured == nil {
+		t.Fatal("summarization config was never passed to Eino")
+	}
+	if captured.Retry == nil {
+		t.Fatal("Retry must be non-nil, otherwise Eino only attempts the summary call once")
+	}
+	if captured.Retry.MaxRetries != nil {
+		t.Fatalf("MaxRetries = %d, want nil so Eino keeps its default of 3 retries", *captured.Retry.MaxRetries)
+	}
+}
+
+// TestSummaryFailureDegradesToUncompactedTurn 断言压缩失败不再等于用户这一轮失败：
+// 摘要模型持续报错时，中间件必须返回 nil error 与原始 state，让主流程带着未压缩的
+// 历史继续跑（这正是 safeMiddleware 存在的理由）。
+func TestSummaryFailureDegradesToUncompactedTurn(t *testing.T) {
+	ctx := context.Background()
+	summaryModel := &failingSummaryModel{}
+	inner, err := summarization.New(ctx, &summarization.Config{
+		Model:   summaryModel,
+		Trigger: &summarization.TriggerCondition{ContextMessages: 1},
+		// 退避置零：这条用例验证的是降级行为，不是重试节奏，不该等秒级 sleep。
+		Retry: &summarization.RetryConfig{
+			MaxRetries:  intPtr(0),
+			BackoffFunc: func(context.Context, int, *schema.Message, error) time.Duration { return 0 },
+		},
+	})
+	if err != nil {
+		t.Fatalf("build summarization middleware: %v", err)
+	}
+	wrapped := &safeMiddleware{
+		BaseChatModelAgentMiddleware: &adk.BaseChatModelAgentMiddleware{},
+		inner:                        inner,
+	}
+
+	messages := []*schema.Message{
+		schema.SystemMessage("安全约束：只读分析"),
+		schema.UserMessage("问题一"),
+		schema.AssistantMessage("回答一", nil),
+		schema.UserMessage("问题二"),
+		schema.UserMessage("当前问题"),
+	}
+	state := &adk.ChatModelAgentState{Messages: messages}
+
+	_, nextState, err := wrapped.BeforeModelRewriteState(ctx, state, nil)
+	if err != nil {
+		t.Fatalf("summary failure must not fail the turn, got error: %v", err)
+	}
+	if nextState != state {
+		t.Fatal("degraded compaction must return the original state")
+	}
+	if len(nextState.Messages) != len(messages) {
+		t.Fatalf("degraded compaction changed history: %d messages, want %d", len(nextState.Messages), len(messages))
+	}
+	if summaryModel.calls == 0 {
+		t.Fatal("summary model was never called: the test did not actually trigger compaction")
+	}
 }

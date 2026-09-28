@@ -51,8 +51,45 @@ type Policy struct {
 }
 
 // Enabled 表示压缩是否启用。
+//
+// 调用方必须用它来门控所有压缩相关的副作用（注册中间件、注入跨轮摘要、
+// 累积会话摘要），否则会出现"配置写 enabled: false，跨轮摘要却照样进 prompt"
+// 这种开关说了不算的情况。
 func Enabled(conf config.ContextCompact) bool {
 	return conf.Enabled
+}
+
+// newSummarization 是 summarization.New 的间接引用：单测替换它就能拿到真正传给
+// Eino 的配置（例如确认 Retry 非 nil），不必靠"故意失败几次再看耗时"这种间接证据。
+var newSummarization = summarization.New
+
+// safeMiddleware 把"压缩失败"降级为"本轮不压缩"。
+//
+// 压缩只是优化：摘要模型 429/超时/5xx、或摘要结果不合规时，summarization
+// 中间件会把错误直接从 BeforeModelRewriteState 返回，整轮对话就此中断——
+// 而用户要的回答并不依赖这次压缩成功与否。这里吞掉错误、保留原始 state，
+// 让主流程带着未压缩的历史继续跑；下一次模型调用还会重新评估是否压缩。
+//
+// 只覆写 BeforeModelRewriteState：summarization 中间件也只实现这一个钩子，
+// 其余钩子沿用 BaseChatModelAgentMiddleware 的空实现，语义不变。
+type safeMiddleware struct {
+	*adk.BaseChatModelAgentMiddleware
+	inner adk.ChatModelAgentMiddleware
+}
+
+func (m *safeMiddleware) BeforeModelRewriteState(ctx context.Context, state *adk.ChatModelAgentState,
+	mc *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
+	nextCtx, nextState, err := m.inner.BeforeModelRewriteState(ctx, state, mc)
+	if err != nil {
+		logger.Warn("context compaction skipped: summarization failed, continue with uncompacted history err=%v messages=%d",
+			err, len(state.Messages))
+		return ctx, state, nil
+	}
+	if nextState == nil {
+		// 中间件不该返回 nil state；真出现时按"未压缩"处理，避免把 state 丢掉。
+		return ctx, state, nil
+	}
+	return nextCtx, nextState, nil
 }
 
 // BuildPolicy 把配置翻译成触发策略，并补齐默认值。
@@ -85,6 +122,7 @@ func BuildPolicy(conf config.ContextCompact) Policy {
 // New 构造压缩中间件。未启用时返回 (nil, nil)，调用方直接跳过即可。
 //
 // chatModel 同时用于生成摘要；通常就是主链路的对话模型。
+// 返回的中间件带一层降级保护：摘要失败不会打断用户这一轮（详见 safeMiddleware）。
 func New(ctx context.Context, conf config.ContextCompact, chatModel model.BaseModel[*schema.Message]) (adk.ChatModelAgentMiddleware, error) {
 	if !conf.Enabled {
 		return nil, nil
@@ -97,9 +135,14 @@ func New(ctx context.Context, conf config.ContextCompact, chatModel model.BaseMo
 	if instruction == "" {
 		instruction = defaultInstruction
 	}
-	middleware, err := summarization.New(ctx, &summarization.Config{
+	middleware, err := newSummarization(ctx, &summarization.Config{
 		Model:   chatModel,
 		Trigger: &summarization.TriggerCondition{ContextTokens: policy.TriggerTokens, ContextMessages: policy.TriggerMessages},
+		// 显式打开重试：Eino 在 Retry 为 nil 时只尝试一次
+		// （summarization.generateWithRetry：retryCfg == nil 直接单次调用），
+		// 而摘要失败在老的写法下会直接终止用户这一轮。空结构体即默认值，
+		// 对应 MaxRetries=3、标准退避。
+		Retry: &summarization.RetryConfig{},
 		// 不开启内部事件：这些事件只允许在 adk Run/Resume 内发送，
 		// 同时也避免新的事件类型涌进前端 SSE 流。压缩观测统一走 Callback + 日志。
 		EmitInternalEvents: false,
@@ -118,7 +161,7 @@ func New(ctx context.Context, conf config.ContextCompact, chatModel model.BaseMo
 	}
 	logger.Info("context compaction enabled trigger_tokens=%d trigger_messages=%d window_tokens=%d",
 		policy.TriggerTokens, policy.TriggerMessages, policy.WindowTokens)
-	return middleware, nil
+	return &safeMiddleware{BaseChatModelAgentMiddleware: &adk.BaseChatModelAgentMiddleware{}, inner: middleware}, nil
 }
 
 // NewHandlers 返回可以直接追加到 agent Handlers 的中间件列表。

@@ -146,9 +146,9 @@ func (s *Service) buildMessageWithHistory(ctx context.Context, userID string,
 	session *dto.SessionContext, profile *dto.Profile,
 	question string) ([]*schema.Message, error) {
 	// 根据用户ID和会话ID获取历史消息
-	messageRecords, _, err := s.sessions.ListMessages(ctx, userID, session.SessionID, dto.Pager{
+	messageRecords, totalMessages, err := s.sessions.ListMessages(ctx, userID, session.SessionID, dto.Pager{
 		Page:  1,
-		Limit: 20,
+		Limit: historyWindowSize,
 	})
 	if err != nil {
 		logger.Error("sessions.ListMessages failed", zap.Error(err), zap.Any("session", session))
@@ -164,8 +164,10 @@ func (s *Service) buildMessageWithHistory(ctx context.Context, userID string,
 
 	// 跨轮压缩记忆：上一轮落库的会话摘要（较早轮次已被折叠）必须重新注入模型输入，
 	// 否则每轮都只带最近 20 条消息，长任务的目标、约束和已确认结论会在轮次之间丢失。
+	// 是否注入由 resolveSessionSummaryMessage 决定：开关关闭、或历史还没被窗口截断时
+	// 都不注入，前者保证"关掉开关=行为不变"，后者避免把已经在 prompt 里的内容重复计费。
 	messages := buildModelHistory(
-		buildSessionSummaryMessage(session),
+		resolveSessionSummaryMessage(s.compactConf(), session, totalMessages, len(messageRecords)),
 		historyMessages,
 		buildProfileMessage(profile),
 	)

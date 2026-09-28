@@ -1,6 +1,9 @@
 # 上下文压缩成效评估（独立复现）
 
-本文档是**独立于实现者**的成效评估，只新增测试与文档，未修改任何实现代码。
+本文档由非实现者编写、只新增测试与文档，未修改任何实现代码。
+口径说明：评估用例与实现位于同一个 Go 包（会用到未导出的助手函数），因此它是
+**白盒**评估而不是黑盒复现——能证明"在给定输入下压缩确实发生了、且压缩后的形状正确"，
+但不能替代对真实模型的端到端验证。
 被测对象：`feat-compact` 分支上的 `service/agent/compress`（封装 Eino v0.9.21
 `adk/middlewares/summarization`）与 `service/conversation` 的跨轮滚动摘要。
 
@@ -89,7 +92,30 @@ Eino 的默认 finalizer 是用真实用户消息**替换**该块（`summarizati
 `TestEvalFinalizerBackfillsUserIntent` 在「模型遵守提示」的假设下验证回填成立。
 生产环境的缓解手段是 Eino 内置指令本身要求输出该块，且项目自定义指令也要求保留用户最新要求。
 
-## 7. 结论
+## 7. 补充评估：开关语义与失败路径
+
+第一轮评估只覆盖了"压缩发生时会怎样"，没有覆盖"压缩没发生时会怎样"。补测后结论如下：
+
+**（1）关闭开关 = 行为不变（三处副作用同时关闭）。**
+`resolveSessionSummaryMessage` 在 `Enabled=false` 时永远返回 nil，即使历史已被窗口截断；
+`persistSession` 在关闭时沿用改造前的覆盖式写法（`summarySession`）而不是滚动累积。
+`TestResolveSessionSummaryMessageRespectsCompactSwitch` 与
+`TestPersistSessionSummaryFollowsCompactSwitch` 覆盖这两条。
+
+**（2）短会话不再重复计费。**
+历史仍能完整放进 20 条窗口时，摘要不注入——此时摘要文本就是 prompt 中已有问答的副本，
+注入会让同一段内容被计费两次。`TestResolveSessionSummaryMessageRespectsCompactSwitch`
+用 `totalMessages == fetchedMessages` 的场景断言注入被跳过。
+
+**（3）摘要失败不再让用户这一轮失败。**
+`TestNewConfiguresRetryForSummaryCalls` 断言传给 Eino 的配置里 `Retry` 非 nil
+（Eino 在 `Retry == nil` 时只调用一次摘要模型）；`TestSummaryFailureDegradesToUncompactedTurn`
+断言摘要模型持续报错时中间件返回 nil error 与原始 state，本轮跳过压缩继续执行。
+
+**仍未覆盖**：真实模型的重试是否成功、以及降级后"未压缩历史"在长链路上的实际表现
+（本次降级路径用 stub 模型验证，未接真实模型）。
+
+## 8. 结论
 
 - 压缩在真实形状的长工具链上**有效且显著**：单次循环内 95%～99% 体积下降，跨轮 89% 下降。
 - 压缩**安全**：system 约束、当前任务、tool 配对三类关键信息在实测中都保住了。

@@ -52,11 +52,7 @@ func evalMiddleware(t *testing.T, conf config.ContextCompact, chatModel model.Ba
 	if middleware == nil {
 		t.Fatal("middleware is nil although Enabled=true")
 	}
-	concrete, ok := middleware.(*summarization.TypedMiddleware[*schema.Message])
-	if !ok {
-		t.Fatalf("middleware type = %T, want *summarization.TypedMiddleware[*schema.Message]", middleware)
-	}
-	return concrete
+	return unwrapSummarizationMiddleware(t, middleware)
 }
 
 // runCompaction 走真实入口，压缩未触发时返回原始消息。

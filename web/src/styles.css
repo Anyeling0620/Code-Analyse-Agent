@@ -191,8 +191,11 @@ button {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 0.8rem;
+  /* 状态/工具胶囊：字号提一档并加中粗，避免绿色小字在浅灰底上发虚看不清。 */
+  padding: 7px 12px;
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 .badge {
@@ -1072,8 +1075,10 @@ button {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 4px 9px;
-  font-size: 0.78rem;
+  padding: 5px 11px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 .tool-status-calling {

@@ -281,7 +281,7 @@ func splitBraceSymbols(content string) []codeChunk {
 	type span struct{ start, end int }
 	var spans []span
 
-	depth, blockStart := 0, 0
+	depth, blockStart, openIdx := 0, 0, 0
 	for i := 0; i < len(content); {
 		switch content[i] {
 		case '/':
@@ -321,6 +321,7 @@ func splitBraceSymbols(content string) []codeChunk {
 		case '{':
 			if depth == 0 {
 				blockStart = blockStartOffset(content, i, li)
+				openIdx = i
 			}
 			depth++
 			i++
@@ -328,7 +329,9 @@ func splitBraceSymbols(content string) []codeChunk {
 			if depth > 0 {
 				depth--
 				if depth == 0 {
-					spans = append(spans, span{blockStart, i + 1})
+					if start, end, ok := braceBlockSpan(content, blockStart, openIdx, i, li); ok {
+						spans = append(spans, span{start, end})
+					}
 				}
 			}
 			i++
@@ -344,7 +347,15 @@ func splitBraceSymbols(content string) []codeChunk {
 	if summary, ok := prefixSummary(content, spans[0].start, li); ok {
 		chunks = append(chunks, summary)
 	}
+	lastEnd := 0
 	for _, s := range spans {
+		// 扩到行尾后相邻块可能重叠，裁掉已归入上一块的部分。
+		if s.start < lastEnd {
+			s.start = lastEnd
+		}
+		if s.start >= s.end {
+			continue
+		}
 		text := strings.TrimRight(content[s.start:s.end], " \t\r\n")
 		if strings.TrimSpace(text) == "" {
 			continue
@@ -359,8 +370,47 @@ func splitBraceSymbols(content string) []codeChunk {
 			startByte: s.start,
 			endByte:   s.end,
 		})
+		lastEnd = s.end
 	}
 	return chunks
+}
+
+// braceBlockSpan 判断一对顶层花括号是否真的是代码块，并把它扩展到行尾。
+//
+// 只按"深度归零"取块在 TS/JS 上会大量误判：import 清单、类型字面量、
+// 解构赋值、对象字面量里的花括号同样出现在顶层深度，却只覆盖半行内容，
+// 于是产出大量"从行中间截断"的碎片块（实测 ts/tsx 有 48% 的块如此结尾）。
+func braceBlockSpan(content string, blockStart, openIdx, closeIdx int, li *lineIndex) (int, int, bool) {
+	// 同一行开闭的花括号一定不是语句块。
+	if li.lineOf(openIdx) == li.lineOf(closeIdx) {
+		return 0, 0, false
+	}
+	if isImportBrace(content, openIdx, closeIdx, li) {
+		return 0, 0, false
+	}
+	// 块尾扩到行尾，把 `};`、尾随注释一并纳入，避免落在行中间。
+	end := li.offsetOfLineEnd(closeIdx)
+	if end <= blockStart {
+		return 0, 0, false
+	}
+	return blockStart, end, true
+}
+
+// isImportBrace 识别模块导入/导出清单的花括号：
+// import { A, B } from './x'、export type { T } from './x'。
+// 这类括号里的名字属于文件头，交给前缀摘要块，不单独成块。
+func isImportBrace(content string, openIdx, closeIdx int, li *lineIndex) bool {
+	prefix := strings.TrimSpace(content[li.offsetOfLineStart(openIdx):openIdx])
+	if strings.HasPrefix(prefix, "import") {
+		return true
+	}
+	// export { a } from './x'：只有紧跟 from 才算导入清单，
+	// 否则 export function foo() { 会被误伤。
+	if strings.HasPrefix(prefix, "export") && !strings.Contains(prefix, "=") {
+		rest := strings.TrimSpace(content[closeIdx+1 : li.offsetOfLineEnd(closeIdx)])
+		return strings.HasPrefix(rest, "from")
+	}
+	return false
 }
 
 var braceSymbolPatterns = []struct {
@@ -619,7 +669,10 @@ func overlapLines(lines []string, start, end, overlap int) int {
 
 // ---------- 行号索引 ----------
 
-type lineIndex struct{ starts []int }
+type lineIndex struct {
+	starts []int
+	size   int
+}
 
 func newLineIndex(s string) *lineIndex {
 	starts := make([]int, 1, 64)
@@ -628,7 +681,7 @@ func newLineIndex(s string) *lineIndex {
 			starts = append(starts, i+1)
 		}
 	}
-	return &lineIndex{starts: starts}
+	return &lineIndex{starts: starts, size: len(s)}
 }
 
 // lineOf 返回 offset 所在的 1-based 行号。
@@ -653,4 +706,14 @@ func (li *lineIndex) offsetOfLineStart(offset int) int {
 		return 0
 	}
 	return li.starts[li.lineOf(offset)-1]
+}
+
+// offsetOfLineEnd 返回 offset 所在行的行尾偏移（不含换行符本身）；
+// 用于把块的结束位置扩到整行，避免块尾落在行中间。
+func (li *lineIndex) offsetOfLineEnd(offset int) int {
+	line := li.lineOf(offset)
+	if line >= len(li.starts) {
+		return li.size
+	}
+	return li.starts[line] - 1
 }

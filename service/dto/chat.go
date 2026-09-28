@@ -57,7 +57,7 @@ type ChatStreamEvent struct {
 	Message       string      `json:"message"`
 	Stage         string      `json:"stage"`
 	Detail        string      `json:"detail"`
-	ElapseMS      int64       `json:"elapse_ms"`
+	ElapseMS      int64       `json:"elapsed_ms"`
 	Timestamp     string      `json:"timestamp"`
 	ContentKind   string      `json:"content_kind"`
 	RenderMode    string      `json:"render_mode"`

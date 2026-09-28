@@ -265,7 +265,7 @@ func loadDocsInScope(ctx context.Context, root string, conf config.RAG, scope do
 			}
 			return nil
 		}
-		if !isDocFile(rel) || isSensitiveFile(rel) {
+		if !isDocFile(rel) || isSensitiveFile(rel) || isSkippedArtifact(rel) {
 			return nil
 		}
 		fi, err := info.Info()
@@ -496,6 +496,35 @@ func shouldSkipDir(name string) bool {
 	default:
 		return false
 	}
+}
+
+// skippedArtifactNames 是锁文件：它们是包管理器的求解结果，只有依赖版本与
+// 完整性哈希，既没有项目自身逻辑，也不携带语义。实测一个中等前端仓库的
+// 两个锁文件能占掉整库 25% 的 chunk 与 embedding 用量，而检索命中为零。
+var skippedArtifactNames = map[string]bool{
+	"package-lock.json": true, "npm-shrinkwrap.json": true, "pnpm-lock.yaml": true,
+	"yarn.lock": true, "bun.lockb": true, "composer.lock": true, "cargo.lock": true,
+	"poetry.lock": true, "pipfile.lock": true, "gemfile.lock": true, "go.sum": true,
+	"packages.lock.json": true, "flake.lock": true, "uv.lock": true,
+	"gradle.lockfile": true, "podfile.lock": true, "mix.lock": true, "pubspec.lock": true,
+}
+
+// skippedArtifactSuffixes 覆盖压缩产物与 source map：它们是构建输出，不是源码。
+var skippedArtifactSuffixes = []string{".min.js", ".min.css", ".map"}
+
+// isSkippedArtifact 拦截锁文件与构建产物。
+// 注意 .map 用后缀匹配：source map 的文件名形如 foo.js.map。
+func isSkippedArtifact(path string) bool {
+	base := strings.ToLower(filepath.Base(path))
+	if skippedArtifactNames[base] {
+		return true
+	}
+	for _, suffix := range skippedArtifactSuffixes {
+		if strings.HasSuffix(base, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) Retriever(ctx context.Context, req *dto.RetrieverReq) ([]*dto.RetrieverChunkDto, common.Errno) {

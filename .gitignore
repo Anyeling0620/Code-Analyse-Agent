@@ -36,4 +36,7 @@ workspace
 
 # 评测产物：可由 `go run ./eval/rag` 重跑生成，不入库
 eval/**/results*.json
-eval/**/collection_index.json
+eval/**/collection_index*.json
+
+# 临时程序（建索引/探测用，用完即删）
+tmp_unseen_index/

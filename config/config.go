@@ -37,6 +37,7 @@ type Config struct {
 	ModelPrice     ModelPrice     `yaml:"model_price"`
 	WorkSpace      WorkSpace      `yaml:"workspace"`
 	RAG            RAG            `yaml:"rag"`
+	Skills         Skills         `yaml:"skills"`
 }
 
 type Server struct {
@@ -94,6 +95,17 @@ type RAG struct {
 	ScoreThreshold     int       `yaml:"score_threshold"` // 混合检索 一般0-0.5  向量检索0-1.0
 	Embedding          Embedding `yaml:"embedding"`
 	Milvus             Milvus    `yaml:"milvus"`
+	Rerank             Rerank    `yaml:"rerank"`
+}
+
+type Rerank struct {
+	Enabled    bool   `yaml:"enabled"`     // 是否启用 Rerank。
+	Provider   string `yaml:"provider"`    // 供应方："dashscope" / "llamacpp"。
+	BaseURL    string `yaml:"base_url"`    // 自定义端点；llamacpp 填根地址。
+	APIKey     string `yaml:"api_key"`     // 鉴权密钥，本地配置不应提交真实值。
+	Model      string `yaml:"model"`       // 模型名："qwen3-reranker-0.6b" "。
+	TopN       int    `yaml:"top_n"`       // 精排后保留的 chunk 数，默认 5。
+	TimeoutSec int    `yaml:"timeout_sec"` // 单次 Rerank 超时秒数，默认由 RAG 服务兜底。
 }
 
 type Embedding struct {
@@ -114,6 +126,12 @@ type Milvus struct {
 	HybridEnabled   bool   `yaml:"hybrid_enabled"`
 	DropBeforeIndex bool   `yaml:"drop_before_index"`
 	TimeoutSec      int    `yaml:"timeout_sec"`
+}
+
+type Skills struct {
+	Enabled     bool     `yaml:"enabled"`
+	Directories []string `yaml:"directories"`
+	ToolName    string   `yaml:"tool_name"`
 }
 
 type DeepSeek struct {

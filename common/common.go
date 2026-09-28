@@ -22,6 +22,10 @@ type UserInfo struct {
 	Plan   Plan   `json:"plan"`
 }
 
+func Ptr[T any](v T) *T {
+	return &v
+}
+
 func (p Plan) DailyQuota() int {
 	switch p {
 	case PlanFree:

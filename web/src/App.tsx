@@ -21,7 +21,17 @@ import {
 } from './chat/messageSegments';
 import { Composer } from './composer/Composer';
 import { initialProfile } from './constants/profile';
+import { ExportPrintRoot } from './export/ExportPrintRoot';
+import {
+  buildEntryAt,
+  buildExportFilename,
+  buildMarkdownDocument,
+  downloadTextFile,
+  type ExportEntry,
+  type ExportFormat,
+} from './export/exportDocument';
 import { normalizeMarkdown } from './markdown/normalizeMarkdown';
+import { ElevatorNav, shouldShowElevatorNav } from './nav/ElevatorNav';
 import { ProfileModal } from './profile/ProfileModal';
 import { SessionPanel } from './sessions/SessionPanel';
 import { createShareLink } from './share/api';
@@ -98,8 +108,12 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   const [isComposerExpanded, setIsComposerExpanded] = useState(true);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [shareNotice, setShareNotice] = useState('');
+  const [printEntries, setPrintEntries] = useState<ExportEntry[] | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const sessionIdRef = useRef('');
+  // 导出入口在消息卡片上，回调需要保持引用稳定（见 handleExportMessage），
+  // 所以最新的消息列表通过 ref 读取。
+  const messagesRef = useRef<ChatMessage[]>([]);
   const isStreamingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const conversationScrollRef = useRef<HTMLDivElement | null>(null);
@@ -118,6 +132,10 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     isStreamingRef.current = isStreaming;
@@ -149,6 +167,64 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     const timer = window.setTimeout(() => setShareNotice(''), SHARE_NOTICE_TTL_MS);
     return () => window.clearTimeout(timer);
   }, [shareNotice]);
+  // PDF 导出：先把打印文档挂到 DOM，等 Mermaid 这类异步渲染完成后再唤起系统打印，
+  // 打印结束（或兜底超时）后卸载这份隐藏文档。
+  //
+  // 这里不能只靠固定延时：Mermaid 图是异步渲染的，过早打印会把还没画出来的图
+  // 变成一段代码块。判定标准是"所有 Mermaid 块都已经产出 svg"。
+  useEffect(() => {
+    if (!printEntries) {
+      return;
+    }
+    let cancelled = false;
+    let timer = 0;
+    const startedAt = Date.now();
+    const MIN_WAIT_MS = 500;
+    const MAX_WAIT_MS = 2500;
+
+    const hasPendingDiagram = () => {
+      const root = document.getElementById('export-print-root');
+      if (!root) {
+        return false;
+      }
+      const blocks = root.querySelectorAll('.mermaid-fallback, .mermaid-diagram').length;
+      if (blocks === 0) {
+        return false;
+      }
+      return root.querySelectorAll('.mermaid-diagram svg').length < blocks;
+    };
+
+    const attemptPrint = () => {
+      if (cancelled) {
+        return;
+      }
+      const waited = Date.now() - startedAt;
+      if (waited < MIN_WAIT_MS || (hasPendingDiagram() && waited < MAX_WAIT_MS)) {
+        timer = window.setTimeout(attemptPrint, 150);
+        return;
+      }
+      window.print();
+    };
+
+    timer = window.setTimeout(attemptPrint, 150);
+    const fallback = window.setTimeout(() => {
+      if (!cancelled) {
+        setPrintEntries(null);
+      }
+    }, 60000);
+    const afterPrint = () => {
+      if (!cancelled) {
+        setPrintEntries(null);
+      }
+    };
+    window.addEventListener('afterprint', afterPrint);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.clearTimeout(fallback);
+      window.removeEventListener('afterprint', afterPrint);
+    };
+  }, [printEntries]);
 
   async function checkHealth() {
     try {
@@ -347,6 +423,29 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     setHasMoreMessages(false);
     setLastTraceId('');
   }
+
+  // ── 项目分析导出 ──────────────────────────────────────────────
+  // 只有项目分析（repo_analyzer）的回答可导出，判定见 export/exportDocument.ts。
+  //
+  // 回调会被 memo 过的 MessageItem 持有，引用必须稳定，否则每次流式更新
+  // 都会让整列消息重新渲染。
+  const handleExportMessage = useCallback((messageId: string, format: ExportFormat) => {
+    const current = messagesRef.current;
+    const index = current.findIndex((item) => item.id === messageId);
+    const entry = index >= 0 ? buildEntryAt(current, index) : null;
+    if (!entry) {
+      setPanelError('这条回答不可导出：只有项目分析的回答支持导出');
+      return;
+    }
+    setPanelError('');
+    const meta = { sessionId: sessionIdRef.current };
+    if (format === 'md') {
+      downloadTextFile(buildExportFilename(meta, 'md'), buildMarkdownDocument([entry], meta));
+      return;
+    }
+    // PDF 交给浏览器打印（见 printEntries 对应的副作用）。
+    setPrintEntries([entry]);
+  }, []);
 
   const handleSubmit = useCallback(async (messageText: string) => {
     const message = messageText.trim();
@@ -698,7 +797,11 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
         </aside>
 
         <main className="chat-stage">
-          <div ref={conversationScrollRef} className="conversation-scroll" onScroll={handleConversationScroll}>
+          <div
+              ref={conversationScrollRef}
+              className={`conversation-scroll${shouldShowElevatorNav(messages) ? ' has-elevator' : ''}`}
+              onScroll={handleConversationScroll}
+          >
             <section className="workspace-meta-bar">
               <span className="workspace-meta-chip">账号: {authSession.user_id}（{authSession.plan}）</span>
               {sessionId && <span className="workspace-meta-chip">Session: {sessionId}</span>}
@@ -708,8 +811,19 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
               </button>
             </section>
 
-            <MessageList messages={messages} bottomRef={bottomRef} isLoadingOlderMessages={isLoadingOlderMessages} hasMoreMessages={hasMoreMessages} />
+            <MessageList
+                messages={messages}
+                bottomRef={bottomRef}
+                isLoadingOlderMessages={isLoadingOlderMessages}
+                hasMoreMessages={hasMoreMessages}
+                onExportMessage={handleExportMessage}
+            />
           </div>
+
+          <ElevatorNav
+              messages={messages}
+              containerRef={conversationScrollRef}
+          />
 
           <Composer
               isStreaming={isStreaming}
@@ -743,6 +857,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
                 }}
             />
         )}
+        {printEntries && <ExportPrintRoot entries={printEntries} meta={{ sessionId }} />}
       </div>
   );
 }

@@ -13,6 +13,7 @@ export function messageRecordToChatMessage(record: ChatMessageRecord): ChatMessa
     segments: [],
     traceEvents: [],
     status: 'done',
+    createdAt: record.created_at,
   };
 
   if (record.role !== 'assistant') {

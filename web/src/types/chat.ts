@@ -36,6 +36,8 @@ export type ChatMessage = {
   segments: MessageSegment[];
   traceEvents: TraceEvent[];
   status: 'idle' | 'streaming' | 'error' | 'done';
+  /** 历史消息的落库时间；实时流新增的消息没有该字段。 */
+  createdAt?: string;
 };
 
 export type ChatResult = {

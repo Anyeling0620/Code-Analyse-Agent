@@ -195,3 +195,13 @@ go run ./eval/rag -report eval/rag/REPORT.md
    但它是证据最强的一条；转正前需确认它对"用户不会写英文标识符"的真实提问同样稳定。
 4. **换陌生仓库跑 20 题**：本项目自身只适合做开发期回归，
    需要一个非本仓库的对象来回答"F@10 是否还在 0.9 量级"。
+
+---
+
+## 附录：本轮对照表（自动生成）
+
+> 本节由 `go run ./eval/rag -report eval/rag/REPORT.md` 原地覆盖更新
+> （标记块存在时是替换、不是追加）。上面的第 2～4 节是人工维护的事实与结论，不受该命令影响。
+
+<!-- BEGIN AUTO:arm-comparison -->
+<!-- END AUTO:arm-comparison -->

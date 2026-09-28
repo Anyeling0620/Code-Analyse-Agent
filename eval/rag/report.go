@@ -55,27 +55,26 @@ func buildReportBlock(res *Results, specs []armSpec) string {
 	if res.RewriteArmModel != "" {
 		fmt.Fprintf(&b, "- 查询改写臂模型：%s\n", res.RewriteArmModel)
 	}
-	b.WriteString("\n| arm | F@1 | F@5 | F@10 | F@20 | S@1 | S@5 | S@10 | S@20 | MRR | avg_ms | p50_ms | p95_ms | rw_ms |\n")
-	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
+	b.WriteString("\n| arm | F@1 | F@5 | F@10 | F@20 | MRR | avg_ms | p50_ms | p95_ms | rw_ms |\n")
+	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, s := range specs {
 		sum := res.Summary[s.name]
 		if sum == nil {
 			continue
 		}
 		if sum.Queries == 0 && sum.Skipped != "" {
-			fmt.Fprintf(&b, "| `%s` | — | — | — | — | — | — | — | — | — | — | — | — | — |\n", s.name)
+			fmt.Fprintf(&b, "| `%s` | — | — | — | — | — | — | — | — | — |\n", s.name)
 			continue
 		}
-		fmt.Fprintf(&b, "| `%s` | %.4f | %.4f | %.4f | %.4f | %.4f | %.4f | %.4f | %.4f | %.4f | %.1f | %.1f | %.1f | %.1f |\n",
+		fmt.Fprintf(&b, "| `%s` | %.4f | %.4f | %.4f | %.4f | %.4f | %.1f | %.1f | %.1f | %.1f |\n",
 			s.name,
 			sum.FileRecallAt["1"], sum.FileRecallAt["5"], sum.FileRecallAt["10"], sum.FileRecallAt["20"],
-			sum.SymbolRecallAt["1"], sum.SymbolRecallAt["5"], sum.SymbolRecallAt["10"], sum.SymbolRecallAt["20"],
 			sum.MRR, sum.AvgLatencyMS, sum.P50LatencyMS, sum.P95LatencyMS, sum.AvgRewriteMS)
 	}
-	b.WriteString("\nF = 文件级 Recall，S = 符号级 Recall；rw_ms = 该臂平均改写耗时（0 表示该臂不涉及改写）。\n")
-	b.WriteString("\n> ⚠️ **S@ 列口径有缺陷，已废弃，请只看 F@ 列。** 当前判定是 " +
+	b.WriteString("\nF = 文件级 Recall；rw_ms = 该臂平均改写耗时（0 表示该臂不涉及改写）。\n")
+	b.WriteString("\n> 符号级 `S@` 指标已废弃并从本表移除：其判定为 " +
 		"`symbol == want || strings.Contains(doc.Content, want)`，不限定命中所在文件，" +
-		"因此会出现 `sparse_zh` 的 S@1=1.0 而 F@1=0.0 这类自相矛盾的数。口径修复前不要用 S@ 下任何结论。\n")
+		"会产生 `sparse_zh` 的 S@1=1.0 而 F@1=0.0 这类自相矛盾的数。请只看 F@ 与 MRR。\n")
 
 	for _, s := range specs {
 		sum := res.Summary[s.name]
@@ -90,16 +89,16 @@ func buildReportBlock(res *Results, specs []armSpec) string {
 			diffs = append(diffs, d)
 		}
 		sort.Strings(diffs)
-		b.WriteString("\n### 分难度（文件级 F@5 / 符号级 S@5 / MRR）\n\n")
-		b.WriteString("| difficulty | arm | n | F@5 | S@5 | MRR |\n| --- | --- | --- | --- | --- | --- |\n")
+		b.WriteString("\n### 分难度（文件级 F@5 / MRR）\n\n")
+		b.WriteString("| difficulty | arm | n | F@5 | MRR |\n| --- | --- | --- | --- | --- |\n")
 		for _, d := range diffs {
 			for _, s := range specs {
 				sum := res.SummaryByDifficulty[d][s.name]
 				if sum == nil || sum.Queries == 0 {
 					continue
 				}
-				fmt.Fprintf(&b, "| %s | `%s` | %d | %.4f | %.4f | %.4f |\n",
-					d, s.name, sum.Queries, sum.FileRecallAt["5"], sum.SymbolRecallAt["5"], sum.MRR)
+				fmt.Fprintf(&b, "| %s | `%s` | %d | %.4f | %.4f |\n",
+					d, s.name, sum.Queries, sum.FileRecallAt["5"], sum.MRR)
 			}
 		}
 	}

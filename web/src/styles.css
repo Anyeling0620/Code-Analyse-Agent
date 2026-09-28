@@ -1785,6 +1785,10 @@ button {
 /* 公开只读分享页：独立布局，不复用登录态的左右两栏。 */
 .share-page {
   display: grid;
+  /* 单列必须显式约束成容器宽度：否则 .share-page-title 的 nowrap 会让网格列按该标题的
+     max-content 宽度撑开（长会话标题可达数千 px），内容被推到视口外、再被 overflow:hidden
+     裁掉，整页看起来一片空白。 */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   height: 100vh;
   min-height: 100vh;
@@ -1869,6 +1873,7 @@ button {
 .share-page-scroll {
   overflow-x: hidden;
   overflow-y: auto;
+  min-width: 0;
   min-height: 0;
   scrollbar-width: thin;
   scrollbar-color: rgba(13, 13, 13, 0.28) rgba(13, 13, 13, 0.06);

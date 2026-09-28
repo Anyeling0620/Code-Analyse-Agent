@@ -9,6 +9,7 @@ import (
 	"edu.agent.code/adaptor/repo/session"
 	"edu.agent.code/config"
 	"edu.agent.code/service/agent/runner"
+	"edu.agent.code/service/agent/skill"
 	"edu.agent.code/service/cost"
 	"edu.agent.code/service/tool/provider"
 	"edu.agent.code/service/tool/terminal"
@@ -20,6 +21,8 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
+	"github.com/samber/lo"
+	"go.uber.org/zap"
 	"time"
 )
 
@@ -78,8 +81,15 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps
 		logger.Error("buildChatModel err", err)
 		return serviceDeps{}, err
 	}
-	// TODO chatModel 中间件
-	var agentHandlers []adk.ChatModelAgentMiddleware
+	// Skill 中间件
+	agentHandlers, skillToolNames, err := buildAgentHandlers(ctx, conf)
+	if err != nil {
+		logger.Error("buildAgentHandlers err", err)
+		return serviceDeps{}, err
+	}
+	lo.ForEach(skillToolNames, func(item string, index int) {
+		visibleToolSet[item] = true
+	})
 	// 数据层
 	repo := buildRepo(a)
 	// RAG
@@ -198,4 +208,17 @@ func buildChatModel(ctx context.Context, conf *config.Config) (model.ToolCalling
 		return nil, err
 	}
 	return dsml.WrapEinoModel(baseModel), nil
+}
+
+func buildAgentHandlers(ctx context.Context, conf *config.Config) ([]adk.ChatModelAgentMiddleware, []string, error) {
+	skillHandler, skillTooName, err := skill.BuildMiddleware(ctx, conf.Skills)
+	if err != nil {
+		logger.Error("buildAgentHandlers BuildMiddleware error",
+			zap.Any("conf", conf), zap.Error(err))
+		return nil, nil, fmt.Errorf("buildAgentHandlers init skill middleware error: %w", err)
+	}
+	if skillHandler == nil {
+		return nil, nil, nil
+	}
+	return []adk.ChatModelAgentMiddleware{skillHandler}, []string{skillTooName}, nil
 }

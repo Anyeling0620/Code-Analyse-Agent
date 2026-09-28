@@ -163,9 +163,6 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 	}
 	agentTools = append(agentTools, c.directTool...)
 
-	// TODO 这是浅拷贝 可能有风险
-	handlers := append([]adk.ChatModelAgentMiddleware{}, c.agentHandler...)
-
 	// TODO 超过最大迭代次数 强制出报告的handler
 
 	mainAgent, err := adk.NewChatModelAgent(
@@ -185,7 +182,7 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 			},
 			GenModelInput: agent.GetGenModelInputFunc(mainChatTemplate),
 			MaxIterations: c.maxIterations.Compose,
-			Handlers:      handlers,
+			Handlers:      c.agentHandler,
 		},
 	)
 	return adk.NewRunner(c.ctx, adk.RunnerConfig{

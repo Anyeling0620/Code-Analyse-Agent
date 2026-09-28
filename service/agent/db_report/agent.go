@@ -16,6 +16,9 @@ const (
 
 type Options struct {
 	MaxIterations int
+	// Handlers 是额外挂载的中间件（例如上下文压缩）。
+	// 它们排在强制回答中间件之前，先压缩历史再决定是否收束回答。
+	Handlers []adk.ChatModelAgentMiddleware
 }
 
 func NewDBReportAgentWithOptions(
@@ -39,12 +42,11 @@ func NewDBReportAgentWithOptions(
 		GenModelInput: agent.GetGenModelInputFunc(dbReportChatTemplate),
 		MaxIterations: opts.MaxIterations,
 		// 因为要强制出报告 需要做一个中间件强制出
-		Handlers: []adk.ChatModelAgentMiddleware{
+		Handlers: append(append([]adk.ChatModelAgentMiddleware{}, opts.Handlers...),
 			force_answer.NewForceAnswerHandler(force_answer.Config{
 				MaxIterations: opts.MaxIterations,
 				ActiveKey:     dbReportForceAnswerActiveKey,
 				Instruction:   dbReportForceAnswerInstruction,
-			}),
-		},
+			})),
 	})
 }

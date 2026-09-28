@@ -9,6 +9,7 @@ import (
 	"edu.agent.code/adaptor/repo/session"
 	"edu.agent.code/config"
 	"edu.agent.code/service/agent/runner"
+	"edu.agent.code/service/agent/compress"
 	"edu.agent.code/service/agent/skill"
 	"edu.agent.code/service/cost"
 	"edu.agent.code/service/rag"
@@ -23,6 +24,7 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"path/filepath"
@@ -119,7 +121,7 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor, projectIndexer *r
 		return serviceDeps{}, err
 	}
 	// Skill 中间件
-	agentHandlers, skillToolNames, err := buildAgentHandlers(ctx, conf)
+	agentHandlers, skillToolNames, err := buildAgentHandlers(ctx, conf, chatModel)
 	if err != nil {
 		logger.Error("buildAgentHandlers err", err)
 		return serviceDeps{}, err
@@ -272,15 +274,26 @@ func buildChatModel(ctx context.Context, conf *config.Config) (model.ToolCalling
 	return dsml.WrapEinoModel(baseModel), nil
 }
 
-func buildAgentHandlers(ctx context.Context, conf *config.Config) ([]adk.ChatModelAgentMiddleware, []string, error) {
+func buildAgentHandlers(ctx context.Context, conf *config.Config,
+	chatModel model.BaseModel[*schema.Message]) ([]adk.ChatModelAgentMiddleware, []string, error) {
+	handlers := make([]adk.ChatModelAgentMiddleware, 0, 2)
+	skillToolNames := make([]string, 0, 1)
 	skillHandler, skillTooName, err := skill.BuildMiddleware(ctx, conf.Skills)
 	if err != nil {
 		logger.Error("buildAgentHandlers BuildMiddleware error",
 			zap.Any("conf", conf), zap.Error(err))
 		return nil, nil, fmt.Errorf("buildAgentHandlers init skill middleware error: %w", err)
 	}
-	if skillHandler == nil {
-		return nil, nil, nil
+	if skillHandler != nil {
+		handlers = append(handlers, skillHandler)
+		skillToolNames = append(skillToolNames, skillTooName)
 	}
-	return []adk.ChatModelAgentMiddleware{skillHandler}, []string{skillTooName}, nil
+	// 上下文压缩中间件：未启用时返回 nil，保持原有行为。
+	compactHandlers, err := compress.NewHandlers(ctx, conf.ContextCompact, chatModel)
+	if err != nil {
+		logger.Error("buildAgentHandlers compress error", zap.Error(err))
+		return nil, nil, fmt.Errorf("buildAgentHandlers init compact middleware error: %w", err)
+	}
+	handlers = append(handlers, compactHandlers...)
+	return handlers, skillToolNames, nil
 }

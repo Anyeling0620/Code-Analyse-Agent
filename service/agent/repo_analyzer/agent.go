@@ -15,6 +15,9 @@ const Name = "repo_analyzer"
 type Options struct {
 	MaxIterations         int
 	SubAgentMaxIterations int
+	// Handlers 是额外挂载的中间件（例如上下文压缩）。
+	// 它们排在强制出报告中间件之前，先压缩历史再决定是否收束。
+	Handlers []adk.ChatModelAgentMiddleware
 }
 
 func NewAnalyzerWithOptions(
@@ -23,7 +26,7 @@ func NewAnalyzerWithOptions(
 	analysisTools []tool.BaseTool,
 	toolMiddlewares []compose.ToolMiddleware,
 	opts Options) (adk.Agent, error) {
-	subAgents, err := newRepoAnalyzerSubAgent(ctx, chatModel, analysisTools, opts.SubAgentMaxIterations, toolMiddlewares)
+	subAgents, err := newRepoAnalyzerSubAgent(ctx, chatModel, analysisTools, opts.SubAgentMaxIterations, toolMiddlewares, opts.Handlers)
 	if err != nil {
 		return nil, err
 	}
@@ -44,13 +47,12 @@ func NewAnalyzerWithOptions(
 		WithoutGeneralSubAgent:       true,
 		MaxIteration:                 opts.MaxIterations,
 		TaskToolDescriptionGenerator: repoAnalyzerTaskToolDescription,
-		Handlers: []adk.ChatModelAgentMiddleware{
+		Handlers: append(append([]adk.ChatModelAgentMiddleware{}, opts.Handlers...),
 			force_answer.NewForceAnswerHandler(force_answer.Config{
 				MaxIterations: opts.MaxIterations,
 				ActiveKey:     repoAnalyzerForceReportActiveKey,
 				Instruction:   repoAnalyzerForceReportInstruction,
-			}),
-		},
+			})),
 	})
 }
 
@@ -59,7 +61,8 @@ func newRepoAnalyzerSubAgent(
 	chatModel model.ToolCallingChatModel,
 	analysisTools []tool.BaseTool,
 	maxIterations int,
-	toolMiddlewares []compose.ToolMiddleware) ([]adk.Agent, error) {
+	toolMiddlewares []compose.ToolMiddleware,
+	handlers []adk.ChatModelAgentMiddleware) ([]adk.Agent, error) {
 	configs := []struct {
 		name        string
 		description string
@@ -102,6 +105,7 @@ func newRepoAnalyzerSubAgent(
 				EmitInternalEvents: true,
 			},
 			MaxIterations: maxIterations,
+			Handlers:      handlers,
 		})
 		if err != nil {
 			return nil, err

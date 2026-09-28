@@ -101,7 +101,9 @@ func (s *Service) persistSession(ctx context.Context, session *dto.SessionContex
 	session.SessionID = runState.SessionID
 	session.LastUserMessage = runState.Question
 	session.LastAssistantMsg = runState.Answer
-	session.Summary = summarySession(runState.Question, runState.Answer)
+	// 滚动累积而不是每轮覆盖：覆盖式摘要会把更早轮次的目标与结论丢掉，
+	// 而跨轮压缩记忆恰恰依赖这些信息。
+	session.Summary = mergeSessionSummary(session.Summary, runState.Question, runState.Answer)
 
 	doSession := do.SessionContext{}
 	_ = copier.Copy(&doSession, session)

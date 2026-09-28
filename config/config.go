@@ -205,6 +205,11 @@ type WorkSpace struct {
 	MaxRepoMB     int  `yaml:"max_repo_mb"`
 	EnableEscaped bool `yaml:"enable_escaped"`
 	CommonDetect  bool `yaml:"common_detect"`
+	// GitMirrorPrefix 是国外仓库（目前只覆盖 github.com）的拉取加速前缀。
+	// 例：填 https://ghfast.top/ 后，https://github.com/o/r 实际会从
+	// https://ghfast.top/https://github.com/o/r 拉取，仓库身份仍按原始地址计算。
+	// 留空表示使用内置默认值（https://ghfast.top/）；显式填 "-" 表示关闭镜像、直连。
+	GitMirrorPrefix string `yaml:"git_mirror_prefix"`
 }
 
 type ModelPrice struct {

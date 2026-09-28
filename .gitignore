@@ -1,21 +1,38 @@
+# 本地配置与密钥（含真实 API key，禁止入库）
 agent_code_local.yml
-.idea
-data/edu.agent.code.db
+
+# 构建产物
 main
 main.exe
+*.exe
 
-web/node_modules
-
-
-
-.ai-memory
-
+# 运行时数据与日志
+data/edu.agent.code.db
 logs/
 
+# 依赖与编辑器
+web/node_modules
+.idea
+.claude
+.ai-memory
+
+# 内部资料（不随仓库分发）
 docs
 scripts
 deploy
 spec
-workspace
 
-.claude
+# Agent 工作区与任务临时文件
+workspace
+.codex_tasks
+
+# 测试文件不纳入版本控制
+*_test.go
+*.test.js
+*.test.mjs
+*.test.ts
+*.test.tsx
+
+# 评测产物：可由 `go run ./eval/rag` 重跑生成，不入库
+eval/**/results*.json
+eval/**/collection_index.json

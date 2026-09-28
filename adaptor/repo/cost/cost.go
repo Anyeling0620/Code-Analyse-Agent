@@ -33,6 +33,8 @@ func (c *Cost) Insert(ctx context.Context, req *do.CostRecord) error {
 		Model:            req.Model,
 		ToolName:         req.ToolName,
 		PromptTokens:     req.PromptTokens,
+		CachedTokens:     req.CachedTokens,
+		CacheMissTokens:  req.CacheMissTokens,
 		CompletionTokens: req.CompletionTokens,
 		TotalTokens:      req.PromptTokens + req.CompletionTokens,
 		EstimatedCNY:     req.EstimatedCNY,

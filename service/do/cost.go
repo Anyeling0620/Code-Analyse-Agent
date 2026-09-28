@@ -8,6 +8,8 @@ type CostRecord struct {
 	Model            string
 	ToolName         string
 	PromptTokens     int64
+	CachedTokens     int64 // 命中 prompt cache 的输入 token 数
+	CacheMissTokens  int64 // 未命中 cache 的输入 token 数
 	CompletionTokens int64
 	EstimatedCNY     float64
 	OccurredAt       time.Time

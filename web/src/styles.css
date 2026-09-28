@@ -757,9 +757,10 @@ button {
 
 .markdown-body :not(pre) > code {
   background: rgba(36, 69, 57, 0.08);
-  padding: 0.12rem 0.4rem;
+  padding: 0.15rem 0.4rem;
   border-radius: 8px;
-  font-size: 0.92em;
+  font-size: 1.2em;
+  font-weight: lighter;
   color: #0d8f70;
   border: 1px solid rgba(13, 13, 13, 0.16);
 }

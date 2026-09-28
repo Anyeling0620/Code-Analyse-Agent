@@ -33,6 +33,11 @@ func (s *Service) ResumeChat(ctx context.Context, req *dto.ChatResumeRequest, em
 		logger.Error("ResumeChat: SessionID mismatch", zap.Any("req", req), zap.Any("pending", pending))
 		return fmt.Errorf("SessionID mismatch")
 	}
+	// 归属校验：pending_id 由客户端携带，凭它就能代为批准会让账号之间互相执行命令。
+	if pending.UserID != req.UserID {
+		logger.Error("ResumeChat: pending approval not owned by user", zap.Any("req", req), zap.Any("pending", pending))
+		return fmt.Errorf("pending approval not owned by user")
+	}
 	if pending.CheckPointID == "" || pending.InterruptID == "" {
 		logger.Error("ResumeChat: pending ID is empty", zap.Any("req", req))
 		return fmt.Errorf("pending checkpointID mismatcha or interrput id mismatch")

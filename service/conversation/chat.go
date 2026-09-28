@@ -233,6 +233,12 @@ func (s *Service) prepareSession(ctx context.Context, userID, sessionID string) 
 		logger.Error("sessions.GetByID failed", zap.Error(err))
 		return nil, err
 	}
+	// 会话归属校验：session_id 由客户端携带，切换账号后可能残留上一个账号的会话。
+	// 不校验就会把消息写进别人的会话，因此非本人会话一律按新建会话处理。
+	if session != nil && session.UserID != userID {
+		logger.Warn("prepareSession session not owned by user=%s session=%s owner=%s", userID, sessionID, session.UserID)
+		session = nil
+	}
 	if session == nil {
 		return &dto.SessionContext{
 			UserID:    userID,
@@ -250,7 +256,6 @@ func (s *Service) prepareSession(ctx context.Context, userID, sessionID string) 
 
 }
 
-// TODO 审查逻辑是否有问题
 func (s *Service) prepareProfile(ctx context.Context,
 	userID string,
 	inputProfile *dto.Profile) (
@@ -260,21 +265,26 @@ func (s *Service) prepareProfile(ctx context.Context,
 		logger.Error("get profile by user id failed", zap.Error(err))
 		return nil, err
 	}
-	var profile dto.Profile
 	if doProfile == nil {
 		doProfile = &do.Profile{UserID: userID}
 	}
-	// Check 原条件反了：只有入参 profile 非空时才应复制并落库，原先永远不会写入
-	// TODO 较大异议
+	// 只有客户端提交了画像才写库；无论写没写，都返回库中该用户最终的画像，
+	// 保证画像始终以当前登录用户为归属键，不会把账号 A 的画像带给账号 B。
 	if inputProfile != nil {
-		_ = copier.Copy(&profile, inputProfile)
-		_ = copier.Copy(&doProfile, &inputProfile)
+		if err := copier.Copy(doProfile, inputProfile); err != nil {
+			logger.Error("copy input profile failed", zap.Error(err))
+			return nil, err
+		}
 		doProfile.UserID = userID
-		err = s.profiles.Upsert(ctx, doProfile)
-		if err != nil {
+		if err := s.profiles.Upsert(ctx, doProfile); err != nil {
 			logger.Error("upsert profile failed", zap.Error(err))
 			return nil, err
 		}
 	}
-	return &profile, nil
+	profile := &dto.Profile{}
+	if err := copier.Copy(profile, doProfile); err != nil {
+		logger.Error("copy profile to dto failed", zap.Error(err))
+		return nil, err
+	}
+	return profile, nil
 }

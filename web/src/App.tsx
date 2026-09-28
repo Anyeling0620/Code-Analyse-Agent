@@ -3,7 +3,8 @@ import { InterruptModal } from './InterruptModal';
 import { fetchJSON, updateQuotaFromHeaders, withAuth } from './api/client';
 import { consumeSSE } from './api/sse';
 import { LoginModal } from './auth/LoginModal';
-import { clearSession, getSession, getToken, saveSession, subscribeSession } from './auth/session';
+import { clearSession, getSession, saveSession, subscribeSession } from './auth/session';
+import type { AuthSession } from './auth/session';
 import { MessageList } from './chat/MessageList';
 import {
   addToolCallWithSegment,
@@ -28,6 +29,33 @@ const SESSION_PAGE_LIMIT = 20;
 const MESSAGE_PAGE_LIMIT = 50;
 
 export default function App() {
+  const [authSession, setAuthSession] = useState(() => getSession());
+
+  useEffect(() => subscribeSession(setAuthSession), []);
+
+  async function handleLogin(username: string, password: string) {
+    const result = await fetchJSON<LoginResult>(
+        '/api/auth/login',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ username, password }),
+        },
+        { handleUnauthorized: false },
+    );
+    saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
+  }
+
+  if (!authSession) {
+    return <LoginModal onSubmit={handleLogin} />;
+  }
+  // 用 user_id 作 key：换账号时整棵工作区重新挂载，
+  // 画像、会话、消息等本地状态不会残留到下一个账号。
+  return <ChatWorkspace key={authSession.user_id} authSession={authSession} />;
+}
+
+// ChatWorkspace 承载单个登录用户的全部界面状态。换账号由上层通过 key 重新挂载来清空。
+function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   const [profile, setProfile] = useState<ProfileForm>(initialProfile);
   const [sessionId, setSessionId] = useState('');
   const [interruptEvent, setInterruptEvent] = useState<PendingInterruptEvent | null>(null);
@@ -48,7 +76,6 @@ export default function App() {
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const [isComposerExpanded, setIsComposerExpanded] = useState(true);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [authSession, setAuthSession] = useState(() => getSession());
   const controllerRef = useRef<AbortController | null>(null);
   const sessionIdRef = useRef('');
   const isStreamingRef = useRef(false);
@@ -62,14 +89,9 @@ export default function App() {
 
   useEffect(() => {
     void checkHealth();
-    if (!getToken()) {
-      return;
-    }
     void refreshMetrics();
     void refreshSessions();
-  }, [authSession]);
-
-  useEffect(() => subscribeSession(setAuthSession), []);
+  }, []);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -105,19 +127,6 @@ export default function App() {
     } catch {
       setHealth('offline');
     }
-  }
-
-  async function handleLogin(username: string, password: string) {
-    const result = await fetchJSON<LoginResult>(
-        '/api/auth/login',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json; charset=utf-8' },
-          body: JSON.stringify({ username, password }),
-        },
-        { handleUnauthorized: false },
-    );
-    saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
   }
 
   async function handleLogout() {
@@ -609,10 +618,6 @@ export default function App() {
     setIsComposerExpanded(true);
     scrollConversationToBottom('smooth');
   }, []);
-
-  if (!authSession) {
-    return <LoginModal onSubmit={handleLogin} />;
-  }
 
   return (
       <div className="app-shell">

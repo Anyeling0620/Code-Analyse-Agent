@@ -37,6 +37,10 @@ const (
 	defaultMaxFileBytes    = 10 * 1024 * 1024
 	defaultTopK            = 5
 	defaultMaxContentRunes = 6400
+	// maxEmbeddingBatchSize 是单次 embedding 请求能提交的最大文档数。
+	// 当前提供方（智谱 embedding-3）的 input 数组上限为 64 条，超过会直接返回 400，
+	// 因此所有写入向量库的批量都必须按这个上限切分。
+	maxEmbeddingBatchSize = 64
 )
 
 type Service struct {
@@ -190,12 +194,12 @@ func (s *Service) IndexDocs(ctx context.Context) error {
 		logger.Warn("rag no docs chunks to index root %s", s.root)
 		return nil
 	}
-	chunks := lo.Chunk(docs, 100)
+	chunks := lo.Chunk(docs, maxEmbeddingBatchSize)
 	ids := make([]string, 0, len(docs))
 	for _, chunk := range chunks {
 		tids, err := s.store.Store(ctx, chunk)
 		if err != nil {
-			return fmt.Errorf("failed to store chunk")
+			return fmt.Errorf("failed to store chunk: %w", err)
 		}
 		ids = append(ids, tids...)
 	}
@@ -204,6 +208,20 @@ func (s *Service) IndexDocs(ctx context.Context) error {
 }
 
 func loadDocs(ctx context.Context, root string, conf config.RAG) ([]*schema.Document, error) {
+	return loadDocsInScope(ctx, root, conf, docScope{})
+}
+
+// docScope 描述一次索引的来源范围。
+// ProjectID 为空表示沿用全局 docs_root 的旧行为（不写项目元数据）。
+type docScope struct {
+	ProjectID   string
+	ProjectRoot string
+	Commit      string
+}
+
+// loadDocsInScope 取样并切分 root 下的文件；scope 非空时给每个 chunk 补项目元数据。
+// 项目与全局索引共用同一条管线，区别只在元数据和 chunk ID 是否带项目标识。
+func loadDocsInScope(ctx context.Context, root string, conf config.RAG, scope docScope) ([]*schema.Document, error) {
 	// 先把文件弄出来
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -247,7 +265,7 @@ func loadDocs(ctx context.Context, root string, conf config.RAG) ([]*schema.Docu
 			}
 			return nil
 		}
-		if !isDocFile(rel) {
+		if !isDocFile(rel) || isSensitiveFile(rel) {
 			return nil
 		}
 		fi, err := info.Info()
@@ -290,7 +308,14 @@ func loadDocs(ctx context.Context, root string, conf config.RAG) ([]*schema.Docu
 			chunk.MetaData["chunk_index"] = idx
 			chunk.MetaData["chunk_size"] = len(chunk.Content)
 			chunk.MetaData["file_size"] = fi.Size()
-			chunk.ID = chunkID(path, idx, chunk.Content)
+			if scope.ProjectID != "" {
+				chunk.MetaData[ProjectIDMetadataKey] = scope.ProjectID
+				chunk.MetaData[ProjectRootMetadataKey] = scope.ProjectRoot
+				chunk.MetaData[CommitMetadataKey] = scope.Commit
+			}
+			// chunk ID 必须带项目标识：Milvus 写入是 upsert（主键=文档 ID），
+			// 否则两个项目里路径和内容相同的文件会互相覆盖。
+			chunk.ID = chunkID(scope.ProjectID, path, idx, chunk.Content)
 			docs = append(docs, chunk)
 		}
 		return nil
@@ -304,8 +329,8 @@ func loadDocs(ctx context.Context, root string, conf config.RAG) ([]*schema.Docu
 	return docs, nil
 }
 
-func chunkID(path string, idx int, content string) string {
-	sum := sha1.Sum([]byte(fmt.Sprintf("%s:%d:%s", path, idx, content)))
+func chunkID(projectID, path string, idx int, content string) string {
+	sum := sha1.Sum([]byte(fmt.Sprintf("%s:%s:%d:%s", projectID, path, idx, content)))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -320,14 +345,65 @@ func detectHeading(text string) string {
 	return ""
 }
 
+// indexableExtensions 是可索引的扩展名集合：原有文档类型 + 代码/配置类型。
+// 代码仓库里真正有信息量的是这些文件，只保留文档类型会让项目索引直接为空。
+var indexableExtensions = map[string]bool{
+	// 原有文档类型
+	".html": true, ".htm": true, ".docx": true, ".txt": true, ".md": true, ".doc": true,
+	// 代码
+	".go": true, ".java": true, ".kt": true, ".py": true, ".js": true, ".jsx": true,
+	".ts": true, ".tsx": true, ".vue": true, ".rs": true, ".c": true, ".h": true,
+	".cpp": true, ".hpp": true, ".cs": true, ".rb": true, ".php": true, ".swift": true,
+	".scala": true, ".sql": true, ".proto": true,
+	// 配置与构建
+	".yaml": true, ".yml": true, ".json": true, ".toml": true, ".ini": true,
+	".sh": true, ".ps1": true, ".gradle": true, ".xml": true,
+}
+
+// indexableFileNames 是没有扩展名（或扩展名不具代表性）但必须入库的依赖/构建文件。
+var indexableFileNames = map[string]bool{
+	"go.mod": true, "package.json": true, "pom.xml": true, "requirements.txt": true,
+	"cargo.toml": true, "build.gradle": true, "settings.gradle": true,
+	"dockerfile": true, "docker-compose.yml": true, "docker-compose.yaml": true,
+	"makefile": true, "procfile": true, ".env.example": true,
+	// 无扩展名的仓库标配文件：filepath.Ext 返回空，若不在这里显式登记就会被整仓跳过。
+	// 典型例子是只含一个 README 的仓库，跳过它等于索引到一个空库。
+	"readme": true, "changelog": true,
+	"notice": true, "authors": true, "contributors": true, "contributing": true,
+	"codeowners": true, "gitignore": true, "vagrantfile": true, "gemfile": true,
+	"rakefile": true, "jenkinsfile": true,
+}
+
+// sensitiveFileSuffixes / sensitiveFileNames 覆盖密钥类文件；.env 一律不入库，
+// 但 .env.example 这类模板允许（它本身就是配置说明）。
+var sensitiveFileSuffixes = []string{".pem", ".key", ".p12", ".pfx", ".keystore", ".jks"}
+
+var sensitiveFileNames = map[string]bool{
+	".env": true, "id_rsa": true, "id_dsa": true, "id_ecdsa": true, "id_ed25519": true,
+}
+
 func isDocFile(path string) bool {
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".html", ".htm", ".docx", ".txt", ".md", ".doc":
+	if indexableExtensions[strings.ToLower(filepath.Ext(path))] {
 		return true
-	default:
-		return false
 	}
+	return indexableFileNames[strings.ToLower(filepath.Base(path))]
+}
+
+// isSensitiveFile 拦截密钥类文件：.env 只放行 .env.example 这样的模板。
+func isSensitiveFile(path string) bool {
+	base := strings.ToLower(filepath.Base(path))
+	if sensitiveFileNames[base] {
+		return true
+	}
+	if strings.HasPrefix(base, ".env.") && !strings.HasSuffix(base, ".example") {
+		return true
+	}
+	for _, suffix := range sensitiveFileSuffixes {
+		if strings.HasSuffix(base, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func shouldSkipDir(name string) bool {

@@ -37,25 +37,30 @@ type Service struct {
 
 	cost *cost.Service
 	rag  *rag.Service
+
+	// projectIndexer 负责项目级代码语义索引：按 project_id 隔离集合，
+	// 供 repo_fetch 完成后异步建索引，并作为 rag_retriever 工具的检索后端。
+	projectIndexer *rag.ProjectIndexer
 }
 
-func NewService(ctx context.Context, adaptor adaptor.IAdaptor) (*Service, error) {
+func NewService(ctx context.Context, adaptor adaptor.IAdaptor, projectIndexer *rag.ProjectIndexer) (*Service, error) {
 	conf := adaptor.GetConfig()
-	deps, err := buildServiceDeps(ctx, adaptor)
+	deps, err := buildServiceDeps(ctx, adaptor, projectIndexer)
 	if err != nil {
 		return nil, err
 	}
 	return &Service{
-		modelName:     conf.DeepSeek.Model,
-		conf:          conf,
-		toolProvider:  deps.toolProvider,
-		composeRunner: deps.composeRunner,
-		visibleTools:  deps.visibleTools,
-		profiles:      profile.NewProfile(adaptor),
-		sessions:      session.NewSession(adaptor),
-		approvals:     approval.NewApproval(adaptor),
-		cost:          deps.cost,
-		rag:           nil,
+		modelName:      conf.DeepSeek.Model,
+		conf:           conf,
+		toolProvider:   deps.toolProvider,
+		composeRunner:  deps.composeRunner,
+		visibleTools:   deps.visibleTools,
+		profiles:       profile.NewProfile(adaptor),
+		sessions:       session.NewSession(adaptor),
+		approvals:      approval.NewApproval(adaptor),
+		cost:           deps.cost,
+		rag:            nil,
+		projectIndexer: projectIndexer,
 	}, nil
 }
 

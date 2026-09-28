@@ -11,7 +11,9 @@ import (
 	"edu.agent.code/service/agent/runner"
 	"edu.agent.code/service/agent/skill"
 	"edu.agent.code/service/cost"
+	"edu.agent.code/service/rag"
 	"edu.agent.code/service/tool/provider"
+	"edu.agent.code/service/tool/repo_fetch"
 	"edu.agent.code/service/tool/terminal"
 	"edu.agent.code/utils/dsml"
 	"edu.agent.code/utils/logger"
@@ -23,6 +25,7 @@ import (
 	"github.com/cloudwego/eino/compose"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
+	"path/filepath"
 	"time"
 )
 
@@ -49,7 +52,7 @@ type serviceDeps struct {
 	cost          *cost.Service
 }
 
-func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps, err error) {
+func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor, projectIndexer *rag.ProjectIndexer) (deps serviceDeps, err error) {
 	// TODO tools handlers ragTool
 	conf := a.GetConfig()
 	// 处理工具集
@@ -61,9 +64,12 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps
 	}
 	defer func() {
 		if err != nil {
-			err = toolProvider.Close()
-			if err != nil {
-				logger.Error("closing tool provider err", err)
+			// 注意：这里不能写 err = toolProvider.Close()。
+			// 那样会在 Close 成功（返回 nil）时把真正的初始化错误覆盖成 nil，
+			// 导致 NewService 返回一个 composeRunner 为 nil 的"半成品"服务，
+			// 直到第一次对话才以 nil panic 的形式暴露出来。
+			if closeErr := toolProvider.Close(); closeErr != nil {
+				logger.Error("closing tool provider err", closeErr)
 			}
 		}
 	}()
@@ -73,8 +79,39 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps
 		qa:       toolGroups.QA,
 		report:   toolGroups.Report,
 	}
+	// repo_fetch：把 git URL / 本地路径统一解析成工作区内稳定的项目根目录。
+	// 它同时承担"仓库就绪后触发异步建索引 + 回写会话项目上下文"的职责。
+	repoFetchTool, err := repo_fetch.NewTool(repo_fetch.WithHooks(buildRepoFetchHooks(projectIndexer)))
+	if err != nil {
+		logger.Error("buildServiceDeps repo_fetch.NewTool err", err)
+		return serviceDeps{}, err
+	}
+	tools.direct = append(tools.direct, repoFetchTool)
+
+	// 项目级 RAG 检索工具：按当前会话的项目隔离集合，替换原先的全局检索工具。
+	var ragTool tool.BaseTool
+	if projectIndexer != nil {
+		ragTool, err = projectIndexer.Tool(ctx)
+		if err != nil {
+			logger.Error("buildServiceDeps projectIndexer.Tool err", err)
+			return serviceDeps{}, err
+		}
+	}
+	if ragTool == nil {
+		// 项目索引不可用（例如 RAG 被关闭）时退回原有全局检索工具，
+		// 保证工具集里不会出现 nil，行为与改造前保持一致。
+		ragTool, err = toolProvider.RetrieverTool(ctx)
+		if err != nil {
+			logger.Error("buildServiceDeps RetrieverTool err", err)
+			return serviceDeps{}, err
+		}
+	}
+	if ragTool != nil {
+		tools.analysis = append(tools.analysis, ragTool)
+		tools.qa = append(tools.qa, ragTool)
+	}
 	// 前端可见工具集
-	visibleToolSet := buildVisibleToolSet(ctx, []string{}, toolGroups.Direct, toolGroups.QA, toolGroups.Analysis, toolGroups.Report)
+	visibleToolSet := buildVisibleToolSet(ctx, []string{repo_fetch.ToolName}, tools.direct, tools.qa, tools.analysis, toolGroups.Report)
 	// chatModel
 	chatModel, err := buildChatModel(ctx, a.GetConfig())
 	if err != nil {
@@ -92,12 +129,6 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor) (deps serviceDeps
 	})
 	// 数据层
 	repo := buildRepo(a)
-	// RAG
-	ragTool, err := toolProvider.RetrieverTool(ctx)
-	if err != nil {
-		logger.Error("buildServiceDeps RetrieverTool err", err)
-		return serviceDeps{}, err
-	}
 	// 主agent + adk Runner
 	composeRunner, err := buildComposeRunner(
 		chatModel,
@@ -193,6 +224,37 @@ func buildIterationLimits(conf config.AgentMaxIterations) runner.IterationLimits
 		RepoAnalyzer:         conf.RepoAnalyzer,
 		RepoAnalyzerSubAgent: conf.RepoAnalyzerSubAgent,
 		DBReport:             conf.DBReport,
+	}
+}
+
+// buildRepoFetchHooks 构造 repo_fetch 成功后的联动逻辑：
+//  1. 回写本轮会话上下文，保证同一轮结束时持久化的会话已经带上项目根目录，
+//     这样第二轮追问"刚才那个项目"时 project_qa / rag_retriever 才知道分析的是哪个项目；
+//  2. 异步触发项目级语义索引，不阻塞 repo_fetch 返回，也不占用分析主流程。
+func buildRepoFetchHooks(projectIndexer *rag.ProjectIndexer) repo_fetch.Hooks {
+	return repo_fetch.Hooks{
+		OnReady: func(ctx context.Context, r repo_fetch.Result) {
+			if session := turnSessionFromContext(ctx); session != nil && r.Root != "" {
+				session.CurrentProjectRoot = r.Root
+				session.CurrentProjectName = filepath.Base(r.Root)
+			}
+			if projectIndexer == nil || r.Root == "" {
+				return
+			}
+			// HTTP 请求结束后 ctx 会被取消，这里必须脱离取消信号，让索引在后台跑完。
+			indexCtx := context.WithoutCancel(ctx)
+			ref := rag.ProjectRef{ProjectID: r.ProjectID, Root: r.Root, Commit: r.Commit}
+			go func() {
+				if err := projectIndexer.EnsureIndexed(indexCtx, ref); err != nil {
+					logger.Error("project rag EnsureIndexed failed",
+						zap.String("project_id", ref.ProjectID),
+						zap.String("root", ref.Root),
+						zap.Error(err))
+					return
+				}
+				logger.Info("project rag index ready project_id=%s", ref.ProjectID)
+			}()
+		},
 	}
 }
 

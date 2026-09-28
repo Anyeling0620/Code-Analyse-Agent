@@ -19,6 +19,24 @@ import (
 
 type ChatEmit func(event dto.ChatStreamEvent) error
 
+// turnSessionKey 用于把本轮会话上下文透传给工具执行层。
+type turnSessionKey struct{}
+
+// withTurnSession 把当前轮的会话上下文放进 Go context。
+// repo_fetch 等工具在运行过程中需要回写"当前分析的项目"，而会话对象是值拷贝，
+// 只有拿到同一个指针，本轮结束时的持久化才会带上回写结果。
+func withTurnSession(ctx context.Context, session *dto.SessionContext) context.Context {
+	if session == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, turnSessionKey{}, session)
+}
+
+func turnSessionFromContext(ctx context.Context) *dto.SessionContext {
+	session, _ := ctx.Value(turnSessionKey{}).(*dto.SessionContext)
+	return session
+}
+
 // ChatCompletion 非流式
 func (s *Service) ChatCompletion(ctx context.Context, req dto.ChatRequest) (*dto.ChatResult, error) {
 	return s.executeChat(ctx, req, nil)
@@ -47,6 +65,7 @@ func (s *Service) executeChat(ctx context.Context, req dto.ChatRequest, emit Cha
 	}
 	ctx = common.WithUserAndSession(ctx, userID, session.SessionID)
 	updateProjectContextFromMessage(session, req.Message)
+	ctx = withTurnSession(ctx, session)
 
 	if emit != nil {
 		err = emit(dto.ChatStreamEvent{

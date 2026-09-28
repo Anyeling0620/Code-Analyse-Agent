@@ -153,9 +153,15 @@ type OTel struct {
 }
 
 type WorkSpace struct {
-	Root          string `yaml:"root"`
-	EnableEscaped bool   `yaml:"enable_escaped"`
-	CommonDetect  bool   `yaml:"common_detect"`
+	Root string `yaml:"root"`
+	// ReposDir 是 repo_fetch 拉取远端仓库的存放目录，为空时默认 <root>/repos。
+	ReposDir string `yaml:"repos_dir"`
+	// GitCloneTimeoutSec 是单次 git clone/fetch 的超时秒数，为空或 <=0 时默认 300 秒。
+	GitCloneTimeoutSec int `yaml:"git_clone_timeout_sec"`
+	// MaxRepoMB 是单个仓库的体积上限（MB），超限会清理并报错，为空或 <=0 时默认 2048。
+	MaxRepoMB     int  `yaml:"max_repo_mb"`
+	EnableEscaped bool `yaml:"enable_escaped"`
+	CommonDetect  bool `yaml:"common_detect"`
 }
 
 type ModelPrice struct {

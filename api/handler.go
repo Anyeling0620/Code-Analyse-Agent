@@ -15,15 +15,19 @@ import (
 )
 
 type Handler struct {
-	adaptor adaptor.IAdaptor
-	cost    *cost.Service
-	quota   *quota.Service
-	session *conversation.Service
-	rag     *rag.Service
+	adaptor        adaptor.IAdaptor
+	cost           *cost.Service
+	quota          *quota.Service
+	session        *conversation.Service
+	rag            *rag.Service
+	projectIndexer *rag.ProjectIndexer
 }
 
 func NewHandler(ctx context.Context, adaptor adaptor.IAdaptor) (*Handler, error) {
-	conversationSvc, err := conversation.NewService(ctx, adaptor)
+	// 项目级语义索引：一个项目一个 Milvus collection，索引与检索都限定在本项目内。
+	// 该实例在 conversation 层（索引 + 检索工具）和 api 层（状态查询）之间共享，避免出现两套状态。
+	projectIndexer := rag.NewProjectIndexer(adaptor)
+	conversationSvc, err := conversation.NewService(ctx, adaptor, projectIndexer)
 	if err != nil {
 		return nil, err
 	}
@@ -32,11 +36,12 @@ func NewHandler(ctx context.Context, adaptor adaptor.IAdaptor) (*Handler, error)
 		return nil, err
 	}
 	return &Handler{
-		adaptor: adaptor,
-		cost:    cost.NewService(adaptor),
-		quota:   quota.NewService(adaptor),
-		session: conversationSvc,
-		rag:     ragSvc,
+		adaptor:        adaptor,
+		cost:           cost.NewService(adaptor),
+		quota:          quota.NewService(adaptor),
+		session:        conversationSvc,
+		rag:            ragSvc,
+		projectIndexer: projectIndexer,
 	}, nil
 }
 

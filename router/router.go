@@ -26,6 +26,7 @@ func routeRegister(app *gin.Engine, h *api.Handler) {
 	app.DELETE("/api/sessions/delete", h.DeleteSession) // 删除会话
 
 	app.POST("/api/rag/retriever", h.Retriever)
+	app.GET("/api/rag/project_status", h.ProjectIndexStatus) // 项目代码语义索引构建状态
 
 	chatQuota := Quota(h.GetQuotaService(), nil)
 	chatRoot := app.Group("/api/chat", chatQuota)

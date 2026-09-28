@@ -15,3 +15,7 @@ logs/
 docs
 scripts
 deploy
+
+workspace
+
+.claude

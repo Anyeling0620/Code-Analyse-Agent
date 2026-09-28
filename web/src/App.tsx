@@ -172,6 +172,9 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   //
   // 这里不能只靠固定延时：Mermaid 图是异步渲染的，过早打印会把还没画出来的图
   // 变成一段代码块。判定标准是"所有 Mermaid 块都已经产出 svg"。
+  //
+  // 等待期间界面上有 .print-wait-overlay 遮罩（跟随 printEntries 挂载/卸载），
+  // 否则用户点完「导出 PDF」到打印框弹出之间看不到任何反馈。
   useEffect(() => {
     if (!printEntries) {
       return;
@@ -203,7 +206,23 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
         timer = window.setTimeout(attemptPrint, 150);
         return;
       }
-      window.print();
+      // window.print() 会阻塞主线程。遮罩与打印文档是同一次提交挂载的，
+      // MIN_WAIT_MS 已保证它有足够时间绘制；这里再让出两帧，
+      // 避免打印框弹出时遮罩还没画出来。
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          if (cancelled) {
+            return;
+          }
+          try {
+            window.print();
+          } catch {
+            // 个别环境（无打印能力的嵌入式浏览器）会直接抛错，
+            // 兜底卸载打印文档与等待遮罩，避免界面卡在等待态。
+            setPrintEntries(null);
+          }
+        });
+      });
     };
 
     timer = window.setTimeout(attemptPrint, 150);
@@ -856,6 +875,21 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
                   await resumeInterruptedRun(ev, approved);
                 }}
             />
+        )}
+        {printEntries && (
+            <div
+                className="print-wait-overlay"
+                role="dialog"
+                aria-modal="true"
+                aria-busy="true"
+                aria-label="正在准备打印稿"
+            >
+              <div className="print-wait-card">
+                <span className="print-wait-spinner" aria-hidden="true" />
+                <p className="print-wait-title">正在准备打印稿…</p>
+                <p className="print-wait-hint">正在等待图表渲染完成，随后会弹出系统打印对话框。</p>
+              </div>
+            </div>
         )}
         {printEntries && <ExportPrintRoot entries={printEntries} meta={{ sessionId }} />}
       </div>

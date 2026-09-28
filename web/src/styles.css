@@ -191,8 +191,11 @@ button {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 0.8rem;
+  /* 状态/工具胶囊：字号提一档并加中粗，避免绿色小字在浅灰底上发虚看不清。 */
+  padding: 7px 12px;
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 .badge {
@@ -1072,8 +1075,10 @@ button {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 4px 9px;
-  font-size: 0.78rem;
+  padding: 5px 11px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 .tool-status-calling {
@@ -2213,5 +2218,75 @@ button {
   .export-print-root .markdown-body h2,
   .export-print-root .markdown-body h3 {
     page-break-after: avoid;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   PDF 导出：准备阶段的等待提示
+
+   点「导出 PDF」后，打印文档要挂载、Mermaid 图要出图（0.5~2.5s），
+   这段时间原本没有任何界面反馈，用户会以为没反应。
+
+   遮罩渲染在 .app-shell 内部，而打印媒体下 .app-shell 整块 display:none，
+   所以它不会被带进 PDF；末尾的 @media print 只是再加一道保险。
+   ──────────────────────────────────────────────────────────────── */
+
+.print-wait-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 28, 24, 0.42);
+  backdrop-filter: blur(4px);
+}
+
+.print-wait-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 260px;
+  max-width: min(420px, 92vw);
+  padding: 22px 28px;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(24, 35, 31, 0.24);
+  text-align: center;
+}
+
+.print-wait-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid rgba(16, 163, 127, 0.22);
+  border-top-color: var(--accent);
+  animation: print-wait-spin 0.8s linear infinite;
+}
+
+@keyframes print-wait-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.print-wait-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0d0d0d;
+}
+
+.print-wait-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+@media print {
+  .print-wait-overlay {
+    display: none !important;
   }
 }

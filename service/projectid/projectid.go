@@ -18,6 +18,19 @@ import (
 // scpLikePattern 匹配 git 的 scp 风格地址：git@github.com:owner/repo.git
 var scpLikePattern = regexp.MustCompile(`^(?:[^@/]+@)?([^:/@]+):(.+)$`)
 
+// knownMirrorHosts 是已知的 GitHub 加速镜像域名。
+//
+// 镜像地址形如 https://ghfast.top/https://github.com/owner/repo：url.Parse 会把镜像域名
+// 当成 host、把真实地址整段塞进 path，直接哈希会得到与原始地址完全不同的 id，
+// 于是同一个仓库在"直连"和"走镜像"两种写法下会各自建一套索引。这里先剥壳再归一化。
+var knownMirrorHosts = map[string]bool{
+	"ghfast.top":         true,
+	"gh-proxy.com":       true,
+	"ghproxy.net":        true,
+	"ghproxy.com":        true,
+	"mirror.ghproxy.com": true,
+}
+
 const idLength = 16
 
 // Derive 派生项目标识：remote 可用时优先用 remote，否则用本地绝对路径。
@@ -62,6 +75,7 @@ func normalizeRemote(remote string) string {
 	if remote == "" {
 		return ""
 	}
+	remote = unwrapMirrorRemote(remote)
 	// 去掉可能的凭证，避免不同 token 产生不同 ID，也避免泄露。
 	if strings.Contains(remote, "://") {
 		parsed, err := url.Parse(remote)
@@ -79,6 +93,26 @@ func normalizeRemote(remote string) string {
 		return cleanHostPath(matches[1], matches[2])
 	}
 	return ""
+}
+
+// unwrapMirrorRemote 剥掉已知镜像前缀，返回内层真实地址；不是镜像地址时原样返回。
+//
+// 只认"host 是已知镜像域名 + path 是带 scheme 的完整地址"这一种形态，
+// 不做通用递归解包，避免把正常路径误当成嵌套 URL。
+func unwrapMirrorRemote(remote string) string {
+	parsed, err := url.Parse(remote)
+	if err != nil || parsed.Host == "" {
+		return remote
+	}
+	if !knownMirrorHosts[strings.ToLower(parsed.Hostname())] {
+		return remote
+	}
+	inner := strings.TrimPrefix(parsed.Path, "/")
+	lower := strings.ToLower(inner)
+	if !strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://") {
+		return remote
+	}
+	return inner
 }
 
 func cleanHostPath(host, path string) string {

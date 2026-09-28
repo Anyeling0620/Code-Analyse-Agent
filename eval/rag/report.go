@@ -73,6 +73,9 @@ func buildReportBlock(res *Results, specs []armSpec) string {
 			sum.MRR, sum.AvgLatencyMS, sum.P50LatencyMS, sum.P95LatencyMS, sum.AvgRewriteMS)
 	}
 	b.WriteString("\nF = 文件级 Recall，S = 符号级 Recall；rw_ms = 该臂平均改写耗时（0 表示该臂不涉及改写）。\n")
+	b.WriteString("\n> ⚠️ **S@ 列口径有缺陷，已废弃，请只看 F@ 列。** 当前判定是 " +
+		"`symbol == want || strings.Contains(doc.Content, want)`，不限定命中所在文件，" +
+		"因此会出现 `sparse_zh` 的 S@1=1.0 而 F@1=0.0 这类自相矛盾的数。口径修复前不要用 S@ 下任何结论。\n")
 
 	for _, s := range specs {
 		sum := res.Summary[s.name]

@@ -17,11 +17,11 @@ export function ProfileModal({ profile, onSave, onClose }: ProfileModalProps) {
 
   const nextProfile = useMemo<ProfileForm>(() => ({
     user_type: draft.user_type.trim(),
-    skill_level: draft.skill_level,
-    goal_type: draft.goal_type,
+    skill_level: draft.skill_level.trim(),
+    goal_type: draft.goal_type.trim(),
     purchased_courses: parseCourses(coursesText),
     current_topic: draft.current_topic.trim(),
-    current_stage: draft.current_stage,
+    current_stage: draft.current_stage.trim(),
   }), [coursesText, draft]);
 
   return (
@@ -56,29 +56,47 @@ export function ProfileModal({ profile, onSave, onClose }: ProfileModalProps) {
 
             <label className="profile-field">
               <span>技能水平</span>
-              <select value={draft.skill_level} onChange={(event) => setDraft((current) => ({ ...current, skill_level: event.target.value as SkillLevel }))}>
+              <input
+                value={draft.skill_level}
+                onChange={(event) => setDraft((current) => ({ ...current, skill_level: event.target.value }))}
+                list="profile-skill-levels"
+                placeholder="例如 零基础 / 入门 / 熟悉，也可自定义"
+              />
+              <datalist id="profile-skill-levels">
                 {skillLevels.map((level) => (
-                  <option key={level} value={level}>{level}</option>
+                  <option key={level} value={level} />
                 ))}
-              </select>
+              </datalist>
             </label>
 
             <label className="profile-field">
               <span>目标类型</span>
-              <select value={draft.goal_type} onChange={(event) => setDraft((current) => ({ ...current, goal_type: event.target.value as GoalType }))}>
+              <input
+                value={draft.goal_type}
+                onChange={(event) => setDraft((current) => ({ ...current, goal_type: event.target.value }))}
+                list="profile-goal-types"
+                placeholder="例如 补基础 / 做项目 / 学Agent，也可自定义"
+              />
+              <datalist id="profile-goal-types">
                 {goalTypes.map((goal) => (
-                  <option key={goal} value={goal}>{goal}</option>
+                  <option key={goal} value={goal} />
                 ))}
-              </select>
+              </datalist>
             </label>
 
             <label className="profile-field">
               <span>当前阶段</span>
-              <select value={draft.current_stage} onChange={(event) => setDraft((current) => ({ ...current, current_stage: event.target.value as CurrentStage }))}>
+              <input
+                value={draft.current_stage}
+                onChange={(event) => setDraft((current) => ({ ...current, current_stage: event.target.value }))}
+                list="profile-current-stages"
+                placeholder="例如 学习中 / 开发中 / 复盘中，也可自定义"
+              />
+              <datalist id="profile-current-stages">
                 {currentStages.map((stage) => (
-                  <option key={stage} value={stage}>{stage}</option>
+                  <option key={stage} value={stage} />
                 ))}
-              </select>
+              </datalist>
             </label>
 
             <label className="profile-field profile-field-full">

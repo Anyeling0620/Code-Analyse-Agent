@@ -44,6 +44,10 @@ func (h *Handler) GetQuotaService() *quota.Service {
 	return h.quota
 }
 
+func (h *Handler) GetCostService() *cost.Service {
+	return h.cost
+}
+
 func (h *Handler) Close() error {
 	if h == nil {
 		return nil

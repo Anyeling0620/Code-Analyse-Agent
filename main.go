@@ -5,6 +5,7 @@ import (
 	"edu.agent.code/adaptor"
 	"edu.agent.code/api"
 	"edu.agent.code/config"
+	"edu.agent.code/mcpserver"
 	"edu.agent.code/router"
 	"edu.agent.code/utils/logger"
 	"edu.agent.code/utils/tracing"
@@ -67,7 +68,7 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	serverErrors := make(chan error, 1)
+	serverErrors := make(chan error, 2)
 	go func() {
 		logger.Info(fmt.Sprintf("http server listening at %s", srv.Addr))
 		err := srv.ListenAndServe()
@@ -76,6 +77,20 @@ func main() {
 			return
 		}
 		serverErrors <- nil
+	}()
+
+	go func() {
+		if !conf.MCPServerSelf.Enabled {
+			return
+		}
+		logger.Info("start mcp server on %s", conf.MCPServerSelf.HttpAddr)
+		err := mcpserver.NewServer(handler.GetQuotaService(), handler.GetCostService()).ServeHTTP(conf.MCPServerSelf.HttpAddr).ListenAndServe()
+		if err != nil {
+			serverErrors <- err
+			return
+		}
+		serverErrors <- nil
+
 	}()
 
 	select {

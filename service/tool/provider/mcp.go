@@ -78,7 +78,7 @@ func (m *MCPLoader) Close() error {
 	}
 	m.clients = nil
 	if err != nil {
-		return fmt.Errorf("close mcp clients: %w", err)
+		return fmt.Errorf("close mcpserver clients: %w", err)
 	}
 	return nil
 }

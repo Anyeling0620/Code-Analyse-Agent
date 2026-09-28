@@ -31,13 +31,19 @@ type Config struct {
 	SQLite         SQLite         `yaml:"sqlite"`
 	DeepSeek       DeepSeek       `yaml:"deepseek"`
 	OTel           OTel           `yaml:"otel"`
-	MCP            MCP            `yaml:"mcp"`
+	MCP            MCP            `yaml:"mcpserver"`
 	DatabaseReport DatabaseReport `yaml:"database_report"`
 	Agents         Agents         `yaml:"agents"`
 	ModelPrice     ModelPrice     `yaml:"model_price"`
 	WorkSpace      WorkSpace      `yaml:"workspace"`
 	RAG            RAG            `yaml:"rag"`
 	Skills         Skills         `yaml:"skills"`
+	MCPServerSelf  MCPServerSelf  `yaml:"mcp_server_self"`
+}
+
+type MCPServerSelf struct {
+	Enabled  bool   `yaml:"enabled"`
+	HttpAddr string `yaml:"http_addr"`
 }
 
 type Server struct {

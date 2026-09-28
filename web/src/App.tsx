@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { InterruptModal } from './InterruptModal';
-import { fetchJSON, updateQuotaFromHeaders } from './api/client';
+import { fetchJSON, updateQuotaFromHeaders, withAuth } from './api/client';
 import { consumeSSE } from './api/sse';
+import { LoginModal } from './auth/LoginModal';
+import { clearSession, getSession, getToken, saveSession, subscribeSession } from './auth/session';
 import { MessageList } from './chat/MessageList';
 import {
   addToolCallWithSegment,
@@ -20,7 +22,7 @@ import { initialProfile } from './constants/profile';
 import { normalizeMarkdown } from './markdown/normalizeMarkdown';
 import { ProfileModal } from './profile/ProfileModal';
 import { SessionPanel } from './sessions/SessionPanel';
-import type { ChatMessage, CostDailyTotal, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent } from './types/chat';
+import type { ChatMessage, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent } from './types/chat';
 
 const SESSION_PAGE_LIMIT = 20;
 const MESSAGE_PAGE_LIMIT = 50;
@@ -46,6 +48,7 @@ export default function App() {
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const [isComposerExpanded, setIsComposerExpanded] = useState(true);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [authSession, setAuthSession] = useState(() => getSession());
   const controllerRef = useRef<AbortController | null>(null);
   const sessionIdRef = useRef('');
   const isStreamingRef = useRef(false);
@@ -59,9 +62,14 @@ export default function App() {
 
   useEffect(() => {
     void checkHealth();
+    if (!getToken()) {
+      return;
+    }
     void refreshMetrics();
     void refreshSessions();
-  }, []);
+  }, [authSession]);
+
+  useEffect(() => subscribeSession(setAuthSession), []);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -97,6 +105,28 @@ export default function App() {
     } catch {
       setHealth('offline');
     }
+  }
+
+  async function handleLogin(username: string, password: string) {
+    const result = await fetchJSON<LoginResult>(
+        '/api/auth/login',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ username, password }),
+        },
+        { handleUnauthorized: false },
+    );
+    saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
+  }
+
+  async function handleLogout() {
+    try {
+      await fetchJSON<null>('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // 令牌可能已过期，服务端吊销失败不影响本地退出。
+    }
+    clearSession();
   }
 
   async function refreshMetrics() {
@@ -292,19 +322,18 @@ export default function App() {
     let sawDone = false;
 
     try {
-      const response = await fetch('/api/chat/stream', {
+      const response = await fetch('/api/chat/stream', withAuth({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
         },
         body: JSON.stringify({
-          user_id: 'demo-user',
           session_id: sessionIdRef.current,
           message,
           profile,
         }),
         signal: controller.signal,
-      });
+      }));
 
       updateQuotaFromHeaders(response);
       if (!response.ok || !response.body) {
@@ -444,7 +473,7 @@ export default function App() {
     setIsStreaming(true);
     patchAssistant(ev.assistant_message_id, (item) => ({ ...item, status: 'streaming' }));
     try {
-      const response = await fetch('/api/chat/resume', {
+      const response = await fetch('/api/chat/resume', withAuth({
         method: 'POST',
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({
@@ -452,7 +481,7 @@ export default function App() {
           pending_id: ev.pending_approval_id,
           approved,
         }),
-      });
+      }));
       updateQuotaFromHeaders(response);
       if (!response.ok || !response.body) {
         const text = await response.text();
@@ -581,6 +610,10 @@ export default function App() {
     scrollConversationToBottom('smooth');
   }, []);
 
+  if (!authSession) {
+    return <LoginModal onSubmit={handleLogin} />;
+  }
+
   return (
       <div className="app-shell">
         <aside className="control-panel">
@@ -602,12 +635,14 @@ export default function App() {
 
         <main className="chat-stage">
           <div ref={conversationScrollRef} className="conversation-scroll" onScroll={handleConversationScroll}>
-            {(sessionId || lastTraceId) && (
-                <section className="workspace-meta-bar">
-                  {sessionId && <span className="workspace-meta-chip">Session: {sessionId}</span>}
-                  {lastTraceId && <span className="workspace-meta-chip">Trace: {lastTraceId}</span>}
-                </section>
-            )}
+            <section className="workspace-meta-bar">
+              <span className="workspace-meta-chip">账号: {authSession.user_id}（{authSession.plan}）</span>
+              {sessionId && <span className="workspace-meta-chip">Session: {sessionId}</span>}
+              {lastTraceId && <span className="workspace-meta-chip">Trace: {lastTraceId}</span>}
+              <button className="workspace-meta-chip trace-entry-button" type="button" onClick={handleLogout}>
+                退出登录
+              </button>
+            </section>
 
             <MessageList messages={messages} bottomRef={bottomRef} isLoadingOlderMessages={isLoadingOlderMessages} hasMoreMessages={hasMoreMessages} />
           </div>

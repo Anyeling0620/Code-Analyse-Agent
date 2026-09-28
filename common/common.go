@@ -7,6 +7,8 @@ const (
 	CtxKeyTraceID = "trace_id"
 	// CtxKeyAuthUser 是 gin.Context 中 *UserInfo 的 key。
 	CtxKeyAuthUser = "auth_user"
+	// CtxKeyAuthToken 是 gin.Context 中当前请求所用登录令牌的 key，供登出时按令牌吊销。
+	CtxKeyAuthToken = "auth_token"
 )
 
 type Plan string

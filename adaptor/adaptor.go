@@ -6,6 +6,7 @@ import (
 	"edu.agent.code/config"
 	"fmt"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
+	"github.com/redis/go-redis/v9"
 
 	// 下面这个驱动可能有问题 如果报错换成 "github.com/glebarez/sqlite"
 	"gorm.io/driver/sqlite"
@@ -14,24 +15,30 @@ import (
 	"gorm.io/plugin/opentelemetry/tracing"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type IAdaptor interface {
 	GetConfig() *config.Config
 	GetDB() *gorm.DB
 	GetMilvusClient() *milvusclient.Client
+	GetRedis() *redis.Client
 }
 
 type Adaptor struct {
 	conf         *config.Config
 	db           *gorm.DB
 	milvusClient *milvusclient.Client
+	redisClient  *redis.Client
 }
 
 func NewAdaptor(conf *config.Config) (IAdaptor, error) {
 	adaptor := &Adaptor{conf: conf}
 	err := adaptor.openDB(conf.SQLite.Path)
 	if err != nil {
+		return nil, err
+	}
+	if err := adaptor.openRedisClient(); err != nil {
 		return nil, err
 	}
 	if conf.RAG.Enabled {
@@ -91,6 +98,37 @@ func (a *Adaptor) GetMilvusClient() *milvusclient.Client {
 		return nil
 	}
 	return a.milvusClient
+}
+
+// GetRedis 返回登录令牌存储使用的 Redis 客户端。
+func (a *Adaptor) GetRedis() *redis.Client {
+	return a.redisClient
+}
+
+// openRedisClient 建立 Redis 连接并探活。登录令牌依赖 Redis，连接失败直接启动失败，
+// 避免服务起来后所有请求都在鉴权阶段报错。
+func (a *Adaptor) openRedisClient() error {
+	if a.redisClient != nil {
+		return nil
+	}
+	conf := a.conf.Redis
+	if conf.Addr == "" {
+		return fmt.Errorf("redis addr can't be empty")
+	}
+	client := redis.NewClient(&redis.Options{
+		Addr:     conf.Addr,
+		Username: conf.Username,
+		Password: conf.Password,
+		DB:       conf.DB,
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := client.Ping(ctx).Err(); err != nil {
+		_ = client.Close()
+		return fmt.Errorf("redis ping %s: %v", conf.Addr, err)
+	}
+	a.redisClient = client
+	return nil
 }
 
 func (a *Adaptor) openMilvusClient() error {

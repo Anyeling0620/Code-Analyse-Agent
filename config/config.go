@@ -29,6 +29,7 @@ var (
 type Config struct {
 	Server         Server         `yaml:"server"`
 	SQLite         SQLite         `yaml:"sqlite"`
+	Redis          Redis          `yaml:"redis"`
 	DeepSeek       DeepSeek       `yaml:"deepseek"`
 	OTel           OTel           `yaml:"otel"`
 	MCP            MCP            `yaml:"mcpserver"`
@@ -39,6 +40,7 @@ type Config struct {
 	RAG            RAG            `yaml:"rag"`
 	Skills         Skills         `yaml:"skills"`
 	MCPServerSelf  MCPServerSelf  `yaml:"mcp_server_self"`
+	Auth           Auth           `yaml:"auth"`
 }
 
 type MCPServerSelf struct {
@@ -55,6 +57,27 @@ type Server struct {
 
 type SQLite struct {
 	Path string `yaml:"path"`
+}
+
+// Redis 是登录令牌存储依赖的 Redis 连接配置。
+type Redis struct {
+	Addr     string `yaml:"addr"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
+}
+
+// Auth 是账号密码登录配置。Account.Plan 取值为 common.Plan 的字符串形式。
+type Auth struct {
+	// TokenTTLHours 是登录令牌有效期（小时），<=0 时按 168 小时（7 天）处理。
+	TokenTTLHours int           `yaml:"token_ttl_hours"`
+	Accounts      []AuthAccount `yaml:"accounts"`
+}
+
+type AuthAccount struct {
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	Plan     string `yaml:"plan"`
 }
 
 type DatabaseReport struct {

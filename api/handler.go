@@ -4,6 +4,7 @@ import (
 	"context"
 	"edu.agent.code/adaptor"
 	"edu.agent.code/common"
+	"edu.agent.code/service/auth"
 	"edu.agent.code/service/conversation"
 	"edu.agent.code/service/cost"
 	"edu.agent.code/service/dto"
@@ -21,6 +22,7 @@ type Handler struct {
 	session        *conversation.Service
 	rag            *rag.Service
 	projectIndexer *rag.ProjectIndexer
+	auth           *auth.Service
 }
 
 func NewHandler(ctx context.Context, adaptor adaptor.IAdaptor) (*Handler, error) {
@@ -42,6 +44,7 @@ func NewHandler(ctx context.Context, adaptor adaptor.IAdaptor) (*Handler, error)
 		session:        conversationSvc,
 		rag:            ragSvc,
 		projectIndexer: projectIndexer,
+		auth:           auth.NewService(adaptor),
 	}, nil
 }
 
@@ -51,6 +54,10 @@ func (h *Handler) GetQuotaService() *quota.Service {
 
 func (h *Handler) GetCostService() *cost.Service {
 	return h.cost
+}
+
+func (h *Handler) GetAuthService() *auth.Service {
+	return h.auth
 }
 
 func (h *Handler) Close() error {
@@ -72,14 +79,12 @@ func (h *Handler) Close() error {
 	return nil
 }
 
+// authUser 返回 Auth 中间件写入的当前登录用户。
+// 未登录请求已被中间件以 401 拦截，这里不再回退到任何演示账号，
+// 否则中间件覆盖不到的路由会静默获得一个高权限身份。
 func (h *Handler) authUser(c *gin.Context) *common.UserInfo {
 	value, _ := c.Get(common.CtxKeyAuthUser)
 	user, _ := value.(*common.UserInfo)
-	if user == nil {
-		return &common.UserInfo{
-			UserID: "demo-user", Plan: common.PlanPro,
-		}
-	}
 	return user
 }
 

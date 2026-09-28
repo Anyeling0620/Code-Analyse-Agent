@@ -20,6 +20,7 @@ require (
 	github.com/jinzhu/copier v0.4.0
 	github.com/mark3labs/mcp-go v1.1.1
 	github.com/milvus-io/milvus/client/v2 v2.6.5
+	github.com/redis/go-redis/v9 v9.22.0
 	github.com/samber/lo v1.53.0
 	github.com/shopspring/decimal v1.4.0
 	github.com/spf13/viper v1.21.0

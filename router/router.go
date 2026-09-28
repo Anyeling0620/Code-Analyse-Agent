@@ -8,7 +8,7 @@ import (
 func New(h *api.Handler) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	app := gin.New()
-	app.Use(gin.Recovery(), gin.Logger(), Tracing(), Auth())
+	app.Use(gin.Recovery(), gin.Logger(), Tracing(), Auth(h.GetAuthService()))
 
 	routeRegister(app, h)
 	return app
@@ -17,6 +17,8 @@ func New(h *api.Handler) *gin.Engine {
 func routeRegister(app *gin.Engine, h *api.Handler) {
 	app.GET("/healthz", h.Health)
 	app.GET("/api/version", h.Version)
+	app.POST("/api/auth/login", h.Login)                // 账号密码登录，换取令牌
+	app.POST("/api/auth/logout", h.Logout)              // 吊销当前令牌
 	app.GET("api/quota/today", h.QuotaToday)            // 用户当天调用量
 	app.GET("/api/cost/daily", h.CostDaily)             // 用户当天的成本
 	app.GET("/api/cost/by_user", h.CostByUser)          // 按用户统计成本

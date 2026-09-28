@@ -123,6 +123,12 @@ export type APIResponse<T> = {
   trace_id?: string;
 };
 
+export type LoginResult = {
+  token: string;
+  user_id: string;
+  plan: string;
+};
+
 export type CostDailyTotal = {
   date: string;
   cny: number;

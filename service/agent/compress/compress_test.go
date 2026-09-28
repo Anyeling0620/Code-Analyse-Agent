@@ -126,13 +126,16 @@ func TestNewRequiresModelWhenEnabled(t *testing.T) {
 	}
 }
 
-// TestSummarizeFoldsHistoryAndKeepsPinnedContext 断言压缩后的历史满足两个硬约束：
+// TestLegacySummarizeFoldsHistoryAndKeepsPinnedContext 断言**旧策略**压缩后的历史满足两个硬约束：
 //  1. system 消息（安全约束、画像等）原样保留；
 //  2. 不再出现孤立的 tool 消息 —— 工具结果被折叠进摘要，而不是留下配不上
 //     assistant tool_call 的悬空 ToolMessage（那种消息会让下一次模型调用直接 400）。
-func TestSummarizeFoldsHistoryAndKeepsPinnedContext(t *testing.T) {
+//
+// 这条用例描述的是 StrategyLegacy 的契约（整段历史折叠成一条摘要），所以显式选它；
+// 默认的 structured 策略保留最近原文，断言见 structured_test.go。
+func TestLegacySummarizeFoldsHistoryAndKeepsPinnedContext(t *testing.T) {
 	ctx := context.Background()
-	middleware, err := New(ctx, config.ContextCompact{Enabled: true, TriggerMessages: 1}, &fakeSummaryModel{
+	middleware, err := New(ctx, config.ContextCompact{Enabled: true, TriggerMessages: 1, Strategy: StrategyLegacy}, &fakeSummaryModel{
 		summary: "关键结论：项目入口是 main.go。\n<all_user_messages>\n</all_user_messages>",
 	})
 	if err != nil {

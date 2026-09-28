@@ -68,6 +68,17 @@ type ContextCompact struct {
 	Instruction string `yaml:"instruction"`
 	// TranscriptPath 是完整会话记录路径，会写进摘要提醒模型可回读原始上下文。
 	TranscriptPath string `yaml:"transcript_path"`
+	// KeepRecent 是压缩时原样保留的最近消息条数（不含 system 消息）。
+	//
+	// 只有更早的历史会被折叠成摘要；<=0 时使用默认值 10。这样"当前正在做的事"
+	// 始终以原文出现在模型输入里，不需要经过摘要模型二次加工。
+	KeepRecent int `yaml:"keep_recent"`
+	// Strategy 选择压缩策略：
+	//   - "structured"（默认，空字符串等价于此）：system 消息永不进摘要，
+	//     最近 KeepRecent 条原样保留，只有更早的历史会生成结构化证据摘要；
+	//   - "legacy"：改造前的行为——整段历史（含 system）交给摘要模型，再用摘要替换全部历史。
+	//     保留该取值是为了让 A/B 评测能够原样复现旧行为。
+	Strategy string `yaml:"strategy"`
 }
 
 type MCPServerSelf struct {

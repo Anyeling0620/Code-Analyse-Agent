@@ -211,12 +211,16 @@ func TestEvalThresholdSensitivity(t *testing.T) {
 
 // TestEvalSummaryOverheadCrossover 找出「压缩反而让 prompt 变大」的临界规模。
 // 摘要消息自带固定的前导说明与继续指令，历史比它短时压缩是净亏。
+//
+// 这条曲线描述的是 StrategyLegacy（整段历史折叠）的形状，所以显式选旧策略：
+// structured 策略会原样保留最近 DefaultKeepRecent 条，短历史下根本不会缩，
+// 用旧策略量出来的临界点才是"折叠式压缩"的真实代价。
 func TestEvalSummaryOverheadCrossover(t *testing.T) {
 	crossover := -1
 	for _, runesPerToolResult := range []int{100, 200, 400, 800, 1200, 2000, 4000} {
 		original := evalHistory(1, runesPerToolResult)
 		stub := &countingSummaryModel{reply: "已确认结论：入口在 main.go（证据：main.go:12）。"}
-		middleware := evalMiddleware(t, config.ContextCompact{Enabled: true, TriggerTokens: 1}, stub)
+		middleware := evalMiddleware(t, config.ContextCompact{Enabled: true, TriggerTokens: 1, Strategy: StrategyLegacy}, stub)
 		compacted := runCompaction(t, middleware, original)
 		if stub.calls != 1 {
 			t.Fatalf("threshold=1 should always trigger, got %d calls", stub.calls)
@@ -259,12 +263,15 @@ func TestEvalCompactionOverhead(t *testing.T) {
 // TestEvalFinalizerBackfillsUserIntent 证明「用户意图回填」依赖模型按提示输出
 // <all_user_messages> 块：输出缺失该块时，用户消息不会被回填。
 // 这是在使用方 prompt 之外的隐含契约，值得在评估报告里显式记录。
+//
+// 回填是 StrategyLegacy（走 Eino 默认 finalizer）的行为；structured 策略不依赖
+// 该 tag，它直接用原文保留最近消息，所以这里显式选旧策略。
 func TestEvalFinalizerBackfillsUserIntent(t *testing.T) {
 	original := evalHistory(2, 1000)
 	lastUser := original[len(original)-1].Content
 
 	withTag := &countingSummaryModel{reply: "结论：入口在 main.go。"}
-	middleware := evalMiddleware(t, config.ContextCompact{Enabled: true, TriggerTokens: 1000}, withTag)
+	middleware := evalMiddleware(t, config.ContextCompact{Enabled: true, TriggerTokens: 1000, Strategy: StrategyLegacy}, withTag)
 	compacted := runCompaction(t, middleware, original)
 	if !strings.Contains(messagesToText(compacted), lastUser) {
 		t.Fatal("user intent was not backfilled although the summary contained the tag block")

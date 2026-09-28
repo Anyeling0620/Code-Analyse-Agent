@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { InterruptModal } from './InterruptModal';
-import { fetchJSON, updateQuotaFromHeaders, withAuth } from './api/client';
+import { fetchAuthorized, fetchJSON, updateQuotaFromHeaders } from './api/client';
 import { consumeSSE } from './api/sse';
 import { LoginModal } from './auth/LoginModal';
 import { clearSession, getSession, saveSession, subscribeSession } from './auth/session';
@@ -332,7 +332,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     let sawDone = false;
 
     try {
-      const response = await fetch('/api/chat/stream', withAuth({
+      const response = await fetchAuthorized('/api/chat/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
@@ -343,7 +343,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
           profile,
         }),
         signal: controller.signal,
-      }));
+      });
 
       updateQuotaFromHeaders(response);
       if (!response.ok || !response.body) {
@@ -484,7 +484,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     setIsStreaming(true);
     patchAssistant(ev.assistant_message_id, (item) => ({ ...item, status: 'streaming' }));
     try {
-      const response = await fetch('/api/chat/resume', withAuth({
+      const response = await fetchAuthorized('/api/chat/resume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({
@@ -492,7 +492,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
           pending_id: ev.pending_approval_id,
           approved,
         }),
-      }));
+      });
       updateQuotaFromHeaders(response);
       if (!response.ok || !response.body) {
         const text = await response.text();

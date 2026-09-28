@@ -19,13 +19,23 @@ export function withAuth(init?: RequestInit): RequestInit {
   return { ...init, headers };
 }
 
-export async function fetchJSON<T>(url: string, init?: RequestInit, options?: FetchJSONOptions): Promise<T> {
-  const handleUnauthorized = options?.handleUnauthorized ?? true;
+// LOGIN_EXPIRED_MESSAGE 是令牌失效时抛出的错误文案，登录页会据此回到未登录态。
+export const LOGIN_EXPIRED_MESSAGE = '登录已失效，请重新登录';
+
+// fetchAuthorized 发起带登录令牌的请求，并在 401 时清除本地登录态。
+// 所有需要登录的请求都必须走这里——包括 SSE 这类直接用 fetch 的场景。
+// 否则令牌失效后界面只会把错误显示在消息气泡里，永远不会退回登录页。
+export async function fetchAuthorized(url: string, init?: RequestInit, options?: FetchJSONOptions): Promise<Response> {
   const response = await fetch(url, withAuth(init));
-  if (response.status === 401 && handleUnauthorized) {
+  if (response.status === 401 && (options?.handleUnauthorized ?? true)) {
     clearSession();
-    throw new Error('登录已失效，请重新登录');
+    throw new Error(LOGIN_EXPIRED_MESSAGE);
   }
+  return response;
+}
+
+export async function fetchJSON<T>(url: string, init?: RequestInit, options?: FetchJSONOptions): Promise<T> {
+  const response = await fetchAuthorized(url, init, options);
   if (!response.ok) {
     throw new Error((await readErrorMessage(response)) || `${url} failed: ${response.status}`);
   }

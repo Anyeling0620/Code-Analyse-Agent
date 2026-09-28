@@ -161,8 +161,11 @@ func (s *Service) handleToolCallResult(msg *schema.Message, runState *dto.ChatRu
 		toolName = runState.ToolCallMap[msg.ToolCallID].Name
 	}
 	runState.UsedTools = appendIfMissing(runState.UsedTools, toolName)
+	// 工具执行结果必须用 tool_result 事件下发：前端按事件名分发，
+	// 事件名若仍是 tool_call，卡片会一直停在“调用中”，tool_result 字段也不会被渲染。
+	// 该事件同时会写入 runState.RenderEvents 供历史回放，实时流与回放必须同名。
 	emitEvent := dto.ChatStreamEvent{
-		Type:        consts.SseEventTypeToolCall,
+		Type:        consts.SseEventTypeToolResult,
 		TraceID:     runState.TraceID,
 		SessionID:   runState.SessionID,
 		ToolName:    toolName,

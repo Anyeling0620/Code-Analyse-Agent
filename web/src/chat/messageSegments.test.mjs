@@ -11,7 +11,7 @@ await build({
   stdin: {
     contents: `
       import { strict as assert } from 'node:assert';
-      import { messageRecordToChatMessage } from './src/chat/messageSegments.ts';
+      import { messageRecordToChatMessage, resolveStreamEventType } from './src/chat/messageSegments.ts';
       import { normalizeMarkdown } from './src/markdown/normalizeMarkdown.ts';
 
       const message = messageRecordToChatMessage({
@@ -48,6 +48,29 @@ await build({
 
       assert.deepEqual(legacyMessage.segments.map((segment) => segment.type), ['text']);
       assert.equal(legacyMessage.segments[0].type === 'text' ? legacyMessage.segments[0].content : '', '旧消息正文');
+
+      // 旧版后端把工具结果也标成 tool_call，只靠 tool_result 字段区分（历史数据同样如此），
+      // 这类事件必须按 tool_result 处理，否则结果渲染不出来、状态停在“调用中”。
+      assert.equal(resolveStreamEventType('tool_call', { type: 'tool_call', tool_result: '' }), 'tool_call');
+      assert.equal(resolveStreamEventType('tool_call', { type: 'tool_call', tool_result: 'ok' }), 'tool_result');
+      assert.equal(resolveStreamEventType('tool_result', { type: 'tool_result', tool_result: '' }), 'tool_result');
+
+      const legacyToolCallShape = messageRecordToChatMessage({
+        id: 3,
+        session_id: 'session-1',
+        user_id: 'user-1',
+        role: 'assistant',
+        content: '最终回答',
+        created_at: new Date().toISOString(),
+        render_events: [
+          { type: 'tool_call', tool_name: 'read_files', tool_call_id: 'call-9', tool_arguments: '{"path":"a.go"}' },
+          { type: 'tool_call', tool_name: 'read_files', tool_call_id: 'call-9', tool_result: 'package main' },
+        ],
+      });
+      const legacyToolSegments = legacyToolCallShape.segments.filter((segment) => segment.type === 'tool');
+      assert.equal(legacyToolSegments.length, 1);
+      assert.equal(legacyToolSegments[0].tool.status, 'done');
+      assert.equal(legacyToolSegments[0].tool.result, 'package main');
 
       const tick = String.fromCharCode(96);
       const toolResult = 'type MgAdminUserDoc struct {\\n    ID                primitive.ObjectID ' + tick + 'bson:"_id"' + tick + '\\n    UserName string   ' + tick + 'bson:"user_name"' + tick + ' // 用户名-账号\\n}';

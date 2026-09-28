@@ -17,6 +17,7 @@ import {
   hasMeaningfulAssistantState,
   hasToolName,
   messageRecordToChatMessage,
+  resolveStreamEventType,
 } from './chat/messageSegments';
 import { Composer } from './composer/Composer';
 import { initialProfile } from './constants/profile';
@@ -388,7 +389,8 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   }, [profile]);
 
   function handleStreamEvent(assistantId: string, eventName: string, payload: StreamPayload) {
-    switch (eventName) {
+    // 后端历史版本把工具结果也发成 tool_call，这里统一归一化后再分发。
+    switch (resolveStreamEventType(eventName, payload)) {
       case 'ready':
         updateTrace(payload);
         break;

@@ -75,7 +75,7 @@ func (p *Provider) Close() error {
 }
 
 func (p *Provider) RetrieverTool(ctx context.Context) (tool.BaseTool, error) {
-	store, err := vector.NewMilvus(ctx, p.adaptor)
+	store, err := vector.NewMilvus(ctx, p.adaptor, vector.WithReranker(vector.NewReranker(p.conf.RAG.Rerank)))
 	if err != nil {
 		return nil, err
 	}

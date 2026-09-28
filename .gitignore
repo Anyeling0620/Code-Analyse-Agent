@@ -15,7 +15,7 @@ logs/
 docs
 scripts
 deploy
-
+spec
 workspace
 
 .claude

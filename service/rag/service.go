@@ -155,7 +155,7 @@ func NewService(ctx context.Context, adaptor adaptor.IAdaptor) (*Service, error)
 	if err != nil {
 		return nil, err
 	}
-	store, err := vector.NewMilvus(ctx, adaptor, vector.WithInitCollection(true))
+	store, err := vector.NewMilvus(ctx, adaptor, vector.WithInitCollection(true), vector.WithReranker(vector.NewReranker(conf.Rerank)))
 	if err != nil {
 		return nil, err
 	}

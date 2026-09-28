@@ -4,6 +4,7 @@ import (
 	"context"
 	"edu.agent.code/adaptor"
 	"edu.agent.code/config"
+	"edu.agent.code/utils/logger"
 	"errors"
 	"fmt"
 	openaiembedding "github.com/cloudwego/eino-ext/components/embedding/openai"
@@ -13,6 +14,7 @@ import (
 	"github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
+	"go.uber.org/zap"
 	"strings"
 	"time"
 )
@@ -33,11 +35,14 @@ type Milvus struct {
 	indexer    *milvusindexer.Indexer
 	retriever  *milvusretriever.Retriever
 	conf       config.RAG
+	reranker   IReranker
+	topN       int
 	// TODO 如果知道是哪个模块 可以直接传一个模块 “更快更准？”
 }
 
 type MilvusOption struct {
 	initCollection bool
+	reranker       IReranker
 }
 
 type NewOption func(opt *MilvusOption)
@@ -47,6 +52,13 @@ func WithInitCollection(initCollection bool) NewOption {
 		milvus.initCollection = initCollection
 	}
 }
+
+func WithReranker(reranker IReranker) NewOption {
+	return func(o *MilvusOption) {
+		o.reranker = reranker
+	}
+}
+
 func withDefault(conf config.RAG) config.RAG {
 	if conf.TopK == 0 {
 		conf.TopK = 5
@@ -101,6 +113,9 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 	for _, opt := range opts {
 		opt(milvusOpt)
 	}
+	if milvusOpt.reranker != nil && conf.Rerank.TopN > 0 {
+		conf.TopK = max(conf.TopK, conf.Rerank.TopN)
+	}
 	metricType := parseMetricType(conf.Milvus.MetricsType)
 	partition := strings.TrimSpace(conf.Milvus.Partition)
 	retrieverConfig := buildRetrieverConfig(client, conf, conf.Milvus.Collection, partition, metricType, embedder)
@@ -115,6 +130,8 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 			client:     client,
 			collection: conf.Milvus.Collection,
 			retriever:  newRetriever,
+			reranker:   milvusOpt.reranker,
+			topN:       conf.Rerank.TopN,
 		}, nil
 	}
 	// 处理索引的逻辑
@@ -144,6 +161,8 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 		indexer:    indexer,
 		retriever:  newRetriever,
 		conf:       conf,
+		reranker:   milvusOpt.reranker,
+		topN:       conf.Rerank.TopN,
 	}
 	return m, nil
 }
@@ -245,7 +264,20 @@ func (m *Milvus) Retrieve(ctx context.Context, query string, opts ...retriever.O
 	if err != nil {
 		return nil, fmt.Errorf("Milvus_Retrieve: %w", err)
 	}
-	return docs, nil
+	if m.reranker == nil {
+		return docs, nil
+	}
+
+	// 召回后的数据重排
+	reranked, err := m.reranker.Rerank(ctx, query, docs, m.topN)
+	if err != nil {
+		logger.Error("Milvus Retrieve Rerank", zap.Error(err), zap.String("query", query), zap.Int("topN", m.topN))
+		if m.topN >= len(docs) {
+			return docs, nil
+		}
+		return docs[:m.topN], nil
+	}
+	return reranked, nil
 }
 func (m *Milvus) Close() error {
 	if m == nil || m.client == nil {

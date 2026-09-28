@@ -176,12 +176,19 @@ func (o *options) fetchRemote(ctx context.Context, workspace config.WorkSpace, s
 	defer unlock()
 
 	timeout := o.timeout(workspace)
+	// 需要加速时只替换"拉代码用的地址"：project_id、目录名、origin 都保持原始地址，
+	// 否则同一个仓库会因为走了镜像而多出一份身份，导致索引与会话上下文对不上。
+	mirrorPrefix := resolveMirrorPrefix(workspace.GitMirrorPrefix)
+	cloneURL, mirrored := mirrorGitURL(source, mirrorPrefix)
+	if mirrored {
+		logger.Info("repo_fetch use git mirror source=%s mirror=%s", redactCredentials(source), redactCredentials(cloneURL))
+	}
 	reused := false
 	switch {
 	case isGitRepository(ctx, o.runner, target):
 		reused = true
 		if refresh {
-			if err := o.updateRepo(ctx, target, ref, timeout); err != nil {
+			if err := o.updateRepo(ctx, target, cloneURL, ref, timeout); err != nil {
 				return Result{}, err
 			}
 		} else {
@@ -195,7 +202,7 @@ func (o *options) fetchRemote(ctx context.Context, workspace config.WorkSpace, s
 				return Result{}, fmt.Errorf("清理半成品目录失败：%w", err)
 			}
 		}
-		if err := o.cloneRepo(ctx, source, target, ref, timeout); err != nil {
+		if err := o.cloneRepo(ctx, source, cloneURL, target, ref, timeout); err != nil {
 			return Result{}, err
 		}
 	}
@@ -233,28 +240,60 @@ func (o *options) fetchRemote(ctx context.Context, workspace config.WorkSpace, s
 	}, nil
 }
 
-func (o *options) cloneRepo(ctx context.Context, source, target, ref string, timeout time.Duration) error {
-	args := []string{"clone", "--depth=1", "--single-branch"}
-	if ref != "" {
-		args = append(args, "--branch", ref)
+// cloneRepo 把仓库克隆到 target。
+//
+// source 是用户给出的原始地址（仓库身份），cloneURL 是实际用于拉取的地址（可能是镜像）。
+// 两者不同时：失败会自动回退到原始地址重试一次，成功后把 origin 写回原始地址。
+func (o *options) cloneRepo(ctx context.Context, source, cloneURL, target, ref string, timeout time.Duration) error {
+	buildArgs := func(url string) []string {
+		args := []string{"clone", "--depth=1", "--single-branch"}
+		if ref != "" {
+			args = append(args, "--branch", ref)
+		}
+		// "--" 之后一律按位置参数处理，避免 source 被当作 git 选项。
+		return append(args, "--", url, target)
 	}
-	// "--" 之后一律按位置参数处理，避免 source 被当作 git 选项。
-	args = append(args, "--", source, target)
-	if _, err := o.runner.Run(ctx, "", timeout, args...); err != nil {
+	_, err := o.runner.Run(ctx, "", timeout, buildArgs(cloneURL)...)
+	if err != nil && cloneURL != source {
+		// 镜像不可用不能等于"拉不下来"：回退直连再试一次。
+		logger.Warn("repo_fetch mirror clone failed, retry origin source=%s err=%v", redactCredentials(source), err)
+		_ = os.RemoveAll(target)
+		_, err = o.runner.Run(ctx, "", timeout, buildArgs(source)...)
+	}
+	if err != nil {
 		// clone 失败可能留下空目录，清掉避免下次被误判为已有仓库。
 		_ = os.RemoveAll(target)
 		return fmt.Errorf("克隆仓库失败（%s）：%w", redactCredentials(source), err)
+	}
+	if cloneURL != source {
+		// origin 固定回用户原始地址：describeRemote / project_id 都依赖它保持稳定。
+		if _, setErr := o.runner.Run(ctx, target, timeout, "remote", "set-url", "origin", source); setErr != nil {
+			logger.Warn("repo_fetch reset origin url failed target=%s err=%v", target, setErr)
+		}
 	}
 	return nil
 }
 
 // updateRepo 刷新已有仓库：默认分支走 fetch + 硬重置，指定 ref 时切到 FETCH_HEAD。
-func (o *options) updateRepo(ctx context.Context, target, ref string, timeout time.Duration) error {
-	fetchArgs := []string{"fetch", "--depth=1", "--force", "origin"}
-	if ref != "" {
-		fetchArgs = append(fetchArgs, ref)
+//
+// fetchURL 是实际用于拉取的地址（可能是镜像）；镜像失败会回退到 origin（原始地址）。
+func (o *options) updateRepo(ctx context.Context, target, fetchURL, ref string, timeout time.Duration) error {
+	if fetchURL == "" {
+		fetchURL = "origin"
 	}
-	if _, err := o.runner.Run(ctx, target, timeout, fetchArgs...); err != nil {
+	buildFetchArgs := func(url string) []string {
+		args := []string{"fetch", "--depth=1", "--force", url}
+		if ref != "" {
+			args = append(args, ref)
+		}
+		return args
+	}
+	_, err := o.runner.Run(ctx, target, timeout, buildFetchArgs(fetchURL)...)
+	if err != nil && fetchURL != "origin" {
+		logger.Warn("repo_fetch mirror fetch failed, retry origin target=%s err=%v", target, err)
+		_, err = o.runner.Run(ctx, target, timeout, buildFetchArgs("origin")...)
+	}
+	if err != nil {
 		return fmt.Errorf("更新仓库失败：%w", err)
 	}
 	if ref != "" {

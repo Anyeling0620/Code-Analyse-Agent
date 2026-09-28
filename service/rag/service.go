@@ -489,9 +489,20 @@ func isSensitiveFile(path string) bool {
 	return false
 }
 
+// shouldSkipDir 拦截对代码分析没有价值的目录。
+//
+// testdata / fixtures 是测试夹具，benchmarks / eval 是评测脚本与数据集：
+// 它们不是产品实现，而且经常包含与用户提问措辞高度相似的自然语言描述，
+// 会在语义检索里抢占实现代码的排名。实测一个 15KB 的评测问题集被索引后，
+// 45 题里有 17 题的第一名是它自己。
+//
+// 取舍：极少数项目会把产品代码放在 eval/ 下，这类项目会有误伤。若遇到，
+// 应改为按具体路径排除，而不是把 eval 从名单里去掉。
 func shouldSkipDir(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case ".git", ".idea", ".vscode", ".obsidian", "node_modules", "vendor", "data", "dist", "build", "target":
+	case ".git", ".idea", ".vscode", ".obsidian", "node_modules", "vendor",
+		"data", "dist", "build", "target",
+		"testdata", "fixtures", "benchmark", "benchmarks", "eval":
 		return true
 	default:
 		return false

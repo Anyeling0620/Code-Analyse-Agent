@@ -1,0 +1,415 @@
+{
+  "project_id": "p1c6a6a726a49c9a8",
+  "collection": "edu_agent_code_docs_p1c6a6a726a49c9a8",
+  "commit_sha": "c3ea49d54831da20be598d05a23e65410ccf2507",
+  "source_root": "",
+  "generated_by": "eval/rag/main.go -gen（runner 兜底生成，非独立评测集 agent）",
+  "generated_at": "2026-09-28",
+  "queries": [
+    {
+      "id": "f001",
+      "question_zh": "带特殊标记的助手消息转成工具调用后，工具名和参数长什么样？",
+      "target_source_path": "utils/dsml/eino_compat_test.go",
+      "target_symbol": "TestNormalizeEinoMessageConvertsDSMLToolCall",
+      "target_kind": "func",
+      "target_line_start": 9,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f002",
+      "question_zh": "用户画像表里都存了哪些信息？已购课程和当前学习阶段是怎么记录的？",
+      "target_source_path": "adaptor/repo/model/models.go",
+      "target_symbol": "Profile",
+      "target_kind": "struct",
+      "target_line_start": 7,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f003",
+      "question_zh": "多行文本合并时，超过长度上限后是怎么截断的，还会返回哪些信息？",
+      "target_source_path": "service/tool/read_files/tool.go",
+      "target_symbol": "joinLinesByRuneLimit",
+      "target_kind": "func",
+      "target_line_start": 118,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f004",
+      "question_zh": "网页上怎么把一段数据保存成指定名字的文件让用户下载？",
+      "target_source_path": "web/src/markdown/MermaidDiagram.tsx",
+      "target_symbol": "downloadBlob",
+      "target_kind": "func",
+      "target_line_start": 34,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f005",
+      "question_zh": "那几个能列出数据库表、查看表结构、执行只读查询的工具是怎么做出来的？",
+      "target_source_path": "service/tool/db_report/tool.go",
+      "target_symbol": "NewTools",
+      "target_kind": "func",
+      "target_line_start": 23,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f006",
+      "question_zh": "服务配置里可以填哪些内容？数据库文件的存放位置是在哪一项里设置的？",
+      "target_source_path": "config/config.go",
+      "target_symbol": "Server, SQLite",
+      "target_kind": "struct",
+      "target_line_start": 43,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f007",
+      "question_zh": "这个只读扫描项目目录结构的工具是怎么注册并提供给模型使用的？",
+      "target_source_path": "service/tool/project_scan/tool.go",
+      "target_symbol": "NewTool",
+      "target_kind": "func",
+      "target_line_start": 40,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f008",
+      "question_zh": "按工具统计费用的接口是怎么取时间范围并返回结果的？",
+      "target_source_path": "api/cost.go",
+      "target_symbol": "Handler.CostByTool",
+      "target_kind": "method",
+      "target_line_start": 42,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f009",
+      "question_zh": "如果没填工作目录会默认用哪里，填了相对路径又是怎么拼成完整路径的？",
+      "target_source_path": "service/tool/terminal/tool.go",
+      "target_symbol": "resolveWorkdir",
+      "target_kind": "func",
+      "target_line_start": 315,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f010",
+      "question_zh": "发起网络请求时能设置哪些参数，比如请求方式、地址、请求头和超时时间？",
+      "target_source_path": "service/tool/http_request/tool.go",
+      "target_symbol": "HTTPRequestInput",
+      "target_kind": "struct",
+      "target_line_start": 24,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f011",
+      "question_zh": "收到某个工具的运行结果后，是怎么把它合并到聊天记录里对应位置的？",
+      "target_source_path": "web/src/chat/messageSegments.ts",
+      "target_symbol": "applyToolResultWithSegment",
+      "target_kind": "func",
+      "target_line_start": 146,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f012",
+      "question_zh": "数据库查询工具允许执行哪些语句？查出来的结果怎么展示给用户？",
+      "target_source_path": "service/tool/db_report/tool.go",
+      "target_symbol": "NewTools",
+      "target_kind": "func",
+      "target_line_start": 49,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f013",
+      "question_zh": "发网络请求的那个功能，返回的结果里都会包含哪些信息和内容？",
+      "target_source_path": "service/tool/http_request/tool.go",
+      "target_symbol": "NewTool",
+      "target_kind": "func",
+      "target_line_start": 32,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f014",
+      "question_zh": "关闭这个处理器时，它会依次释放哪些资源，中途出错又怎么处理？",
+      "target_source_path": "api/handler.go",
+      "target_symbol": "Handler.Close",
+      "target_kind": "method",
+      "target_line_start": 47,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f015",
+      "question_zh": "给用户提问拼装上下文消息时，历史记录取多少条，用户资料怎么插进去，最后怎么套进模板？",
+      "target_source_path": "service/conversation/chat.go",
+      "target_symbol": "Service.buildMessageWithHistory",
+      "target_kind": "method",
+      "target_line_start": 126,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f016",
+      "question_zh": "给会话追加助手消息时，附带的渲染数据是怎么来的？",
+      "target_source_path": "service/conversation/resume.go",
+      "target_symbol": "Service.ResumeChat",
+      "target_kind": "method",
+      "target_line_start": 105,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f017",
+      "question_zh": "怎么判断一个路径是不是以盘符开头的绝对路径？",
+      "target_source_path": "service/tool/terminal/tool.go",
+      "target_symbol": "isWindowsAbsolutePath",
+      "target_kind": "func",
+      "target_line_start": 500,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f018",
+      "question_zh": "生成报表时如果查不到数据会怎么展示？数值类结果又有哪些格式要求？",
+      "target_source_path": "service/agent/db_report/prompt.go",
+      "target_symbol": "DBReportInstruction",
+      "target_kind": "const",
+      "target_line_start": 38,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f019",
+      "question_zh": "工具调用的名称和参数是怎么记录到追踪里的？",
+      "target_source_path": "web/src/App.tsx",
+      "target_symbol": "App",
+      "target_kind": "func",
+      "target_line_start": 338,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f020",
+      "question_zh": "聊天记录里每条消息保存了哪些字段，其中渲染事件是怎么存进去的？",
+      "target_source_path": "service/dto/chat.go",
+      "target_symbol": "ChatMessageRecord",
+      "target_kind": "struct",
+      "target_line_start": 76,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f021",
+      "question_zh": "每条消息上那些小标签是怎么根据内容显示出来的？",
+      "target_source_path": "web/src/chat/MessageItem.tsx",
+      "target_symbol": "copyMessage",
+      "target_kind": "func",
+      "target_line_start": 34,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f022",
+      "question_zh": "生成不带横线的唯一标识并往上下文里塞检查点编号是怎么做的？",
+      "target_source_path": "common/tool.go",
+      "target_symbol": "GetUUIDHex, WithCheckPointID",
+      "target_kind": "func",
+      "target_line_start": 13,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f023",
+      "question_zh": "链路追踪的上报通道和采样比例分别是怎么根据配置决定的？",
+      "target_source_path": "utils/tracing/tracer.go",
+      "target_symbol": "doInit",
+      "target_kind": "func",
+      "target_line_start": 29,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f024",
+      "question_zh": "审批存储接口长什么样？新增待审批和按编号改状态分别要什么参数、返回什么？",
+      "target_source_path": "service/tool/terminal/approval.go",
+      "target_symbol": "IApprovalStore",
+      "target_kind": "interface",
+      "target_line_start": 23,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f025",
+      "question_zh": "聊天会话和消息记录的保存、查询、删除是怎么规定的？",
+      "target_source_path": "adaptor/repo/session/session.go",
+      "target_symbol": "ISession",
+      "target_kind": "interface",
+      "target_line_start": 17,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f026",
+      "question_zh": "用户当天额度的已用数量和上限是怎么查出来返回的？",
+      "target_source_path": "api/quota.go",
+      "target_symbol": "Handler.QuotaToday",
+      "target_kind": "method",
+      "target_line_start": 10,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f027",
+      "question_zh": "配置一个外部工具服务时，怎么指定它走本地命令还是网络地址，以及工具名前缀和分组怎么设？",
+      "target_source_path": "config/config.go",
+      "target_symbol": "MCPServer",
+      "target_kind": "struct",
+      "target_line_start": 69,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f028",
+      "question_zh": "按名字查找内容时，是不是依次去各个来源里试，谁先找到就返回谁？",
+      "target_source_path": "service/agent/skill/backend.go",
+      "target_symbol": "DirectoryBackend.Get",
+      "target_kind": "method",
+      "target_line_start": 81,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f029",
+      "question_zh": "用户输入的命令路径是怎么变成完整路径的？开头的波浪号会展开成什么？",
+      "target_source_path": "service/tool/terminal/tool.go",
+      "target_symbol": "resolveCommandPathCandidate",
+      "target_kind": "func",
+      "target_line_start": 336,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f030",
+      "question_zh": "把一批工具调用换成另一种格式输出时，具体是怎么转换、保留了哪些内容？",
+      "target_source_path": "utils/dsml/eino_compat.go",
+      "target_symbol": "ToEinoToolCalls",
+      "target_kind": "func",
+      "target_line_start": 57,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f031",
+      "question_zh": "输入区那个回车发送、换行提示的说明文字会根据什么变化？",
+      "target_source_path": "web/src/composer/Composer.tsx",
+      "target_symbol": "submitDraft",
+      "target_kind": "func",
+      "target_line_start": 55,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f032",
+      "question_zh": "工具调用标签里的命名空间标记和句首句尾特殊符号，在代码里是怎么定义和保存的？",
+      "target_source_path": "utils/dsml/dsml_compat.go",
+      "target_symbol": "DSML, BOS, EOS",
+      "target_kind": "const",
+      "target_line_start": 24,
+      "difficulty": "locating"
+    },
+    {
+      "id": "f033",
+      "question_zh": "每天总花费怎么统计？统计失败时会怎样？",
+      "target_source_path": "service/cost/service.go",
+      "target_symbol": "Service.DailyTotal",
+      "target_kind": "method",
+      "target_line_start": 75,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f034",
+      "question_zh": "会话摘要是怎么保存的？每条记录里都包含哪些内容？",
+      "target_source_path": "adaptor/repo/model/models.go",
+      "target_symbol": "Session",
+      "target_kind": "struct",
+      "target_line_start": 25,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f035",
+      "question_zh": "用户每天调用次数的配额限制是怎么按天累加并判断超限的？",
+      "target_source_path": "router/quota.go",
+      "target_symbol": "Quota",
+      "target_kind": "func",
+      "target_line_start": 42,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f036",
+      "question_zh": "怎么根据输入和输出的字数算出该收多少人民币？",
+      "target_source_path": "utils/pricing/pricing.go",
+      "target_symbol": "CalculateCNY",
+      "target_kind": "func",
+      "target_line_start": 10,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f037",
+      "question_zh": "工具在返回自己的描述信息时，是怎么把名称替换成自己名字的？",
+      "target_source_path": "service/tool/provider/mcp.go",
+      "target_symbol": "mcpTool.Info",
+      "target_kind": "method",
+      "target_line_start": 169,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f038",
+      "question_zh": "图表渲染库是懒加载的吗，第一次用的时候才去加载并做初始化？",
+      "target_source_path": "web/src/markdown/MermaidDiagram.tsx",
+      "target_symbol": "loadMermaid",
+      "target_kind": "func",
+      "target_line_start": 10,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f039",
+      "question_zh": "每轮对话的检查点数据具体是怎么保存的？都有哪些内容？",
+      "target_source_path": "adaptor/repo/model/agent_checkpoint.go",
+      "target_symbol": "AgentCheckpoint",
+      "target_kind": "struct",
+      "target_line_start": 5,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f040",
+      "question_zh": "向量嵌入服务的配置是怎么定义的？都包含哪些可设置的项？",
+      "target_source_path": "config/config.go",
+      "target_symbol": "Embedding",
+      "target_kind": "struct",
+      "target_line_start": 111,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f041",
+      "question_zh": "这个配额限制是怎么判断用户是否超限的？白名单路径怎么跳过检查？",
+      "target_source_path": "router/quota.go",
+      "target_symbol": "Quota",
+      "target_kind": "func",
+      "target_line_start": 12,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f042",
+      "question_zh": "这个服务对外开放了哪些接口？聊天相关的几个入口是怎么分组并统一加上配额限制的？",
+      "target_source_path": "router/router.go",
+      "target_symbol": "routeRegister",
+      "target_kind": "func",
+      "target_line_start": 17,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f043",
+      "question_zh": "流式对话推送的事件分成哪几类？遇到需要人工审批的中断时会带哪些信息？",
+      "target_source_path": "service/dto/chat.go",
+      "target_symbol": "ChatStreamEvent",
+      "target_kind": "struct",
+      "target_line_start": 48,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "f044",
+      "question_zh": "这段代码是怎么把文件加载进来并切分成小块的？",
+      "target_source_path": "service/rag/service.go",
+      "target_symbol": "initDocsPipeline",
+      "target_kind": "func",
+      "target_line_start": 93,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "f045",
+      "question_zh": "这个会话记录里保存了哪些信息，分别代表什么？",
+      "target_source_path": "service/dto/chat.go",
+      "target_symbol": "SessionContext",
+      "target_kind": "struct",
+      "target_line_start": 27,
+      "difficulty": "descriptive"
+    }
+  ]
+}

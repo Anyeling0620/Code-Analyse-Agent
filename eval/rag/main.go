@@ -9,20 +9,26 @@
 //	go run ./eval/rag -schema         # 只打印目标 collection 的字段结构
 //	go run ./eval/rag -limit 5        # 只跑前 5 题（调试用）
 //
-// 五条 arm：
+// 评测臂（默认全部；可用 -arms 选择子集）：
 //
-//	dense_zh  中文原句 -> 稠密向量（COSINE）检索
-//	dense_en  中文原句 -> LLM 改写成英文 -> 稠密向量检索
-//	sparse_zh 中文原句 -> BM25 稀疏检索
-//	hybrid_zh dense+sparse+RRF+rerank，用中文原句
-//	hybrid_en dense+sparse+RRF+rerank，用改写后的英文
+//	dense_zh            中文原句 -> 稠密向量（COSINE）候选池，无重排
+//	dense_en            中文原句 -> LLM 改写成英文 -> 稠密向量候选池，无重排
+//	sparse_zh           中文原句 -> BM25 稀疏检索候选池，无重排
+//	hybrid_zh           dense+sparse+RRF+rerank，用中文原句
+//	hybrid_en           dense+sparse+RRF+rerank，用改写后的英文
+//	hybrid_zh_norerank  同 hybrid_zh 的候选池，但跳过重排（RRF-only 对照）
+//	hybrid_en_norerank  同 hybrid_en 的候选池，但跳过重排（RRF-only 对照）
+//	rewrite_hybrid_zh   中文原句 -> 多路改写 -> 多路 RRF 融合 -> rerank
+//
+// 候选池按 arm 解耦：hybrid 下 dense/sparse 子路各取 dense_top_k / sparse_top_k 条，
+// RRF 融合后保留 candidate_k 条候选，再交给重排（-no-rerank 可整体关掉重排）。
 //
 // 与生产的一致性说明：
 //   - 检索参数（字段名 vector/sparse_vector/content/metadata、metric COSINE、
-//     BM25、RRF、topK、rerank provider/model）全部取自 agent_code_local.yml 的 rag 段，
+//     BM25、RRF、rerank provider/model）全部取自 agent_code_local.yml 的 rag 段，
 //     与 adaptor/vector/milvus.go 的 buildRetrieverConfig 保持一致；
 //   - 唯一的有意偏差：生产链路 hybrid 重排后只保留 rerank.top_n=5 条，
-//     这里为了能算 Recall@10/@20，重排后保留 topK=20 条（候选池大小与生产相同）。
+//     这里为了能算 Recall@10/@20，重排后保留 final 条（默认 20，候选池大小与生产一致）。
 package main
 
 import (
@@ -32,6 +38,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -42,6 +49,7 @@ import (
 
 	"edu.agent.code/adaptor/vector"
 	"edu.agent.code/config"
+	"edu.agent.code/service/rag"
 
 	openaiembedding "github.com/cloudwego/eino-ext/components/embedding/openai"
 	milvus2 "github.com/cloudwego/eino-ext/components/retriever/milvus2"
@@ -56,6 +64,7 @@ import (
 const (
 	defaultCollection = "edu_agent_code_docs_p1c6a6a726a49c9a8"
 	defaultQueryset   = "eval/rag/queryset.json"
+	fallbackQueryset  = "eval/rag/queryset.fallback.json"
 	defaultOut        = "eval/rag/results.json"
 	smokeOut          = "eval/rag/results.smoke.json"
 	defaultConfig     = "agent_code_local.yml"
@@ -83,6 +92,7 @@ type fileConfig struct {
 		Embedding config.Embedding `yaml:"embedding"`
 		Milvus    config.Milvus    `yaml:"milvus"`
 		Rerank    config.Rerank    `yaml:"rerank"`
+		Rewrite   config.Rewrite   `yaml:"rewrite"`
 	} `yaml:"rag"`
 }
 
@@ -302,16 +312,55 @@ func sanitizeRewrite(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// ---------------------------------------------------------------- 五条 arm
+// ---------------------------------------------------------------- 评测臂
+
+// armSpec 是一条评测臂的声明：候选池（dense_top_k / sparse_top_k / candidate_k）与
+// rerank 开关都在这里按 arm 显式给出，互不耦合。
+type armSpec struct {
+	name       string
+	desc       string
+	kind       string // dense | sparse | hybrid | rewrite_hybrid
+	useEnglish bool   // 用"中文改写成英文"的那一路查询
+	rerank     bool   // 召回/融合之后是否过 cross-encoder 重排
+	denseTopK  int    // dense 子路（或 dense 单路）TopK
+	sparseTopK int    // sparse 子路（或 sparse 单路）TopK
+	candidateK int    // RRF 融合后保留、交给重排的候选池大小
+}
+
+// armPool 是候选池参数（默认取配置文件，可被命令行覆盖），也是结果与报告的记录口径。
+type armPool struct {
+	DenseTopK  int `json:"dense_top_k"`
+	SparseTopK int `json:"sparse_top_k"`
+	CandidateK int `json:"candidate_k"`
+	FinalK     int `json:"final_k"`
+}
+
+// buildArmSpecs 给出本轮的评测臂集合。除任务书要求的 7 条外，额外补一条 hybrid_en_norerank
+// 与 hybrid_zh_norerank 对称，方便直接对读 RRF-only 下的中英差距。
+func buildArmSpecs(p armPool) []armSpec {
+	return []armSpec{
+		{"dense_zh", "中文原句 -> 稠密向量（COSINE）候选池，无重排", "dense", false, false, p.DenseTopK, 0, 0},
+		{"dense_en", "中文改写成英文 -> 稠密向量（COSINE）候选池，无重排", "dense", true, false, p.DenseTopK, 0, 0},
+		{"sparse_zh", "中文原句 -> BM25 稀疏检索候选池，无重排", "sparse", false, false, 0, p.SparseTopK, 0},
+		{"hybrid_zh", "dense+sparse+RRF+rerank，中文原句", "hybrid", false, true, p.DenseTopK, p.SparseTopK, p.CandidateK},
+		{"hybrid_en", "dense+sparse+RRF+rerank，改写英文", "hybrid", true, true, p.DenseTopK, p.SparseTopK, p.CandidateK},
+		{"hybrid_zh_norerank", "dense+sparse+RRF（RRF-only，不重排），中文原句", "hybrid", false, false, p.DenseTopK, p.SparseTopK, p.CandidateK},
+		{"hybrid_en_norerank", "dense+sparse+RRF（RRF-only，不重排），改写英文", "hybrid", true, false, p.DenseTopK, p.SparseTopK, p.CandidateK},
+		{"rewrite_hybrid_zh", "中文原句 -> LLM 多路改写 -> 多路 RRF 融合 -> rerank", "rewrite_hybrid", false, true, p.DenseTopK, p.SparseTopK, p.CandidateK},
+	}
+}
 
 type arm struct {
 	name       string
 	desc       string
+	kind       string
 	retriever  *milvus2.Retriever
 	reranker   vector.IReranker
-	topK       int
-	rerankTopN int
+	rewriter   *rag.QueryRewriter
+	poolK      int
+	finalK     int
 	useEnglish bool
+	skipped    string // 非空表示该 arm 本轮未执行（如查询改写不可用），内容即跳过原因
 }
 
 func newRetriever(
@@ -337,88 +386,144 @@ func newRetriever(
 	return milvus2.NewRetriever(ctx, conf)
 }
 
+// buildArms 按 spec 构造评测臂。检索参数（字段名/度量/BM25/RRF）与
+// adaptor/vector/milvus.go 的 buildRetrieverConfig 一致：hybrid 下 dense/sparse 子路 TopK
+// 分别取 denseTopK/sparseTopK，RRF 融合后保留 candidateK 条候选。
 func buildArms(
 	ctx context.Context,
 	client *milvusclient.Client,
 	collection string,
-	topK int,
+	specs []armSpec,
 	emb embedding.Embedder,
 	reranker vector.IReranker,
+	rewriter *rag.QueryRewriter,
+	finalK int,
 ) ([]*arm, error) {
 	metric := milvus2.COSINE
-	denseMode := func() milvus2.SearchMode { return search_mode.NewApproximate(metric) }
-	sparseMode := func() milvus2.SearchMode { return search_mode.NewSparse(milvus2.BM25) }
-	hybridMode := func() milvus2.SearchMode {
-		return search_mode.NewHybrid(milvusclient.NewRRFReranker(),
-			&search_mode.SubRequest{
-				VectorField: vectorField,
-				MetricType:  metric,
-				TopK:        topK,
-				VectorType:  milvus2.DenseVector,
-			},
-			&search_mode.SubRequest{
-				VectorField: sparseVectorField,
-				MetricType:  milvus2.BM25,
-				TopK:        topK,
-				VectorType:  milvus2.SparseVector,
-			},
-		)
-	}
-
-	specs := []struct {
-		name       string
-		desc       string
-		mode       milvus2.SearchMode
-		emb        embedding.Embedder
-		reranker   vector.IReranker
-		useEnglish bool
-	}{
-		{"dense_zh", "中文原句 -> 稠密向量（COSINE）TopK", denseMode(), emb, nil, false},
-		{"dense_en", "中文改写成英文 -> 稠密向量（COSINE）TopK", denseMode(), emb, nil, true},
-		{"sparse_zh", "中文原句 -> BM25 稀疏检索 TopK", sparseMode(), nil, nil, false},
-		{"hybrid_zh", "dense+sparse+RRF+rerank，中文原句", hybridMode(), emb, reranker, false},
-		{"hybrid_en", "dense+sparse+RRF+rerank，改写英文", hybridMode(), emb, reranker, true},
-	}
-
 	arms := make([]*arm, 0, len(specs))
 	for _, spec := range specs {
-		r, err := newRetriever(ctx, client, collection, topK, spec.mode, spec.emb)
+		var (
+			mode     milvus2.SearchMode
+			pool     int
+			embedder embedding.Embedder
+		)
+		switch spec.kind {
+		case "dense":
+			mode = search_mode.NewApproximate(metric)
+			pool = spec.denseTopK
+			embedder = emb
+		case "sparse":
+			mode = search_mode.NewSparse(milvus2.BM25)
+			pool = spec.sparseTopK
+		case "hybrid", "rewrite_hybrid":
+			mode = search_mode.NewHybrid(milvusclient.NewRRFReranker(),
+				&search_mode.SubRequest{
+					VectorField: vectorField,
+					MetricType:  metric,
+					TopK:        spec.denseTopK,
+					VectorType:  milvus2.DenseVector,
+				},
+				&search_mode.SubRequest{
+					VectorField: sparseVectorField,
+					MetricType:  milvus2.BM25,
+					TopK:        spec.sparseTopK,
+					VectorType:  milvus2.SparseVector,
+				},
+			)
+			pool = spec.candidateK
+			embedder = emb
+		default:
+			return nil, fmt.Errorf("未知 arm kind=%q（arm=%s）", spec.kind, spec.name)
+		}
+		if pool <= 0 {
+			return nil, fmt.Errorf("arm %s 的候选池为空（dense=%d sparse=%d candidate=%d）",
+				spec.name, spec.denseTopK, spec.sparseTopK, spec.candidateK)
+		}
+		r, err := newRetriever(ctx, client, collection, pool, mode, embedder)
 		if err != nil {
 			return nil, fmt.Errorf("构建 arm %s 失败: %w", spec.name, err)
 		}
-		arms = append(arms, &arm{
+		a := &arm{
 			name:       spec.name,
 			desc:       spec.desc,
+			kind:       spec.kind,
 			retriever:  r,
-			reranker:   spec.reranker,
-			topK:       topK,
-			rerankTopN: topK,
+			poolK:      pool,
+			finalK:     finalK,
 			useEnglish: spec.useEnglish,
-		})
+		}
+		if spec.rerank {
+			a.reranker = reranker
+		}
+		if spec.kind == "rewrite_hybrid" {
+			if rewriter == nil || !rewriter.Enabled() {
+				a.skipped = "查询改写不可用（rewrite 配置缺失或 enabled=false），该 arm 跳过"
+			} else {
+				a.rewriter = rewriter
+			}
+		}
+		arms = append(arms, a)
 	}
 	return arms, nil
 }
 
-// search 执行一次检索。重排失败时与生产一致：fail-open 返回未重排结果。
-func (a *arm) search(ctx context.Context, query string) ([]*schema.Document, error) {
+// searchMeta 记录一次检索里与指标无关、但需要写进明细的信息。
+type searchMeta struct {
+	RewriteMS int64
+	Variants  []string
+	Reranked  bool
+}
+
+// retrieve 走一遍底层检索器，失败重试 3 次。
+func (a *arm) retrieve(ctx context.Context, query string) ([]*schema.Document, error) {
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
-		docs, err := a.retriever.Retrieve(ctx, query, retriever.WithTopK(a.topK))
-		if err != nil {
-			lastErr = err
-			time.Sleep(time.Duration(attempt+1) * time.Second)
-			continue
-		}
-		if a.reranker == nil || len(docs) == 0 {
+		docs, err := a.retriever.Retrieve(ctx, query, retriever.WithTopK(a.poolK))
+		if err == nil {
 			return docs, nil
 		}
-		reranked, rerr := a.reranker.Rerank(ctx, query, docs, a.rerankTopN)
-		if rerr != nil {
-			return docs, nil
-		}
-		return reranked, nil
+		lastErr = err
+		time.Sleep(time.Duration(attempt+1) * time.Second)
 	}
 	return nil, lastErr
+}
+
+// search 执行一次检索。rewrite_hybrid 臂先把中文查询改写成多路（原文 + 英文检索式 + 关键词 + 子问题），
+// 每路各跑一遍 hybrid 检索，再用 RRF 融合后重排；其余臂直接检索。
+// 重排失败时与生产一致：fail-open 返回未重排结果。
+func (a *arm) search(ctx context.Context, query string) ([]*schema.Document, searchMeta, error) {
+	var meta searchMeta
+	variants := []string{query}
+	if a.kind == "rewrite_hybrid" && a.rewriter != nil {
+		started := time.Now()
+		variants = a.rewriter.Variants(ctx, query)
+		meta.RewriteMS = time.Since(started).Milliseconds()
+		meta.Variants = variants
+	}
+	sets := make([][]*schema.Document, 0, len(variants))
+	for _, variant := range variants {
+		docs, err := a.retrieve(ctx, variant)
+		if err != nil {
+			return nil, meta, err
+		}
+		sets = append(sets, docs)
+	}
+	if len(sets) == 0 {
+		return nil, meta, errors.New("没有任何一路检索返回结果")
+	}
+	docs := sets[0]
+	if len(sets) > 1 {
+		docs = rag.MergeRRF(sets, a.poolK)
+	}
+	if a.reranker == nil || len(docs) == 0 {
+		return docs, meta, nil
+	}
+	reranked, rerr := a.reranker.Rerank(ctx, query, docs, a.finalK)
+	if rerr != nil {
+		return docs, meta, nil
+	}
+	meta.Reranked = true
+	return reranked, meta, nil
 }
 
 // ---------------------------------------------------------------- 指标
@@ -441,6 +546,10 @@ type ArmResult struct {
 	Query         string          `json:"query"`
 	LatencyMS     int64           `json:"latency_ms"`
 	Error         string          `json:"error,omitempty"`
+	Skipped       string          `json:"skipped,omitempty"`
+	RewriteMS     int64           `json:"rewrite_ms,omitempty"`
+	Variants      []string        `json:"query_variants,omitempty"`
+	Reranked      bool            `json:"reranked"`
 	Hits          []Hit           `json:"hits"`
 	HitFileAt     map[string]bool `json:"hit_file_at"`
 	HitSymbolAt   map[string]bool `json:"hit_symbol_at"`
@@ -492,11 +601,14 @@ func normalizePath(p string) string {
 }
 
 // evalArm 把检索结果折算成指标。symbol 级命中 = metadata.symbol 相等 或 content 里含该符号名。
-func evalArm(name, query string, docs []*schema.Document, target Query, latency time.Duration) *ArmResult {
+func evalArm(name, query string, docs []*schema.Document, target Query, latency time.Duration, meta searchMeta) *ArmResult {
 	res := &ArmResult{
 		Arm:         name,
 		Query:       query,
 		LatencyMS:   latency.Milliseconds(),
+		RewriteMS:   meta.RewriteMS,
+		Variants:    meta.Variants,
+		Reranked:    meta.Reranked,
 		Hits:        make([]Hit, 0, len(docs)),
 		HitFileAt:   map[string]bool{},
 		HitSymbolAt: map[string]bool{},
@@ -552,10 +664,13 @@ type ArmSummary struct {
 	Desc           string             `json:"desc"`
 	Queries        int                `json:"queries"`
 	Errors         int                `json:"errors"`
+	Skipped        string             `json:"skipped,omitempty"`
 	FileRecallAt   map[string]float64 `json:"file_recall_at"`
 	SymbolRecallAt map[string]float64 `json:"symbol_recall_at"`
 	MRR            float64            `json:"mrr"`
 	AvgLatencyMS   float64            `json:"avg_latency_ms"`
+	P50LatencyMS   float64            `json:"p50_latency_ms"`
+	P95LatencyMS   float64            `json:"p95_latency_ms"`
 	AvgRewriteMS   float64            `json:"avg_rewrite_ms,omitempty"`
 }
 
@@ -575,8 +690,10 @@ type Results struct {
 	CommitSHA           string                            `json:"commit_sha"`
 	SourceRoot          string                            `json:"source_root"`
 	TopK                int                               `json:"top_k"`
+	Pool                armPool                           `json:"pool"`
 	Arms                []string                          `json:"arms"`
 	RewriteModel        string                            `json:"rewrite_model"`
+	RewriteArmModel     string                            `json:"rewrite_arm_model,omitempty"`
 	Queries             int                               `json:"queries"`
 	PerQuery            []QueryResult                     `json:"per_query"`
 	Summary             map[string]*ArmSummary            `json:"summary"`
@@ -599,6 +716,7 @@ func summarize(arms []*arm, results []QueryResult, subset []int) map[string]*Arm
 			sum.SymbolRecallAt[fmt.Sprintf("%d", k)] = 0
 		}
 		var mrr, latTotal, rewriteTotal float64
+		lats := make([]int64, 0, len(subset))
 		n, rewriteN := 0, 0
 		for _, idx := range subset {
 			qr := results[idx]
@@ -606,14 +724,22 @@ func summarize(arms []*arm, results []QueryResult, subset []int) map[string]*Arm
 			if !ok {
 				continue
 			}
+			if ar.Skipped != "" {
+				sum.Skipped = ar.Skipped
+				continue
+			}
 			if ar.Error != "" {
 				sum.Errors++
 				continue
 			}
 			n++
+			lats = append(lats, ar.LatencyMS)
 			latTotal += float64(ar.LatencyMS)
 			if a.useEnglish {
 				rewriteTotal += float64(qr.RewriteMS)
+				rewriteN++
+			} else if ar.RewriteMS > 0 {
+				rewriteTotal += float64(ar.RewriteMS)
 				rewriteN++
 			}
 			mrr += ar.MRR
@@ -636,6 +762,8 @@ func summarize(arms []*arm, results []QueryResult, subset []int) map[string]*Arm
 			}
 			sum.MRR = round4(mrr / float64(n))
 			sum.AvgLatencyMS = round2(latTotal / float64(n))
+			sum.P50LatencyMS = round2(percentile(lats, 50))
+			sum.P95LatencyMS = round2(percentile(lats, 95))
 		}
 		if rewriteN > 0 {
 			sum.AvgRewriteMS = round2(rewriteTotal / float64(rewriteN))
@@ -648,22 +776,49 @@ func summarize(arms []*arm, results []QueryResult, subset []int) map[string]*Arm
 func round4(v float64) float64 { return float64(int(v*10000+0.5)) / 10000 }
 func round2(v float64) float64 { return float64(int(v*100+0.5)) / 100 }
 
+// percentile 用最近秩法算分位点（lats 会被就地排序）。
+func percentile(lats []int64, p float64) float64 {
+	if len(lats) == 0 {
+		return 0
+	}
+	sort.Slice(lats, func(i, j int) bool { return lats[i] < lats[j] })
+	if p <= 0 {
+		return float64(lats[0])
+	}
+	if p >= 100 {
+		return float64(lats[len(lats)-1])
+	}
+	rank := int(math.Ceil(p/100*float64(len(lats)))) - 1
+	if rank < 0 {
+		rank = 0
+	}
+	if rank >= len(lats) {
+		rank = len(lats) - 1
+	}
+	return float64(lats[rank])
+}
+
 // ---------------------------------------------------------------- 输出
 
 func printSummary(res *Results, arms []*arm) {
-	fmt.Printf("\n=== 汇总（%d 题，collection=%s）===\n", res.Queries, res.Collection)
-	fmt.Printf("%-10s %8s %8s %8s %8s | %8s %8s %8s %8s | %7s %9s %9s\n",
-		"arm", "F@1", "F@5", "F@10", "F@20", "S@1", "S@5", "S@10", "S@20", "MRR", "avg_ms", "rewrite_ms")
+	fmt.Printf("\n=== 汇总（%d 题，collection=%s，pool dense/sparse/candidate/final=%d/%d/%d/%d）===\n",
+		res.Queries, res.Collection, res.Pool.DenseTopK, res.Pool.SparseTopK, res.Pool.CandidateK, res.Pool.FinalK)
+	fmt.Printf("%-20s %7s %7s %7s %7s | %7s %7s %7s %7s | %7s %8s %8s %8s %8s\n",
+		"arm", "F@1", "F@5", "F@10", "F@20", "S@1", "S@5", "S@10", "S@20", "MRR", "avg_ms", "p50_ms", "p95_ms", "rw_ms")
 	for _, a := range arms {
 		s := res.Summary[a.name]
 		if s == nil {
 			continue
 		}
-		fmt.Printf("%-10s %8.4f %8.4f %8.4f %8.4f | %8.4f %8.4f %8.4f %8.4f | %7.4f %9.1f %9.1f\n",
+		if s.Queries == 0 && s.Skipped != "" {
+			fmt.Printf("%-20s SKIPPED: %s\n", a.name, s.Skipped)
+			continue
+		}
+		fmt.Printf("%-20s %7.4f %7.4f %7.4f %7.4f | %7.4f %7.4f %7.4f %7.4f | %7.4f %8.1f %8.1f %8.1f %8.1f\n",
 			a.name,
 			s.FileRecallAt["1"], s.FileRecallAt["5"], s.FileRecallAt["10"], s.FileRecallAt["20"],
 			s.SymbolRecallAt["1"], s.SymbolRecallAt["5"], s.SymbolRecallAt["10"], s.SymbolRecallAt["20"],
-			s.MRR, s.AvgLatencyMS, s.AvgRewriteMS)
+			s.MRR, s.AvgLatencyMS, s.P50LatencyMS, s.P95LatencyMS, s.AvgRewriteMS)
 	}
 	if len(res.SummaryByDifficulty) > 0 {
 		diffs := make([]string, 0, len(res.SummaryByDifficulty))
@@ -679,7 +834,7 @@ func printSummary(res *Results, arms []*arm) {
 				if s == nil || s.Queries == 0 {
 					continue
 				}
-				fmt.Printf("   %-10s n=%-3d F@5=%.4f S@5=%.4f mrr=%.4f\n",
+				fmt.Printf("   %-20s n=%-3d F@5=%.4f S@5=%.4f mrr=%.4f\n",
 					a.name, s.Queries, s.FileRecallAt["5"], s.SymbolRecallAt["5"], s.MRR)
 			}
 		}
@@ -781,12 +936,12 @@ type ChunkMeta struct {
 
 // CollectionIndex 是 collection 的元数据快照，供评测集挑选/核对目标用。
 type CollectionIndex struct {
-	Collection string            `json:"collection"`
-	RowCount   int               `json:"row_count"`
-	CommitSHAs map[string]int    `json:"commit_shas"`
-	KindCounts map[string]int    `json:"kind_counts"`
-	FileCounts map[string]int    `json:"file_counts"`
-	Chunks     []ChunkMeta       `json:"chunks"`
+	Collection string         `json:"collection"`
+	RowCount   int            `json:"row_count"`
+	CommitSHAs map[string]int `json:"commit_shas"`
+	KindCounts map[string]int `json:"kind_counts"`
+	FileCounts map[string]int `json:"file_counts"`
+	Chunks     []ChunkMeta    `json:"chunks"`
 }
 
 // dumpCollection 把 collection 的全部 chunk 元数据导出到 JSON（只读，不写 Milvus）。
@@ -1212,6 +1367,86 @@ func truncate(s string, n int) string {
 	return string(r[:n]) + "..."
 }
 
+// resolveArmPool 把候选池参数定下来：命令行 > 配置文件 > top_k 兜底。
+func resolveArmPool(conf *fileConfig, denseFlag, sparseFlag, candidateFlag, finalFlag, topK int) armPool {
+	base := topK
+	if base <= 0 {
+		base = 20
+	}
+	p := armPool{
+		DenseTopK:  conf.RAG.Milvus.DenseTopK,
+		SparseTopK: conf.RAG.Milvus.SparseTopK,
+		CandidateK: conf.RAG.Milvus.CandidateK,
+	}
+	if p.DenseTopK <= 0 {
+		p.DenseTopK = base
+	}
+	if p.SparseTopK <= 0 {
+		p.SparseTopK = base
+	}
+	if p.CandidateK <= 0 {
+		p.CandidateK = base
+	}
+	if denseFlag > 0 {
+		p.DenseTopK = denseFlag
+	}
+	if sparseFlag > 0 {
+		p.SparseTopK = sparseFlag
+	}
+	if candidateFlag > 0 {
+		p.CandidateK = candidateFlag
+	}
+	p.FinalK = finalFlag
+	if p.FinalK <= 0 {
+		p.FinalK = base
+	}
+	// 至少要能算到最大的 hitK（F@20），否则指标会被截断。
+	if maxK := hitKs[len(hitKs)-1]; p.FinalK < maxK {
+		p.FinalK = maxK
+	}
+	return p
+}
+
+// filterArmSpecs 按 -arms 过滤（空串表示全跑），并保持 buildArmSpecs 里的声明顺序。
+func filterArmSpecs(specs []armSpec, want string) ([]armSpec, error) {
+	want = strings.TrimSpace(want)
+	if want == "" {
+		return specs, nil
+	}
+	allowed := map[string]bool{}
+	for _, name := range strings.Split(want, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		allowed[name] = true
+	}
+	byName := map[string]bool{}
+	for _, s := range specs {
+		byName[s.name] = true
+	}
+	for name := range allowed {
+		if !byName[name] {
+			return nil, fmt.Errorf("未知 arm: %s（可选：%s）", name, strings.Join(armNames(specs), ", "))
+		}
+	}
+	out := make([]armSpec, 0, len(specs))
+	for _, s := range specs {
+		if allowed[s.name] {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+func armNames(specs []armSpec) []string {
+	names := make([]string, 0, len(specs))
+	for _, s := range specs {
+		names = append(names, s.name)
+	}
+	return names
+}
+
 // ---------------------------------------------------------------- main
 
 func main() {
@@ -1229,6 +1464,14 @@ func main() {
 	gen := flag.Int("gen", 0, "兜底出题：从 collection 里生成 N 条中文问题（写 queryset.fallback.json）")
 	genOut := flag.String("gen-out", "eval/rag/queryset.fallback.json", "兜底评测集输出路径")
 	rewriteWorkers := flag.Int("rewrite-workers", 4, "改写并发数")
+	denseTopK := flag.Int("dense-topk", 0, "hybrid dense 子路 TopK（0 表示取配置 rag.milvus.dense_top_k）")
+	sparseTopK := flag.Int("sparse-topk", 0, "hybrid sparse 子路 TopK（0 表示取 rag.milvus.sparse_top_k）")
+	candidateK := flag.Int("candidate-k", 0, "RRF 融合后候选池大小（0 表示取 rag.milvus.candidate_k）")
+	rerankTopN := flag.Int("rerank-topn", 0, "重排后保留条数（0 表示取 topk，且不小于 20）")
+	armsFlag := flag.String("arms", "", "只跑指定 arm（逗号分隔；默认全部）")
+	noRerank := flag.Bool("no-rerank", false, "全局关闭 rerank：hybrid 两路退化为 RRF-only")
+	rewriteArm := flag.Bool("rewrite-arm", true, "是否跑 rewrite_hybrid_zh（会临时强制开启 rewrite 配置）")
+	reportPath := flag.String("report", "", "把本轮对照表写入/更新到该 markdown 文件（如 eval/rag/REPORT.md）")
 	flag.Parse()
 
 	ctx := context.Background()
@@ -1247,6 +1490,7 @@ func main() {
 	if *smoke && *outPath == defaultOut {
 		*outPath = smokeOut
 	}
+	pool := resolveArmPool(conf, *denseTopK, *sparseTopK, *candidateK, *rerankTopN, *topK)
 
 	client, err := milvusclient.New(ctx, &milvusclient.ClientConfig{
 		Address:  conf.RAG.Milvus.Address,
@@ -1338,18 +1582,63 @@ func main() {
 		fmt.Fprintln(os.Stderr, "警告：rerank 未启用/配置不完整，hybrid 两路将退化为无重排的 RRF 结果")
 	}
 
-	arms, err := buildArms(ctx, client, *collection, *topK, embedder, reranker)
+	// 查询改写器：评测 rewrite_hybrid_zh 臂时临时强制开启（默认配置里 enabled=false），
+	// 构造失败（缺 provider/key/model）时该臂会被标注跳过，不影响其它臂。
+	rwConf := conf.RAG.Rewrite
+	if *rewriteArm {
+		rwConf.Enabled = true
+	}
+	rewriter := rag.NewQueryRewriter(rwConf, config.DeepSeek{
+		APIKey:  conf.DeepSeek.APIKey,
+		BaseURL: conf.DeepSeek.BaseURL,
+		Model:   conf.DeepSeek.Model,
+	})
+	rewriteArmModel := ""
+	if rewriter != nil {
+		rewriteArmModel = strings.TrimSpace(rwConf.Model)
+		if rewriteArmModel == "" {
+			rewriteArmModel = conf.DeepSeek.Model
+		}
+	}
+
+	specs := buildArmSpecs(pool)
+	if *noRerank {
+		for i := range specs {
+			specs[i].rerank = false
+		}
+	}
+	specs, ferr := filterArmSpecs(specs, *armsFlag)
+	if ferr != nil {
+		fmt.Fprintf(os.Stderr, "筛选 arm 失败: %v\n", ferr)
+		os.Exit(1)
+	}
+
+	arms, err := buildArms(ctx, client, *collection, specs, embedder, reranker, rewriter, pool.FinalK)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "构建检索 arm 失败: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Printf("pool dense/sparse/candidate/final=%d/%d/%d/%d arms=%v\n",
+		pool.DenseTopK, pool.SparseTopK, pool.CandidateK, pool.FinalK, armNames(specs))
 
 	qs := smokeQueries()
 	if !*smoke {
 		loaded, err := loadQueryset(*querysetPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "读取 queryset 失败（%s）: %v\n", *querysetPath, err)
-			os.Exit(3)
+			// 独立评测集 queryset.json 尚未生成时，自动退回 runner 自造的兜底评测集，
+			// 让 root 的 "go run ./eval/rag" 直接可跑；显式指定的路径不会静默替换。
+			if *querysetPath == defaultQueryset {
+				if fb, ferr := loadQueryset(fallbackQueryset); ferr == nil {
+					fmt.Fprintf(os.Stderr, "提示：%s 不存在，自动改用 %s（%d 题）\n",
+						*querysetPath, fallbackQueryset, len(fb.Queries))
+					loaded, err = fb, nil
+					*querysetPath = fallbackQueryset
+				}
+			}
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "读取 queryset 失败（%s）: %v\n", *querysetPath, err)
+				os.Exit(3)
+			}
 		}
 		qs = loaded
 		qs.Collection = *collection
@@ -1407,20 +1696,25 @@ func main() {
 	}
 	fmt.Printf("改写完成：成功=%d 失败=%d\n", len(qs.Queries)-failedRewrite, failedRewrite)
 
-	// 2) 逐题跑五条 arm。
+	// 2) 逐题跑各条 arm。
 	results := &Results{
-		GeneratedAt:  time.Now().Format(time.RFC3339),
-		Collection:   *collection,
-		ProjectID:    qs.ProjectID,
-		QuerysetPath: *querysetPath,
-		CommitSHA:    qs.CommitSHA,
-		SourceRoot:   qs.SourceRoot,
-		TopK:         *topK,
-		RewriteModel: conf.DeepSeek.Model,
-		Queries:      len(qs.Queries),
-		Arms:         []string{},
+		GeneratedAt:     time.Now().Format(time.RFC3339),
+		Collection:      *collection,
+		ProjectID:       qs.ProjectID,
+		QuerysetPath:    *querysetPath,
+		CommitSHA:       qs.CommitSHA,
+		SourceRoot:      qs.SourceRoot,
+		TopK:            *topK,
+		Pool:            pool,
+		RewriteModel:    conf.DeepSeek.Model,
+		RewriteArmModel: rewriteArmModel,
+		Queries:         len(qs.Queries),
+		Arms:            []string{},
 		Notes: []string{
-			"hybrid 两路在重排后保留 topK 条（生产只保留 rerank.top_n=5）；候选池大小与生产一致。",
+			fmt.Sprintf("候选池与最终返回解耦：dense=%d sparse=%d candidate=%d；重排后保留 final=%d 条（生产只保留 rerank.top_n=5）。",
+				pool.DenseTopK, pool.SparseTopK, pool.CandidateK, pool.FinalK),
+			"hybrid_zh_norerank / hybrid_en_norerank 是 RRF-only 对照：与 hybrid 同样的候选池，但跳过 cross-encoder 重排。",
+			"rewrite_hybrid_zh 用 service/rag 的查询改写：中文原句 -> 多路（英文检索式/关键词/子问题）-> 每路各跑一遍 hybrid 检索 -> RRF 融合 -> 重排；原文那一路始终在内。",
 			"检索参数取自 agent_code_local.yml 的 rag 段，字段名/度量/BM25/RRF 与 adaptor/vector/milvus.go 一致。",
 			"dense 两路只走稠密向量（COSINE），不走 BM25；sparse_zh 只走 BM25。",
 			"symbol 级命中判定：metadata.symbol 等于目标符号，或 content 里包含该符号名。",
@@ -1439,12 +1733,22 @@ func main() {
 			Arms:         map[string]*ArmResult{},
 		}
 		for _, a := range arms {
+			if a.skipped != "" {
+				qr.Arms[a.name] = &ArmResult{
+					Arm:         a.name,
+					Skipped:     a.skipped,
+					Hits:        []Hit{},
+					HitFileAt:   map[string]bool{},
+					HitSymbolAt: map[string]bool{},
+				}
+				continue
+			}
 			queryText := q.QuestionZH
 			if a.useEnglish {
 				queryText = rewrites[i]
 			}
 			started := time.Now()
-			docs, err := a.search(ctx, queryText)
+			docs, meta, err := a.search(ctx, queryText)
 			elapsed := time.Since(started)
 			if err != nil {
 				qr.Arms[a.name] = &ArmResult{
@@ -1458,13 +1762,19 @@ func main() {
 				}
 				continue
 			}
-			qr.Arms[a.name] = evalArm(a.name, queryText, docs, q, elapsed)
+			qr.Arms[a.name] = evalArm(a.name, queryText, docs, q, elapsed, meta)
 		}
 		results.PerQuery = append(results.PerQuery, qr)
 
 		mark := func(armName string) string {
 			ar := qr.Arms[armName]
-			if ar == nil || ar.Error != "" {
+			if ar == nil {
+				return "ERR"
+			}
+			if ar.Skipped != "" {
+				return "SKIP"
+			}
+			if ar.Error != "" {
 				return "ERR"
 			}
 			if ar.HitSymbolAt["10"] {
@@ -1475,8 +1785,12 @@ func main() {
 			}
 			return "miss"
 		}
-		fmt.Printf("[%2d/%2d] %s zh@10=%-4s en@10=%-4s en=%q\n",
-			i+1, len(qs.Queries), q.ID, mark("dense_zh"), mark("dense_en"), truncate(rewrites[i], 70))
+		line := fmt.Sprintf("[%2d/%2d] %s zh@10=%-4s en@10=%-4s",
+			i+1, len(qs.Queries), q.ID, mark("dense_zh"), mark("dense_en"))
+		if _, ok := qr.Arms["rewrite_hybrid_zh"]; ok {
+			line += fmt.Sprintf(" rw@10=%-4s", mark("rewrite_hybrid_zh"))
+		}
+		fmt.Printf("%s en=%q\n", line, truncate(rewrites[i], 70))
 	}
 
 	// 3) 汇总（全量 + 分难度）。
@@ -1502,4 +1816,12 @@ func main() {
 	}
 	printSummary(results, arms)
 	fmt.Printf("\n结果已写入 %s\n", *outPath)
+
+	if strings.TrimSpace(*reportPath) != "" {
+		if err := writeReportSection(*reportPath, results, specs); err != nil {
+			fmt.Fprintf(os.Stderr, "写入报告失败: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("对照表已写入 %s\n", *reportPath)
+	}
 }

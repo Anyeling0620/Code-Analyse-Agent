@@ -175,3 +175,137 @@ go run ./eval/rag -smoke                      # -> eval/rag/results.smoke.json
 | `eval/rag/queryset.fallback.json` | runner 自造的 45 题兜底评测集 |
 | `eval/rag/collection_index.json` | collection 全量 828 chunk 元数据快照 + 文件/kind/commit 统计 |
 | `eval/rag/results.smoke.json` | 内置 3 题的冒烟结果 |
+
+<!-- BEGIN AUTO:arm-comparison -->
+## 附：候选池 / RRF-only / 查询改写 对照（自动生成）
+
+- 生成时间：2026-09-29T00:12:21+08:00
+- collection：`edu_agent_code_docs_p1c6a6a726a49c9a8`，题目数：45
+- 候选池：dense_top_k=40 / sparse_top_k=40 / candidate_k=40，重排后保留 final=20 条
+- 查询改写臂模型：deepseek-flash
+
+| arm | F@1 | F@5 | F@10 | F@20 | S@1 | S@5 | S@10 | S@20 | MRR | avg_ms | p50_ms | p95_ms | rw_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `dense_zh` | 0.3556 | 0.8222 | 0.8444 | 0.9556 | 0.3333 | 0.6667 | 0.7111 | 0.8667 | 0.5310 | 301.9 | 296.0 | 379.0 | 0.0 |
+| `dense_en` | 0.6000 | 0.8667 | 0.9333 | 0.9556 | 0.5556 | 0.8667 | 0.9333 | 0.9333 | 0.7205 | 271.4 | 277.0 | 321.0 | 1244.9 |
+| `sparse_zh` | 0.1556 | 0.2889 | 0.4000 | 0.4000 | 0.1556 | 0.2222 | 0.2889 | 0.4000 | 0.2249 | 38.7 | 33.0 | 55.0 | 0.0 |
+| `hybrid_zh` | 0.5333 | 0.8889 | 0.9556 | 0.9556 | 0.4444 | 0.8444 | 0.8889 | 0.8889 | 0.6771 | 726.6 | 731.0 | 848.0 | 0.0 |
+| `hybrid_en` | 0.6444 | 0.8667 | 0.9778 | 1.0000 | 0.5778 | 0.8889 | 0.9778 | 1.0000 | 0.7482 | 786.2 | 777.0 | 862.0 | 1244.9 |
+| `hybrid_zh_norerank` | 0.2444 | 0.4444 | 0.5333 | 0.8667 | 0.2444 | 0.4000 | 0.4444 | 0.7333 | 0.3365 | 295.6 | 295.0 | 340.0 | 0.0 |
+| `hybrid_en_norerank` | 0.3778 | 0.6667 | 0.7778 | 0.9556 | 0.3556 | 0.6889 | 0.7556 | 0.9778 | 0.5016 | 273.6 | 269.0 | 320.0 | 1244.9 |
+| `rewrite_hybrid_zh` | 0.5111 | 0.9111 | 0.9778 | 1.0000 | 0.4222 | 0.9111 | 0.9556 | 0.9778 | 0.6751 | 3571.9 | 3109.0 | 5716.0 | 2056.8 |
+
+F = 文件级 Recall，S = 符号级 Recall；rw_ms = 该臂平均改写耗时（0 表示该臂不涉及改写）。
+
+### 分难度（文件级 F@5 / 符号级 S@5 / MRR）
+
+| difficulty | arm | n | F@5 | S@5 | MRR |
+| --- | --- | --- | --- | --- | --- |
+| descriptive | `dense_zh` | 16 | 0.8750 | 0.6875 | 0.6333 |
+| descriptive | `dense_en` | 16 | 0.8125 | 0.8750 | 0.6385 |
+| descriptive | `sparse_zh` | 16 | 0.3125 | 0.3125 | 0.2545 |
+| descriptive | `hybrid_zh` | 16 | 0.8125 | 0.8125 | 0.5506 |
+| descriptive | `hybrid_en` | 16 | 0.8125 | 0.8750 | 0.6652 |
+| descriptive | `hybrid_zh_norerank` | 16 | 0.5625 | 0.5000 | 0.4461 |
+| descriptive | `hybrid_en_norerank` | 16 | 0.4375 | 0.6875 | 0.3092 |
+| descriptive | `rewrite_hybrid_zh` | 16 | 0.8750 | 0.8750 | 0.6652 |
+| explaining | `dense_zh` | 28 | 0.7857 | 0.6429 | 0.4737 |
+| explaining | `dense_en` | 28 | 0.8929 | 0.8571 | 0.7573 |
+| explaining | `sparse_zh` | 28 | 0.2500 | 0.1429 | 0.1803 |
+| explaining | `hybrid_zh` | 28 | 0.9286 | 0.8571 | 0.7378 |
+| explaining | `hybrid_en` | 28 | 0.8929 | 0.8929 | 0.7866 |
+| explaining | `hybrid_zh_norerank` | 28 | 0.3571 | 0.3214 | 0.2502 |
+| explaining | `hybrid_en_norerank` | 28 | 0.7857 | 0.6786 | 0.6205 |
+| explaining | `rewrite_hybrid_zh` | 28 | 0.9286 | 0.9286 | 0.6692 |
+| locating | `dense_zh` | 1 | 1.0000 | 1.0000 | 0.5000 |
+| locating | `dense_en` | 1 | 1.0000 | 1.0000 | 1.0000 |
+| locating | `sparse_zh` | 1 | 1.0000 | 1.0000 | 1.0000 |
+| locating | `hybrid_zh` | 1 | 1.0000 | 1.0000 | 1.0000 |
+| locating | `hybrid_en` | 1 | 1.0000 | 1.0000 | 1.0000 |
+| locating | `hybrid_zh_norerank` | 1 | 1.0000 | 1.0000 | 1.0000 |
+| locating | `hybrid_en_norerank` | 1 | 1.0000 | 1.0000 | 0.2500 |
+| locating | `rewrite_hybrid_zh` | 1 | 1.0000 | 1.0000 | 1.0000 |
+
+_（本节由 `go run ./eval/rag -report eval/rag/REPORT.md` 自动生成于 2026-09-29T00:17:04+08:00，重跑即覆盖。）_
+<!-- END AUTO:arm-comparison -->
+
+---
+
+## 7. 第二轮：候选池解耦 / RRF-only / 查询改写（2026-09-29）
+
+本节回答上一版报告留下的两个问题：①hybrid 的 F@20 为什么低于 dense 单路，放大候选池能否修好；
+②智谱 rerank 分数高度饱和，它到底有没有净收益。顺带把"中文查询改写"这条臂也接进跑分。
+
+### 7.1 这一轮改了什么
+
+- **候选池与最终返回解耦**（生产侧 `adaptor/vector/milvus.go` + `config.Milvus`）：
+  `dense_top_k=40` / `sparse_top_k=40` / `candidate_k=40`，RRF 融合后保留 40 条再重排；
+  评测臂逐条对齐同一组参数（`eval/rag/main.go` 的 `armSpec`/`armPool`）。
+- **新增 3 条臂**：`hybrid_zh_norerank`（RRF-only，同候选池但跳过重排）、
+  `hybrid_en_norerank`（中英对称）、`rewrite_hybrid_zh`（用 `service/rag` 的查询改写：
+  中文原句 → 多路改写 → 每路各跑一遍 hybrid → RRF 融合 → 重排；原文那一路始终在内）。
+- 指标补齐 **P50/P95 延迟** 与 **S@5**；对照表见上面的自动生成块。
+- 数据口径沿用上一轮的 45 题兜底评测集（`queryset.fallback.json`，45/45 目标在库里核对通过），
+  因此可与上一版表格逐列对照。
+
+### 7.2 结论
+
+**1）候选池放大后，hybrid 的 F@20 反超回来，达到与 dense 单路持平。**
+上一轮 `hybrid_zh` 的 F@20 是 0.8889（低于 `dense_zh` 的 0.9556），根因是"融合后只剩 20 条、
+把单路本来能召回的目标截掉了"。把候选池放到 40 后，`hybrid_zh` 的 F@20 = **0.9556**，
+`hybrid_en` 的 F@20 = **1.0000**，`rewrite_hybrid_zh` 的 F@20 = **1.0000**。
+F@10 也从上一轮的 0.8889 提升到 0.9556。这条改造方向验证通过。
+
+**2）rerank 不是"没用的饱和分数"，它的净收益很大。**
+把候选池、查询、融合方式全部固定，只切 rerank 开关：
+
+| 对照（同候选池 40，仅切换 rerank） | F@1 | F@5 | F@10 | F@20 | S@5 | MRR |
+| --- | --- | --- | --- | --- | --- | --- |
+| `hybrid_zh`（+rerank） | 0.5333 | 0.8889 | 0.9556 | 0.9556 | 0.8444 | 0.6771 |
+| `hybrid_zh_norerank`（RRF-only） | 0.2444 | 0.4444 | 0.5333 | 0.8667 | 0.4000 | 0.3365 |
+| `hybrid_en`（+rerank） | 0.6444 | 0.8667 | 0.9778 | 1.0000 | 0.8889 | 0.7482 |
+| `hybrid_en_norerank`（RRF-only） | 0.3778 | 0.6667 | 0.7778 | 0.9556 | 0.6889 | 0.5016 |
+
+中文那一路 F@1 +28.9pp、F@5 +44.4pp、MRR +0.34，英文那一路 F@1 +26.7pp、F@5 +20.0pp。
+**结论：即使 rerank 的打分区间被压缩在 0.998~1.0，它给出的排序仍远好于原始 RRF 顺序**，
+上一版"分数饱和所以重排没用"的怀疑不成立——重排不该关。
+
+**3）`rewrite_hybrid_zh`（改写但保留原查询）能补回跨语言损失，质量与 `hybrid_en` 相当。**
+
+| | F@1 | F@5 | F@10 | F@20 | S@5 | MRR | p50_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `hybrid_zh`（不改写） | 0.5333 | 0.8889 | 0.9556 | 0.9556 | 0.8444 | 0.6771 | 731 |
+| `hybrid_en`（先改写再检索） | 0.6444 | 0.8667 | 0.9778 | 1.0000 | 0.8889 | 0.7482 | 777 |
+| `rewrite_hybrid_zh`（多路改写+原查询） | 0.5111 | **0.9111** | 0.9778 | 1.0000 | **0.9111** | 0.6751 | 3109 |
+
+`rewrite_hybrid_zh` 在 F@5 / F@20 / S@5 上不低于甚至略好于 `hybrid_en`，且**不替换原始中文查询**
+（多路里含原文），因此对"原句本身就能命中"的情形没有退化风险。代价是延迟：改写平均 2057ms，
+整条臂 P50 约 3.1s（P95 约 5.7s），相对 `hybrid_zh` 的 0.73s 高出约 4 倍。
+
+**4）跨语言鸿沟仍在，且主要伤害排序而非召回。**
+`dense_zh` F@1=0.3556 vs `dense_en` F@1=0.6000（**+24.4pp**），MRR 0.5310 vs 0.7205（**+36%**），
+但两者 F@20 都是 0.9556。即中文提问"够得着"目标却排在后面，改用英文检索式能把顺序提前。
+这仍是"加中文→英文改写节点"最直接的论据。
+
+**5）`sparse_zh`（BM25）依旧天花板明显**：F@20=0.4000、S@5=0.2222，中文自然语言提问不要单独走 BM25。
+
+### 7.3 复现
+
+```powershell
+# 全量：8 条臂，写 results.json 并把对照表写入本文件
+go run ./eval/rag -queryset eval/rag/queryset.fallback.json -out eval/rag/results.json -report eval/rag/REPORT.md
+
+# 只跑某几条臂 / 关掉重排 / 改候选池 / 不跑改写臂
+go run ./eval/rag -arms hybrid_zh,hybrid_zh_norerank
+go run ./eval/rag -no-rerank
+go run ./eval/rag -dense-topk 60 -sparse-topk 60 -candidate-k 60 -rerank-topn 20
+go run ./eval/rag -rewrite-arm=false        # rewrite_hybrid_zh 会被标注跳过
+```
+
+### 7.4 采样说明与残留风险
+
+- 仍用 runner 自造的 45 题兜底集（`queryset.json` 独立评测集至今未生成），绝对数值只能当方向性证据。
+- collection 是旧快照（`c3ea49d`）；本机 main 上新增的 RAG 文件不在库里，结论外推到新代码需重建索引再跑。
+- rerank、embedding、改写都走外部服务，数字有网络抖动；本表是单次运行。
+- `rewrite_hybrid_zh` 的耗时包含一次改写 LLM 调用与多路检索，未做并发优化；若要上线需按体验权衡
+  （例如只在首轮/低置信时改写）。

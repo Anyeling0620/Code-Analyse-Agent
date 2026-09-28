@@ -125,6 +125,18 @@ type RAG struct {
 	Embedding          Embedding `yaml:"embedding"`
 	Milvus             Milvus    `yaml:"milvus"`
 	Rerank             Rerank    `yaml:"rerank"`
+	Rewrite            Rewrite   `yaml:"rewrite"`
+}
+
+// Rewrite 中文查询改写：把中文自然语言提问改写为英文检索式，并抽取关键词与子问题。
+type Rewrite struct {
+	Enabled       bool   `yaml:"enabled"`        // 是否启用查询改写，默认关闭。
+	Provider      string `yaml:"provider"`       // 供应方，目前支持 "deepseek"。
+	BaseURL       string `yaml:"base_url"`       // 自定义端点。
+	APIKey        string `yaml:"api_key"`        // 鉴权密钥。
+	Model         string `yaml:"model"`          // 模型名。
+	TimeoutSec    int    `yaml:"timeout_sec"`    // 单次改写超时秒数，默认 20。
+	MaxSubqueries int    `yaml:"max_subqueries"` // 最多拆分的子问题数，默认 3。
 }
 
 type Rerank struct {
@@ -155,6 +167,14 @@ type Milvus struct {
 	HybridEnabled   bool   `yaml:"hybrid_enabled"`
 	DropBeforeIndex bool   `yaml:"drop_before_index"`
 	TimeoutSec      int    `yaml:"timeout_sec"`
+	// DenseTopK / SparseTopK 是 hybrid 模式下两路单路检索各取多少条候选；
+	// CandidateK 是 RRF 融合后保留、再交给重排（或直接返回）的候选池大小。
+	// 这三个值把"候选池"与"最终返回条数"解耦：单路 TopK 决定各路召回面，
+	// CandidateK 决定融合后的候选池，最终返回条数由调用方传入的 topK 决定。
+	// 三者任意一个 <= 0 时回落到 TopK，保持与旧配置完全一致的行为。
+	DenseTopK  int `yaml:"dense_top_k"`
+	SparseTopK int `yaml:"sparse_top_k"`
+	CandidateK int `yaml:"candidate_k"`
 }
 
 type Skills struct {

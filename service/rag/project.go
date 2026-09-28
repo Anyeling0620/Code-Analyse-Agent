@@ -100,6 +100,8 @@ type ProjectIndexer struct {
 	base     adaptor.IAdaptor
 	conf     config.RAG
 	sessions sessionLookup
+	// rewriter 是可选的中文查询改写节点；为 nil 时检索行为与不加改写完全一致。
+	rewriter *QueryRewriter
 
 	// storeMu 保护 stores；建集合是一次网络调用，不能和其它项目互相阻塞。
 	storeMu sync.Mutex
@@ -129,6 +131,8 @@ func NewProjectIndexer(a adaptor.IAdaptor) *ProjectIndexer {
 	}
 	if conf := a.GetConfig(); conf != nil {
 		indexer.conf = withDefault(conf.RAG)
+		// 改写默认关闭：conf.RAG.Rewrite.Enabled 为 false 时这里得到 nil，检索走原路径。
+		indexer.rewriter = NewQueryRewriter(indexer.conf.Rewrite, conf.DeepSeek)
 	}
 	if a.GetDB() != nil {
 		indexer.sessions = sessionrepo.NewSession(a)
@@ -219,11 +223,41 @@ func (p *ProjectIndexer) Retrieve(ctx context.Context, projectID, query string, 
 	if topK <= 0 {
 		topK = p.conf.TopK
 	}
-	docs, err := store.Retrieve(ctx, query, retriever.WithTopK(topK))
+	docs, err := p.retrieveVariants(ctx, store, query, topK)
 	if err != nil {
 		return nil, fmt.Errorf("project rag retrieve project_id=%s: %w", projectID, err)
 	}
 	return filterByProject(docs, projectID), nil
+}
+
+// retrieveVariants 执行一次（或改写后的多路）召回。
+// 改写未启用、未触发、超时或报错时只剩原始查询，行为与单路检索完全一致；
+// 多路时各路分别召回，再用 RRF 融合并截断到 topK，最后仍交给上层做项目校验与展示。
+func (p *ProjectIndexer) retrieveVariants(ctx context.Context, store vector.IStore, query string, topK int) ([]*schema.Document, error) {
+	variants := p.rewriter.Variants(ctx, query)
+	if len(variants) <= 1 {
+		return store.Retrieve(ctx, query, retriever.WithTopK(topK))
+	}
+	sets := make([][]*schema.Document, 0, len(variants))
+	var firstErr error
+	for _, variant := range variants {
+		docs, err := store.Retrieve(ctx, variant, retriever.WithTopK(topK))
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			logger.Warn("project rag 多路召回单路失败，已跳过 query=%q err=%v", variant, err)
+			continue
+		}
+		sets = append(sets, docs)
+	}
+	if len(sets) == 0 {
+		return nil, firstErr
+	}
+	if len(sets) == 1 {
+		return sets[0], nil
+	}
+	return MergeRRF(sets, topK), nil
 }
 
 // Status 返回项目索引状态；未登记过的项目返回 StatusNone。

@@ -25,24 +25,31 @@ func NewService(adaptor adaptor.IAdaptor) *Service {
 	}
 }
 
-// Track TODO: 价格计算按高峰期计算，没有分时期
-func (s *Service) Track(ctx context.Context, userID, sessionID, modelName, toolName string, prompt, completion int64) error {
-	if prompt < 0 || completion < 0 { // Check 原为 && 导致只屏蔽"双负数"，任一为负都应视为无效用量
+// Track 记录一次模型调用的用量与成本。
+// prompt 为总输入 token，cached 为其中命中 prompt cache 的部分（未命中部分 = prompt - cached），
+// cached 超出 [0, prompt] 时会被收敛到合法区间。
+// TODO: 价格计算按高峰期计算，没有分时期
+func (s *Service) Track(ctx context.Context, userID, sessionID, modelName, toolName string, prompt, cached, completion int64) error {
+	if prompt < 0 || cached < 0 || completion < 0 { // Check 原为 && 导致只屏蔽"双负数"，任一为负都应视为无效用量
 		return nil
 	}
-	rate, ok := s.lookupRate(modelName) // TODO 可能的缺陷:prompt_tokens 含 prompt cache 命中部分（实测 1152/1364），缓存命中单价更低，统一按 prompt 单价算会高估成本
-	if !ok {
-		err := fmt.Errorf("model %s not found", modelName)
+	if cached > prompt {
+		cached = prompt
+	}
+	rate, err := s.lookupRate(modelName)
+	if err != nil {
 		logger.Warn("cost:%v, fallback=%s", err, s.price.FallbackModel)
 		return err
 	}
-	cny := pricing.CalculateCNY(rate, prompt, completion)
-	err := s.cost.Insert(ctx, &do.CostRecord{
+	cny := pricing.CalculateCNY(rate, prompt, cached, completion)
+	err = s.cost.Insert(ctx, &do.CostRecord{
 		UserID:           userID,
 		SessionID:        sessionID,
 		Model:            modelName,
 		ToolName:         toolName,
 		PromptTokens:     prompt,
+		CachedTokens:     cached,
+		CacheMissTokens:  prompt - cached,
 		CompletionTokens: completion,
 		EstimatedCNY:     cny,
 		OccurredAt:       time.Now(),
@@ -54,22 +61,30 @@ func (s *Service) Track(ctx context.Context, userID, sessionID, modelName, toolN
 	return nil
 }
 
-func (s *Service) lookupRate(modelName string) (pricing.Rate, bool) {
+// lookupRate 查询模型单价：模型未配置，或缓存命中价未正确配置时返回错误。
+func (s *Service) lookupRate(modelName string) (pricing.Rate, error) {
 	if p, ok := s.price.PriceCNY[modelName]; ok {
-		return pricing.Rate{
-			Prompt:     p.Prompt,
-			Completion: p.Completion,
-		}, true
+		return toRate(modelName, p)
 	}
 	if s.price.FallbackModel != "" {
 		if p, ok := s.price.PriceCNY[s.price.FallbackModel]; ok {
-			return pricing.Rate{
-				Prompt:     p.Prompt,
-				Completion: p.Completion,
-			}, true
+			return toRate(s.price.FallbackModel, p)
 		}
 	}
-	return pricing.Rate{}, false
+	return pricing.Rate{}, fmt.Errorf("model %s not found", modelName)
+}
+
+// toRate 把配置价转换为计价单价。
+// cache_hit 必须显式配置为正数：缺失或非正会让成本被低估，因此直接报错而不做兜底。
+func toRate(modelName string, p config.ModelPriceCNY) (pricing.Rate, error) {
+	if p.CacheHit <= 0 {
+		return pricing.Rate{}, fmt.Errorf("model %s cache_hit price must be > 0, got %v", modelName, p.CacheHit)
+	}
+	return pricing.Rate{
+		Prompt:     p.Prompt,
+		CacheHit:   p.CacheHit,
+		Completion: p.Completion,
+	}, nil
 }
 
 func (s *Service) DailyTotal(ctx context.Context, day time.Time) (float64, error) {

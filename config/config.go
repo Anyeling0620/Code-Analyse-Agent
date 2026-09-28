@@ -158,8 +158,9 @@ type ModelPrice struct {
 }
 
 type ModelPriceCNY struct {
-	Prompt     float64 `yaml:"prompt"`
-	Completion float64 `yaml:"completion"`
+	Prompt     float64 `yaml:"prompt"`     // 输入单价（缓存未命中）
+	CacheHit   float64 `yaml:"cache_hit"`  // 缓存命中单价；必须显式配置为正数，否则 cost.Track 直接报错
+	Completion float64 `yaml:"completion"` // 输出单价
 }
 
 type Agents struct {

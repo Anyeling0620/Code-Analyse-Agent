@@ -81,7 +81,8 @@ func (s *Service) trackUsage(
 	}
 	usage := msg.ResponseMeta.Usage
 	prompt, completion := int64(usage.PromptTokens), int64(usage.CompletionTokens)
-	err := s.cost.Track(ctx, runState.UserID, runState.SessionID, s.modelName, agentName, prompt, completion)
+	cached := int64(usage.PromptTokenDetails.CachedTokens) // 命中 prompt cache 的输入 token
+	err := s.cost.Track(ctx, runState.UserID, runState.SessionID, s.modelName, agentName, prompt, cached, completion)
 	if err != nil {
 		logger.Error("cost.Track err",
 			zap.Any("modelName", s.modelName),

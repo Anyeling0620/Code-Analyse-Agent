@@ -234,7 +234,16 @@ func buildIndexerConfig(
 			MetricType:  milvusindexer.BM25,
 			Method:      milvusindexer.SparseMethodAuto,
 		}
-		// TODO 怎么去验证他用中文进行稀疏向量后的结果
+		// analyzer_params 选择 chinese（jieba）而非 standard，是实测对比后的结论：
+		//   1) chinese 不会把代码标识符切碎——查询 getUserInfoByPhone 能命中含有该标识符的文档，
+		//      而查询 phone 只命中把它当独立单词的文档，说明整标识符被当作一个 token 保留；
+		//   2) 中文查询只有 chinese 能召回——查询"鉴权"在 chinese 下命中，standard 会把 CJK
+		//      逐字切分，导致完全召不回；
+		//   3) 两者都做不到 camelCase 子词匹配：查询 getUserInfo 都召不回 getUserInfoByPhone，
+		//      这部分语义目前依赖 dense 向量兜底。
+		// 因此这里保持 chinese；若要支持子词匹配，需要另外引入标识符展开/自定义 tokenizer，
+		// 不能靠换成 standard 解决。
+		// 注意：analyzer 是建集合时写进 schema 的，改动这里必须重建 collection 才会生效。
 		indexerConfig.FieldParams = map[string]map[string]string{
 			fieldContent: {
 				"enable_analyzer": "true",

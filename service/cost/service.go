@@ -41,7 +41,8 @@ func (s *Service) Track(ctx context.Context, userID, sessionID, modelName, toolN
 		logger.Warn("cost:%v, fallback=%s", err, s.price.FallbackModel)
 		return err
 	}
-	cny := pricing.CalculateCNY(rate, prompt, cached, completion)
+
+	breakdown := pricing.Calculate(rate, prompt, cached, completion)
 	err = s.cost.Insert(ctx, &do.CostRecord{
 		UserID:           userID,
 		SessionID:        sessionID,
@@ -51,7 +52,9 @@ func (s *Service) Track(ctx context.Context, userID, sessionID, modelName, toolN
 		CachedTokens:     cached,
 		CacheMissTokens:  prompt - cached,
 		CompletionTokens: completion,
-		EstimatedCNY:     cny,
+		EstimatedCNY:     breakdown.TotalCNY(),
+		CacheHitCNY:      breakdown.CacheHitCNY,
+		CacheMissCNY:     breakdown.CacheMissCNY,
 		OccurredAt:       time.Now(),
 	})
 	if err != nil {
@@ -94,6 +97,25 @@ func (s *Service) DailyTotal(ctx context.Context, day time.Time) (float64, error
 		return 0, err
 	}
 	return total, nil
+}
+
+// DailyUsage 返回某天的用量与成本汇总，含缓存命中 / 未命中拆分，供前端展示。
+func (s *Service) DailyUsage(ctx context.Context, day time.Time) (dto.CostDailyTotal, error) {
+	row, err := s.cost.DailyUsage(ctx, day)
+	if err != nil {
+		logger.Error("cost.DailyUsage days=%s err=%v", day.Format(time.DateTime), err)
+		return dto.CostDailyTotal{}, err
+	}
+	return dto.CostDailyTotal{
+		Date:             day.Format(time.DateOnly),
+		CNY:              row.TotalCNY,
+		PromptTokens:     row.PromptTokens,
+		CompletionTokens: row.CompletionTokens,
+		CacheHitTokens:   row.CachedTokens,
+		CacheMissTokens:  row.CacheMissTokens,
+		CacheHitCNY:      row.CacheHitCNY,
+		CacheMissCNY:     row.CacheMissCNY,
+	}, nil
 }
 
 func (s *Service) GroupByUser(ctx context.Context, from, to time.Time) ([]dto.CostByUser, error) {

@@ -126,6 +126,12 @@ export type APIResponse<T> = {
 export type CostDailyTotal = {
   date: string;
   cny: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  cache_hit_tokens: number;
+  cache_miss_tokens: number;
+  cache_hit_cny: number;
+  cache_miss_cny: number;
 };
 
 export type QuotaToday = {

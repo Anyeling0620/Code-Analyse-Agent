@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent, memo, useRef, useState } from 'react';
-import { formatCost, formatQuota } from '../chat/formatters';
+import { formatCacheStats, formatCost, formatQuota } from '../chat/formatters';
 import type { CostDailyTotal, QuotaToday } from '../types/chat';
 
 export const Composer = memo(function Composer({
@@ -63,6 +63,9 @@ export const Composer = memo(function Composer({
           />
           <div className="composer-footer">
             <span className="composer-meta">{isStreaming ? '正在返回，可随时停止本轮。' : 'Enter 发送，Shift+Enter 换行。'}</span>
+            <span className="cache-metrics" title="今日累计：命中缓存的输入 token 与金额 / 未命中缓存的输入 token 与金额">
+              {formatCacheStats(costDaily)}
+            </span>
             <div className="actions-right">
               <span className="inline-metrics">成本 {formatCost(costDaily)} · 额度 {formatQuota(quota)}</span>
               <button type="button" className="icon-button scroll-button" onClick={onScrollTop} aria-label="置顶" title="置顶">

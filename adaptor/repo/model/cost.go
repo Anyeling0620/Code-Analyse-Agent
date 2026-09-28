@@ -14,6 +14,8 @@ type CostRecord struct {
 	CompletionTokens int64
 	TotalTokens      int64
 	EstimatedCNY     float64   `gorm:"type:decimal(10,2)"`
+	CacheHitCNY      float64   `gorm:"type:decimal(12,6)"` // 命中部分成本
+	CacheMissCNY     float64   `gorm:"type:decimal(12,6)"` // 未命中部分成本
 	OccurredAt       time.Time `gorm:"index"`
 }
 

@@ -1190,6 +1190,7 @@ button {
 }
 
 .composer-compact .composer-meta,
+.composer-compact .cache-metrics,
 .composer-compact .inline-metrics {
   display: none;
 }
@@ -1209,9 +1210,10 @@ button {
 
 .composer-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 6px 10px;
   padding-top: 8px;
   border-top: 1px solid rgba(13, 13, 13, 0.08);
 }
@@ -1224,6 +1226,11 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.cache-metrics {
+  color: var(--text-soft);
+  font-size: 0.82rem;
 }
 
 .inline-metrics {

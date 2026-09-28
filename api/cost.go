@@ -2,7 +2,6 @@ package api
 
 import (
 	"edu.agent.code/common"
-	"edu.agent.code/service/dto"
 	"github.com/gin-gonic/gin"
 	"time"
 )
@@ -14,15 +13,12 @@ func (h *Handler) CostDaily(c *gin.Context) {
 		return
 	}
 
-	cny, err := h.cost.DailyTotal(c.Request.Context(), day)
+	item, err := h.cost.DailyUsage(c.Request.Context(), day)
 	if err != nil {
 		h.writeResp(c, nil, common.ServerError.WithError(err))
 		return
 	}
-	h.writeResp(c, dto.CostDailyTotal{
-		Date: day.Format(time.DateOnly),
-		CNY:  cny,
-	}, common.OK)
+	h.writeResp(c, item, common.OK)
 
 }
 

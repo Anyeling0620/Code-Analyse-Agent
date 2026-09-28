@@ -293,30 +293,43 @@ func loadDocsInScope(ctx context.Context, root string, conf config.RAG, scope do
 		if len(loaded) == 0 {
 			return nil
 		}
-		chunks, err := splitter.Transform(ctx, loaded)
+		fileChunks, err := buildFileChunks(ctx, splitter, rel, loaded, conf.ChunkSize, conf.ChunkOverlap)
 		if err != nil {
 			logger.Error("fail to split docs from %s", rel)
 			return nil
 		}
-		for idx, chunk := range chunks {
-			header := detectHeading(chunk.Content)
-			if chunk.MetaData == nil {
-				chunk.MetaData = make(map[string]any)
+		for idx, chunk := range fileChunks {
+			if chunk.Meta == nil {
+				chunk.Meta = make(map[string]any)
 			}
-			chunk.MetaData["header"] = header
-			chunk.MetaData["source_path"] = rel
-			chunk.MetaData["chunk_index"] = idx
-			chunk.MetaData["chunk_size"] = len(chunk.Content)
-			chunk.MetaData["file_size"] = fi.Size()
+			chunk.Meta["header"] = chunkHeader(rel, chunk)
+			chunk.Meta["source_path"] = rel
+			chunk.Meta["chunk_index"] = idx
+			chunk.Meta["chunk_size"] = len(chunk.Content)
+			chunk.Meta["file_size"] = fi.Size()
+			chunk.Meta["kind"] = chunk.Kind
+			if chunk.Symbol != "" {
+				chunk.Meta["symbol"] = chunk.Symbol
+			}
+			if chunk.Parent != "" {
+				chunk.Meta["parent"] = chunk.Parent
+			}
+			if chunk.LineStart > 0 {
+				chunk.Meta["line_start"] = chunk.LineStart
+				chunk.Meta["line_end"] = chunk.LineEnd
+			}
 			if scope.ProjectID != "" {
-				chunk.MetaData[ProjectIDMetadataKey] = scope.ProjectID
-				chunk.MetaData[ProjectRootMetadataKey] = scope.ProjectRoot
-				chunk.MetaData[CommitMetadataKey] = scope.Commit
+				chunk.Meta[ProjectIDMetadataKey] = scope.ProjectID
+				chunk.Meta[ProjectRootMetadataKey] = scope.ProjectRoot
+				chunk.Meta[CommitMetadataKey] = scope.Commit
 			}
 			// chunk ID 必须带项目标识：Milvus 写入是 upsert（主键=文档 ID），
 			// 否则两个项目里路径和内容相同的文件会互相覆盖。
-			chunk.ID = chunkID(scope.ProjectID, path, idx, chunk.Content)
-			docs = append(docs, chunk)
+			docs = append(docs, &schema.Document{
+				ID:       chunkID(scope.ProjectID, path, idx, chunk.Content),
+				Content:  chunk.Content,
+				MetaData: chunk.Meta,
+			})
 		}
 		return nil
 	})
@@ -327,6 +340,76 @@ func loadDocsInScope(ctx context.Context, root string, conf config.RAG, scope do
 		return docs[i].ID < docs[j].ID
 	})
 	return docs, nil
+}
+
+// fileChunk 是文件级切分结果：符号级切分会带上 symbol/kind/行号，回退路径只带内容。
+type fileChunk struct {
+	Content   string
+	Symbol    string
+	Kind      string
+	Parent    string
+	LineStart int
+	LineEnd   int
+	Meta      map[string]any
+}
+
+// buildFileChunks 优先按源码结构（符号级）切分；
+// 语言不支持或解析不出结构时，回退到通用递归切分器，保持原有行为不变。
+func buildFileChunks(ctx context.Context, splitter document.Transformer, rel string, loaded []*schema.Document, chunkSize, chunkOverlap int) ([]fileChunk, error) {
+	if text := joinDocContents(loaded); strings.TrimSpace(text) != "" {
+		if chunks, ok := splitBySymbol(rel, text, chunkSize, chunkOverlap); ok {
+			out := make([]fileChunk, 0, len(chunks))
+			for _, c := range chunks {
+				out = append(out, fileChunk{
+					Content:   c.Content,
+					Symbol:    c.Symbol,
+					Kind:      c.Kind,
+					Parent:    c.Parent,
+					LineStart: c.LineStart,
+					LineEnd:   c.LineEnd,
+				})
+			}
+			return out, nil
+		}
+	}
+
+	chunks, err := splitter.Transform(ctx, loaded)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]fileChunk, 0, len(chunks))
+	for _, c := range chunks {
+		out = append(out, fileChunk{Content: c.Content, Kind: kindText, Meta: c.MetaData})
+	}
+	return out, nil
+}
+
+func joinDocContents(loaded []*schema.Document) string {
+	switch len(loaded) {
+	case 0:
+		return ""
+	case 1:
+		return loaded[0].Content
+	}
+	var sb strings.Builder
+	for _, doc := range loaded {
+		sb.WriteString(doc.Content)
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+// chunkHeader 让 header 真正描述块内容：符号块用 "kind symbol"，
+// 文件摘要块用文件名，回退块沿用原来的 Markdown 标题探测。
+func chunkHeader(rel string, chunk fileChunk) string {
+	switch {
+	case chunk.Kind == kindFileSummary:
+		return "file summary: " + rel
+	case chunk.Symbol != "":
+		return strings.TrimSpace(chunk.Kind + " " + chunk.Symbol)
+	default:
+		return detectHeading(chunk.Content)
+	}
 }
 
 func chunkID(projectID, path string, idx int, content string) string {

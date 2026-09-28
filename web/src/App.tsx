@@ -24,10 +24,14 @@ import { initialProfile } from './constants/profile';
 import { normalizeMarkdown } from './markdown/normalizeMarkdown';
 import { ProfileModal } from './profile/ProfileModal';
 import { SessionPanel } from './sessions/SessionPanel';
+import { createShareLink } from './share/api';
+import { SharedSessionView } from './share/SharedSessionView';
 import type { ChatMessage, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent } from './types/chat';
 
 const SESSION_PAGE_LIMIT = 20;
 const MESSAGE_PAGE_LIMIT = 50;
+// SHARE_NOTICE_TTL_MS 是「已复制分享链接」提示的停留时长。
+const SHARE_NOTICE_TTL_MS = 4000;
 
 export default function App() {
   const [authSession, setAuthSession] = useState(() => getSession());
@@ -47,12 +51,28 @@ export default function App() {
     saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
   }
 
+  // 分享链接是公开只读页：命中 ?share=<token> 时直接渲染快照，
+  // 既不弹登录框，也不进入需要登录的工作区。
+  const shareToken = readShareToken();
+  if (shareToken) {
+    return <SharedSessionView token={shareToken} />;
+  }
+
   if (!authSession) {
     return <LoginModal onSubmit={handleLogin} />;
   }
   // 用 user_id 作 key：换账号时整棵工作区重新挂载，
   // 画像、会话、消息等本地状态不会残留到下一个账号。
   return <ChatWorkspace key={authSession.user_id} authSession={authSession} />;
+}
+
+// readShareToken 从地址栏读取分享令牌；没有就返回空串，走正常的登录流程。
+function readShareToken(): string {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+  const params = new URLSearchParams(window.location.search);
+  return (params.get('share') ?? '').trim();
 }
 
 // ChatWorkspace 承载单个登录用户的全部界面状态。换账号由上层通过 key 重新挂载来清空。
@@ -77,6 +97,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const [isComposerExpanded, setIsComposerExpanded] = useState(true);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [shareNotice, setShareNotice] = useState('');
   const controllerRef = useRef<AbortController | null>(null);
   const sessionIdRef = useRef('');
   const isStreamingRef = useRef(false);
@@ -120,6 +141,14 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!shareNotice) {
+      return;
+    }
+    const timer = window.setTimeout(() => setShareNotice(''), SHARE_NOTICE_TTL_MS);
+    return () => window.clearTimeout(timer);
+  }, [shareNotice]);
 
   async function checkHealth() {
     try {
@@ -279,6 +308,32 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
       setPanelError('');
     } catch (error) {
       setPanelError(error instanceof Error ? error.message : '会话删除失败');
+    }
+  }
+
+  async function shareSession(targetSessionId: string) {
+    if (isStreaming) {
+      return;
+    }
+    try {
+      const result = await createShareLink(targetSessionId);
+      const link = window.location.origin + result.share_path;
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(link);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+      if (copied) {
+        setShareNotice('已复制分享链接');
+      } else {
+        // 剪贴板不可用（非安全上下文、无权限等）时至少把链接交给用户。
+        window.alert(link);
+      }
+      setPanelError('');
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : '创建分享失败');
     }
   }
 
@@ -636,7 +691,9 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
               onLoadSession={loadSession}
               onLoadMoreSessions={loadMoreSessions}
               onDeleteSession={deleteSession}
+              onShareSession={shareSession}
               onOpenProfile={() => setIsProfileModalOpen(true)}
+              shareNotice={shareNotice}
           />
         </aside>
 

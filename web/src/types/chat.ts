@@ -77,6 +77,9 @@ export type SessionListItem = {
   last_user_message: string;
   last_assistant_msg: string;
   update_at: string;
+  // 后端 SessionContext 会带上项目根/项目名；列表接口不保证返回，故为可选。
+  current_project_root?: string;
+  current_project_name?: string;
 };
 
 export type ChatMessageRecord = {
@@ -146,4 +149,18 @@ export type QuotaToday = {
   date: string;
   used: number;
   limit: number;
+};
+
+// ShareCreateResult 是创建只读分享后后端返回的分享凭据。
+export type ShareCreateResult = {
+  share_token: string;
+  share_path: string;
+  created_at: string;
+  expires_at: string | null;
+};
+
+// SharedSessionDetail 是只读分享页拿到的快照内容（按令牌读取，无需登录）。
+export type SharedSessionDetail = SessionDetail & {
+  shared_at: string;
+  expires_at: string | null;
 };

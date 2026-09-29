@@ -17,9 +17,10 @@ func (h *Handler) Health(c *gin.Context) {
 func (h *Handler) Version(c *gin.Context) {
 	conf := h.adaptor.GetConfig()
 	resp := dto.Version{
-		AppName:   conf.Server.AppName,
-		Version:   conf.Server.Version,
-		GoVersion: "1.26.5",
+		AppName:    conf.Server.AppName,
+		Version:    conf.Server.Version,
+		GoVersion:  "1.26.5",
+		GuestLogin: conf.Auth.Guest.Enabled,
 	}
 	h.writeResp(c, resp, common.OK)
 }

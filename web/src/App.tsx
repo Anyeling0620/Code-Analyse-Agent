@@ -37,7 +37,7 @@ import { ProfileModal } from './profile/ProfileModal';
 import { SessionPanel } from './sessions/SessionPanel';
 import { createShareLink } from './share/api';
 import { SharedSessionView } from './share/SharedSessionView';
-import type { ChatMessage, ChatRunActiveResp, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent } from './types/chat';
+import type { ChatMessage, ChatRunActiveResp, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent, VersionInfo } from './types/chat';
 
 // 会话列表项在后端已截断到 200 字，负载很小，保持 20 条一页。
 const SESSION_PAGE_LIMIT = 20;
@@ -51,11 +51,35 @@ const MESSAGE_HYDRATE_TARGET = 30;
 const SESSION_CACHE_MAX = 10;
 // SHARE_NOTICE_TTL_MS 是「已复制分享链接」提示的停留时长。
 const SHARE_NOTICE_TTL_MS = 4000;
+// GUEST_ID_PREFIX 与后端 common.GuestUserPrefix 对齐，用于把游客身份和真实账号区分开显示。
+const GUEST_ID_PREFIX = 'guest_';
 
 export default function App() {
   const [authSession, setAuthSession] = useState(() => getSession());
+  const [guestEnabled, setGuestEnabled] = useState(false);
 
   useEffect(() => subscribeSession(setAuthSession), []);
+
+  // 登录前只有 /api/version 可访问，用它确认服务端是否开放游客登录：
+  // 没开就不显示入口，避免出现"点了才报错"的按钮。
+  useEffect(() => {
+    if (authSession) {
+      return;
+    }
+    let cancelled = false;
+    fetchJSON<VersionInfo>('/api/version', undefined, { handleUnauthorized: false })
+      .then((version) => {
+        if (!cancelled) {
+          setGuestEnabled(Boolean(version.guest_login));
+        }
+      })
+      .catch(() => {
+        // 探测失败按未开放处理，账号登录不受影响。
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession]);
 
   async function handleLogin(username: string, password: string) {
     const result = await fetchJSON<LoginResult>(
@@ -70,6 +94,16 @@ export default function App() {
     saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
   }
 
+  // 游客登录不带任何凭据：后端按 IP + 浏览器标识派生身份，额度记在该身份上。
+  async function handleGuestLogin() {
+    const result = await fetchJSON<LoginResult>(
+        '/api/auth/guest',
+        { method: 'POST' },
+        { handleUnauthorized: false },
+    );
+    saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
+  }
+
   // 分享链接是公开只读页：命中 ?share=<token> 时直接渲染快照，
   // 既不弹登录框，也不进入需要登录的工作区。
   const shareToken = readShareToken();
@@ -78,7 +112,7 @@ export default function App() {
   }
 
   if (!authSession) {
-    return <LoginModal onSubmit={handleLogin} />;
+    return <LoginModal onSubmit={handleLogin} guestEnabled={guestEnabled} onGuestSubmit={handleGuestLogin} />;
   }
   // 用 user_id 作 key：换账号时整棵工作区重新挂载，
   // 画像、会话、消息等本地状态不会残留到下一个账号。
@@ -1140,7 +1174,11 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
               onScroll={handleConversationScroll}
           >
             <section className="workspace-meta-bar">
-              <span className="workspace-meta-chip">账号: {authSession.user_id}（{authSession.plan}）</span>
+              <span className="workspace-meta-chip">
+                {authSession.user_id.startsWith(GUEST_ID_PREFIX)
+                    ? `游客身份: ${authSession.user_id}（${authSession.plan}）`
+                    : `账号: ${authSession.user_id}（${authSession.plan}）`}
+              </span>
               {sessionId && <span className="workspace-meta-chip">Session: {sessionId}</span>}
               {lastTraceId && <span className="workspace-meta-chip">Trace: {lastTraceId}</span>}
               <button className="workspace-meta-chip trace-entry-button" type="button" onClick={handleLogout}>

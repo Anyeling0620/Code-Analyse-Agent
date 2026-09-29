@@ -14,6 +14,8 @@ var authWhitelist = map[string]bool{
 	"/healthz":        true,
 	"/api/version":    true,
 	"/api/auth/login": true,
+	// 游客登录同样在登录前调用，必须放行。
+	"/api/auth/guest": true,
 	// 只读分享是公开链接：拿到令牌即可查看，不要求登录。
 	"/api/sessions/shared/info": true,
 }

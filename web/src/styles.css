@@ -1455,6 +1455,139 @@ button {
   padding-top: 4px;
 }
 
+/* 登录弹窗：比通用 profile 弹窗更窄，四周留白更大，两枚按钮都撑满一行。 */
+.login-modal {
+  width: min(420px, 100%);
+}
+
+.login-modal .trace-modal-header {
+  justify-content: flex-start;
+  padding: 26px 28px 14px;
+  border-bottom: 0;
+}
+
+.login-modal .trace-modal-header h3 {
+  margin: 0;
+  color: var(--wechat-dark);
+  font-size: 1.22rem;
+}
+
+.login-modal .trace-modal-header p {
+  margin-top: 6px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.login-form {
+  gap: 16px;
+  padding: 6px 28px 32px;
+}
+
+.login-actions {
+  display: grid;
+  gap: 16px;
+}
+
+.login-submit {
+  width: 100%;
+  padding: 12px 18px;
+  font-weight: 700;
+}
+
+/* 游客入口：与登录按钮同宽，用「或」分区线衔接，做成一枚有层次的次级入口。 */
+.guest-login {
+  display: grid;
+  gap: 14px;
+}
+
+.guest-login-divider {
+  position: relative;
+  display: block;
+  text-align: center;
+}
+
+.guest-login-divider::before {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto;
+  height: 1px;
+  background: rgba(13, 13, 13, 0.1);
+}
+
+.guest-login-divider em {
+  position: relative;
+  padding: 0 10px;
+  background: #ffffff;
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  font-style: normal;
+}
+
+.guest-login-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 16px;
+  border: 1px solid rgba(16, 163, 127, 0.26);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(16, 163, 127, 0.09), rgba(16, 163, 127, 0.02));
+  color: var(--wechat-dark);
+  text-align: left;
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.guest-login-button:hover:not(:disabled) {
+  border-color: rgba(16, 163, 127, 0.48);
+  background: linear-gradient(180deg, rgba(16, 163, 127, 0.16), rgba(16, 163, 127, 0.05));
+  box-shadow: 0 12px 26px rgba(16, 163, 127, 0.16);
+  transform: translateY(-1px);
+}
+
+.guest-login-button:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.guest-login-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: rgba(16, 163, 127, 0.14);
+}
+
+.guest-login-icon svg,
+.guest-login-arrow {
+  width: 18px;
+  height: 18px;
+}
+
+.guest-login-icon svg path,
+.guest-login-arrow path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.guest-login-label {
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.guest-login-arrow {
+  color: rgba(13, 143, 112, 0.55);
+  transition: transform 160ms ease;
+}
+
+.guest-login-button:hover:not(:disabled) .guest-login-arrow {
+  transform: translateX(2px);
+}
+
 .trace-row {
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr) auto;

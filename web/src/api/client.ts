@@ -1,4 +1,5 @@
 import { clearSession, getToken } from '../auth/session';
+import { getDeviceFingerprint } from '../auth/fingerprint';
 import type { APIResponse } from '../types/chat';
 
 // 后端 business code：200 表示成功，其余为业务/系统错误（与 common.OK.Code 对齐）
@@ -15,6 +16,11 @@ export function withAuth(init?: RequestInit): RequestInit {
   const headers = new Headers(init?.headers);
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
+  }
+  // 游客身份由「IP + 浏览器标识」派生，登录前后都要带上，未登录时后端才能识别同一个身份。
+  const fingerprint = getDeviceFingerprint();
+  if (fingerprint) {
+    headers.set('X-Device-Fingerprint', fingerprint);
   }
   return { ...init, headers };
 }

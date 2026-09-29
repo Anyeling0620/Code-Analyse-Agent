@@ -72,12 +72,28 @@ type Auth struct {
 	// TokenTTLHours 是登录令牌有效期（小时），<=0 时按 168 小时（7 天）处理。
 	TokenTTLHours int           `yaml:"token_ttl_hours"`
 	Accounts      []AuthAccount `yaml:"accounts"`
+	// Guest 是游客登录配置：为没有账号的访客提供免密码入口，
+	// 身份由 IP + 浏览器指纹派生，用量计入该派生身份的配额。
+	Guest Guest `yaml:"guest"`
 }
 
 type AuthAccount struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	Plan     string `yaml:"plan"`
+}
+
+// Guest 是游客登录配置。
+type Guest struct {
+	// Enabled 为 true 时才允许游客登录；不配置时默认关闭，避免线上被静默放开。
+	Enabled bool `yaml:"enabled"`
+	// Plan 是游客身份使用的套餐，取值为 common.Plan 的字符串形式；
+	// 留空或取值非法时按 plus 处理。
+	Plan string `yaml:"plan"`
+	// DailyQuota 覆盖游客身份的单日调用上限；<=0 时沿用套餐自带额度。
+	DailyQuota int `yaml:"daily_quota"`
+	// TokenTTLHours 是游客令牌有效期（小时）；<=0 时按 24 小时处理，且不超过 auth.token_ttl_hours。
+	TokenTTLHours int `yaml:"token_ttl_hours"`
 }
 
 type DatabaseReport struct {

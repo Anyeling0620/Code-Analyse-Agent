@@ -20,7 +20,7 @@ func (h *Handler) QuotaToday(ctx *gin.Context) {
 		Plan:   string(user.Plan),
 		Date:   today,
 		Used:   used,
-		Limit:  user.Plan.DailyQuota(),
+		Limit:  h.quota.DailyLimit(user),
 	}
 	h.writeResp(ctx, resp, common.OK)
 }

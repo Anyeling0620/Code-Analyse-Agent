@@ -1,5 +1,7 @@
 package common
 
+import "strings"
+
 const (
 	// CtxKeyUserID 是 gin.Context 中当前用户 ID 的 key。
 	CtxKeyUserID = "user_id"
@@ -9,7 +11,15 @@ const (
 	CtxKeyAuthUser = "auth_user"
 	// CtxKeyAuthToken 是 gin.Context 中当前请求所用登录令牌的 key，供登出时按令牌吊销。
 	CtxKeyAuthToken = "auth_token"
+	// GuestUserPrefix 是游客派生身份的 UserID 前缀。
+	// 游客不建账号，身份由 IP + 浏览器指纹派生，加前缀便于配额与成本统计区分游客。
+	GuestUserPrefix = "guest_"
 )
+
+// IsGuestUser 判断 UserID 是否为游客派生身份。
+func IsGuestUser(userID string) bool {
+	return strings.HasPrefix(userID, GuestUserPrefix)
+}
 
 type Plan string
 

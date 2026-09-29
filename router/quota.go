@@ -49,7 +49,7 @@ func Quota(svc *quota.Service, whiteList map[string]bool) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		limit := user.Plan.DailyQuota()
+		limit := svc.DailyLimit(user)
 		if count > int64(limit) {
 			c.JSON(http.StatusTooManyRequests, gin.H{
 				"code": http.StatusTooManyRequests,

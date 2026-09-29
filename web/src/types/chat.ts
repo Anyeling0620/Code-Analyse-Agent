@@ -159,6 +159,15 @@ export type LoginResult = {
   plan: string;
 };
 
+// VersionInfo 是 /api/version 的返回。登录前唯一可访问的接口，
+// 这里带出的 guest_login 决定登录页是否展示游客入口。
+export type VersionInfo = {
+  app_name: string;
+  version: string;
+  go_version: string;
+  guest_login: boolean;
+};
+
 export type CostDailyTotal = {
   date: string;
   cny: number;

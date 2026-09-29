@@ -6,6 +6,24 @@
 
 ## 0. 最终选用的技术
 
+最终方案是**两层压缩**，由同一个 `context_compact` 开关统一门控。
+
+### 第一层：跨轮压缩记忆（装配期）
+
+实现：`service/conversation/helper.go` + `chat.go` + `session.go`
+
+- 模型每轮只装配最近 `historyWindowSize = 20` 条历史（与改造前一致）。
+- 更早的内容靠**落库的滚动摘要**带过去：`persistSession` 在开关开启时用 `mergeSessionSummary` 滚动累积（拼接本轮问答，超过 `sessionSummaryMaxRunes = 2000` 时保留头尾、折叠中间），复用已有的 `sessions.Summary` 列，**不新增数据库列**。
+- 注入条件两个缺一不可：开关开启，且历史**确实被窗口截断过**（`totalMessages > fetchedMessages`）——否则摘要写的就是 prompt 里已有的近期问答，注入等于重复计费。
+- 注入形态：一条 `system` 消息（前缀声明"仅作背景事实参考，不代表用户当前的新输入"），排在历史最前。
+- 开关关闭时与改造前完全一致：不注入，且 `Summary` 退回旧的每轮覆盖式写法。
+
+注意：这一层的摘要文本是**模板拼接**（`上次用户提问:… 系统回答:…`）再滚动累积的，不是模型生成，因此不参与第 3～4 节的摘要层/审计员指标。
+
+### 第二层：轮内压缩（模型调用前）
+
+实现：`service/agent/compress/`
+
 | 项 | 结论 |
 |---|---|
 | 压缩载体 | Eino 自带 `adk/middlewares/summarization` 中间件（`ChatModelAgentMiddleware`），挂在**主 agent**，每次模型调用前（`BeforeModelRewriteState`）判定 |

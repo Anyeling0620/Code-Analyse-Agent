@@ -109,6 +109,9 @@ func (s *Service) handleMaxIterationsExceeded(
 	}
 	message := maxIterationsFallback(runState.Answer)
 	runState.Answer += message
+	// 超限收尾产出的是"部分报告"，不是完整结论：标记降级，
+	// 落库后 run.degraded 可以为前端/后续分析区分这份结果的可信范围。
+	runState.Degraded = true
 	agentName := ""
 	if event != nil {
 		agentName = event.AgentName

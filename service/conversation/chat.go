@@ -3,12 +3,9 @@ package conversation
 import (
 	"context"
 	"edu.agent.code/common"
-	"edu.agent.code/service/consts"
 	"edu.agent.code/service/do"
 	"edu.agent.code/service/dto"
 	"edu.agent.code/utils/logger"
-	"fmt"
-	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/prompt"
 	"github.com/cloudwego/eino/schema"
 	"github.com/jinzhu/copier"
@@ -37,109 +34,27 @@ func turnSessionFromContext(ctx context.Context) *dto.SessionContext {
 	return session
 }
 
-// ChatCompletion 非流式
+// ChatCompletion 非流式：阻塞等待整轮跑完。
+//
+// 它同样会落一条 run 记录（终态 done / failed），只是不像流式那样有实时订阅者。
 func (s *Service) ChatCompletion(ctx context.Context, req dto.ChatRequest) (*dto.ChatResult, error) {
-	return s.executeChat(ctx, req, nil)
+	runCtx, prep, err := s.prepareChatRun(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return s.executeRun(runCtx, prep)
 }
 
-// ChatStream 流式
+// ChatStream 流式：起一轮 run 并把事件转发给 emit。
+//
+// 保留这个签名的意义是兼容既有调用方；内部已经是"后台执行 + 订阅转发"，
+// 因此 emit 写失败（客户端断开）只会结束转发，不会影响 run 本身。
 func (s *Service) ChatStream(ctx context.Context, req dto.ChatRequest, emit ChatEmit) error {
-	_, err := s.executeChat(ctx, req, emit)
-	return err
-}
-
-// 核心消息处理
-func (s *Service) executeChat(ctx context.Context, req dto.ChatRequest, emit ChatEmit) (*dto.ChatResult, error) {
-	startedAt := time.Now()
-	userID := req.UserID
-	profile, err := s.prepareProfile(ctx, userID, req.Profile)
+	runID, _, err := s.StartChatRun(ctx, req)
 	if err != nil {
-		logger.Error("prepareProfile failed", zap.Error(err), zap.Any("req", req))
-		return nil, err
+		return err
 	}
-
-	session, err := s.prepareSession(ctx, userID, req.SessionID)
-	if err != nil {
-		logger.Error("prepareSession failed", zap.Error(err), zap.Any("req", req))
-		return nil, err
-	}
-	ctx = common.WithUserAndSession(ctx, userID, session.SessionID)
-	updateProjectContextFromMessage(session, req.Message)
-	ctx = withTurnSession(ctx, session)
-
-	if emit != nil {
-		err = emit(dto.ChatStreamEvent{
-			Type:      consts.SseEventTypeSession,
-			TraceID:   req.TraceID,
-			SessionID: session.SessionID,
-			Stage:     "agent_start",
-			Detail:    "runner.RUNNING",
-		})
-		if err != nil {
-			logger.Error("emit failed", zap.Error(err), zap.Any("req", req))
-			return nil, err
-		}
-	}
-
-	messages, err := s.buildMessageWithHistory(ctx, userID, session, profile, req.Message)
-	if err != nil {
-		logger.Error("buildMessageWithHistory failed", zap.Error(err), zap.Any("req", req))
-		return nil, err
-	}
-	runState := &dto.ChatRunState{
-		UserID:      userID,
-		TraceID:     req.TraceID,
-		Question:    req.Message,
-		SessionID:   session.SessionID,
-		ToolCallMap: map[string]dto.ToolCallState{},
-	}
-
-	checkPointID := fmt.Sprintf("session:%s turn:%s", session.SessionID, common.GetUUIDHex())
-	ctx = common.WithCheckPointID(ctx, checkPointID)
-	iter := s.composeRunner.Run(ctx, messages, adk.WithCheckPointID(checkPointID))
-
-	err = s.consumeAgentEvents(ctx, iter, runState, emit)
-	// 保存会话 就算中断报错了 也要把 runState 存起来
-	if err != nil {
-		logger.Error("run failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
-		err = s.persistSession(ctx, session, runState)
-		if err != nil {
-			logger.Error("persistSession failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
-		}
-		return nil, err
-	}
-	// 跑到这说明没有消息输出了
-	result := &dto.ChatResult{
-		Answer:           runState.Answer,
-		ReasoningContent: runState.ReasoningContent,
-		SessionID:        session.SessionID,
-		UsedTools:        runState.UsedTools,
-		Profile:          profile,
-		Session:          session,
-	}
-
-	// 不管是否成功 都需要保存会话
-	err = s.persistSession(ctx, session, runState)
-	if err != nil {
-		logger.Error("persistSession failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
-	}
-	if emit != nil {
-		err = emit(dto.ChatStreamEvent{
-			Type:       consts.SseEventTypeDone,
-			TraceID:    runState.TraceID,
-			SessionID:  runState.SessionID,
-			ElapseMS:   time.Since(startedAt).Milliseconds(),
-			Timestamp:  time.Now().Format(time.DateTime),
-			Visibility: "user",
-			Result:     result,
-		})
-		if err != nil {
-			logger.Error("ChatStream emit failed", zap.Error(err), zap.Any("req", req), zap.Any("runState", runState))
-			return nil, err
-		}
-	}
-
-	return result, nil
+	return s.PumpRun(ctx, runID, 0, emit)
 }
 
 func (s *Service) buildMessageWithHistory(ctx context.Context, userID string,

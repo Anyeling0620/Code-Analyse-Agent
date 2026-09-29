@@ -8,6 +8,7 @@ import (
 	"edu.agent.code/adaptor/repo/profile"
 	"edu.agent.code/adaptor/repo/session"
 	"edu.agent.code/config"
+	"edu.agent.code/service/agent/compress"
 	"edu.agent.code/service/agent/runner"
 	"edu.agent.code/service/agent/skill"
 	"edu.agent.code/service/cost"
@@ -23,9 +24,11 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 	"github.com/samber/lo"
 	"go.uber.org/zap"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -119,7 +122,7 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor, projectIndexer *r
 		return serviceDeps{}, err
 	}
 	// Skill 中间件
-	agentHandlers, skillToolNames, err := buildAgentHandlers(ctx, conf)
+	agentHandlers, skillToolNames, err := buildAgentHandlers(ctx, conf, chatModel)
 	if err != nil {
 		logger.Error("buildAgentHandlers err", err)
 		return serviceDeps{}, err
@@ -259,28 +262,67 @@ func buildRepoFetchHooks(projectIndexer *rag.ProjectIndexer) repo_fetch.Hooks {
 }
 
 func buildChatModel(ctx context.Context, conf *config.Config) (model.ToolCallingChatModel, error) {
+	return buildChatModelWithName(ctx, conf, conf.DeepSeek.Model)
+}
+
+// buildChatModelWithName 用同一个 DeepSeek 端点构造指定名称的对话模型。
+func buildChatModelWithName(ctx context.Context, conf *config.Config, modelName string) (model.ToolCallingChatModel, error) {
 	baseModel, err := einoopenai.NewChatModel(ctx, &einoopenai.ChatModelConfig{
 		APIKey:  conf.DeepSeek.APIKey,
 		Timeout: time.Minute * 5,
 		BaseURL: conf.DeepSeek.BaseURL,
-		Model:   conf.DeepSeek.Model,
+		Model:   modelName,
 	})
 	if err != nil {
-		logger.Error("buildChatModel NewChatModel err:%v", err)
+		logger.Error("buildChatModel NewChatModel err:%v model=%s", err, modelName)
 		return nil, err
 	}
 	return dsml.WrapEinoModel(baseModel), nil
 }
 
-func buildAgentHandlers(ctx context.Context, conf *config.Config) ([]adk.ChatModelAgentMiddleware, []string, error) {
+// buildSummarizeModel 返回生成摘要用的模型。
+//
+// 默认沿用主链路的对话模型；当 context_compact.model 显式配置了另一个模型时，
+// 单独构造一个，避免"配置了 model 却静默不生效"。
+func buildSummarizeModel(ctx context.Context, conf *config.Config,
+	fallback model.BaseModel[*schema.Message]) (model.BaseModel[*schema.Message], error) {
+	name := strings.TrimSpace(conf.ContextCompact.Model)
+	if name == "" || name == conf.DeepSeek.Model {
+		return fallback, nil
+	}
+	summarizeModel, err := buildChatModelWithName(ctx, conf, name)
+	if err != nil {
+		return nil, fmt.Errorf("build summarization model %q: %w", name, err)
+	}
+	logger.Info("context compaction uses a dedicated summary model model=%s", name)
+	return summarizeModel, nil
+}
+
+func buildAgentHandlers(ctx context.Context, conf *config.Config,
+	chatModel model.BaseModel[*schema.Message]) ([]adk.ChatModelAgentMiddleware, []string, error) {
+	handlers := make([]adk.ChatModelAgentMiddleware, 0, 2)
+	skillToolNames := make([]string, 0, 1)
 	skillHandler, skillTooName, err := skill.BuildMiddleware(ctx, conf.Skills)
 	if err != nil {
 		logger.Error("buildAgentHandlers BuildMiddleware error",
 			zap.Any("conf", conf), zap.Error(err))
 		return nil, nil, fmt.Errorf("buildAgentHandlers init skill middleware error: %w", err)
 	}
-	if skillHandler == nil {
-		return nil, nil, nil
+	if skillHandler != nil {
+		handlers = append(handlers, skillHandler)
+		skillToolNames = append(skillToolNames, skillTooName)
 	}
-	return []adk.ChatModelAgentMiddleware{skillHandler}, []string{skillTooName}, nil
+	// 上下文压缩中间件：未启用时返回 nil，保持原有行为。
+	summarizeModel, err := buildSummarizeModel(ctx, conf, chatModel)
+	if err != nil {
+		logger.Error("buildAgentHandlers buildSummarizeModel error", zap.Error(err))
+		return nil, nil, fmt.Errorf("buildAgentHandlers init compact model error: %w", err)
+	}
+	compactHandlers, err := compress.NewHandlers(ctx, conf.ContextCompact, summarizeModel)
+	if err != nil {
+		logger.Error("buildAgentHandlers compress error", zap.Error(err))
+		return nil, nil, fmt.Errorf("buildAgentHandlers init compact middleware error: %w", err)
+	}
+	handlers = append(handlers, compactHandlers...)
+	return handlers, skillToolNames, nil
 }

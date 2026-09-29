@@ -3,6 +3,7 @@ package conversation
 import (
 	"context"
 	"edu.agent.code/common"
+	"edu.agent.code/service/agent/compress"
 	"edu.agent.code/service/do"
 	"edu.agent.code/service/dto"
 	"edu.agent.code/utils/logger"
@@ -106,7 +107,15 @@ func (s *Service) persistSession(ctx context.Context, session *dto.SessionContex
 	session.SessionID = runState.SessionID
 	session.LastUserMessage = runState.Question
 	session.LastAssistantMsg = runState.Answer
-	session.Summary = summarySession(runState.Question, runState.Answer)
+	// 摘要的写入方式跟随压缩开关：
+	//   - 开启压缩：滚动累积而不是每轮覆盖——覆盖式摘要会把更早轮次的目标与结论丢掉，
+	//     而跨轮压缩记忆恰恰依赖这些信息（关闭时摘要根本不会注入，见 resolveSessionSummaryMessage）；
+	//   - 关闭压缩：保持改造前的覆盖式写法，确保"关掉开关 = 行为完全不变"。
+	if compress.Enabled(s.compactConf()) {
+		session.Summary = mergeSessionSummary(session.Summary, runState.Question, runState.Answer)
+	} else {
+		session.Summary = summarySession(runState.Question, runState.Answer)
+	}
 
 	doSession := do.SessionContext{}
 	_ = copier.Copy(&doSession, session)

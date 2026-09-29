@@ -58,10 +58,15 @@ func (s *Service) GetSessionInfo(ctx context.Context, userID string, req *dto.Ge
 	copier.Copy(&resultSession, &session)
 	resultMessages := make([]*dto.ChatMessageRecord, 0, len(messages))
 	copier.Copy(&resultMessages, &messages)
+	// GetOffset 会顺带把未传的 page/limit 归一化为默认值，
+	// 因此这里的 req.Pager 已经是实际生效的分页参数。
+	hasMore := int64(req.GetOffset()+len(messages)) < total
 	return &dto.SessionInfo{
 		Session: resultSession,
 		List:    resultMessages,
 		Total:   total,
+		HasMore: hasMore,
+		Pager:   req.Pager,
 	}, err
 
 }

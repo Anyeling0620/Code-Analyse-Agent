@@ -424,7 +424,7 @@ button {
   grid-template-rows: minmax(0, 1fr);
   min-height: 100vh;
   min-width: 0;
-  font-size: 0.88rem;
+  font-size: 0.92rem;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -481,12 +481,93 @@ button {
   font-size: 0.78rem;
 }
 
+/* ===== 切换会话时的骨架屏 ===== */
+
+.chat-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(var(--chat-content-width), calc(100% - 64px));
+  margin: 0 auto;
+  padding: 10px 0 150px;
+}
+
+.chat-skeleton-hint {
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid rgba(13, 13, 13, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+
+.chat-skeleton-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(13, 13, 13, 0.14);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: chat-skeleton-spin 720ms linear infinite;
+}
+
+@keyframes chat-skeleton-spin {
+  to { transform: rotate(360deg); }
+}
+
+.chat-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 40px 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(13, 13, 13, 0.08);
+  background: var(--assistant);
+}
+
+.chat-skeleton-line {
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(13, 13, 13, 0.07) 25%, rgba(13, 13, 13, 0.13) 37%, rgba(13, 13, 13, 0.07) 63%);
+  background-size: 400% 100%;
+  animation: chat-skeleton-shimmer 1.4s ease infinite;
+}
+
+.chat-skeleton-line-title {
+  width: 42%;
+  height: 18px;
+}
+
+.chat-skeleton-line-short {
+  width: 58%;
+}
+
+.chat-skeleton-line-mid {
+  width: 78%;
+}
+
+@keyframes chat-skeleton-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-skeleton-line,
+  .chat-skeleton-spinner {
+    animation: none;
+  }
+}
+
 .message {
   position: relative;
   width: 100%;
   min-width: 0;
   border-radius: 18px;
-  padding: 12px 38px 12px 14px;
+  padding: 14px 40px 14px 16px;
   border: 1px solid rgba(13, 13, 13, 0.08);
   overflow: hidden;
 }
@@ -554,7 +635,7 @@ button {
   align-items: center;
   gap: 6px;
   font-size: 0.78rem;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
   color: var(--text-soft);
 }
 
@@ -565,7 +646,7 @@ button {
 
 .plain-text {
   margin: 0;
-  line-height: 1.55;
+  line-height: 1.75;
   white-space: pre-wrap;
 }
 
@@ -1529,6 +1610,7 @@ button {
 
   .workspace-meta-bar,
   .message-list,
+  .chat-skeleton,
   .composer-shell {
     width: calc(100% - 32px);
   }
@@ -1560,20 +1642,25 @@ button {
 
 
 /* ────────────────────────────────────────────────────────────────
-   Markdown 紧凑渲染修正
+   Markdown 阅读排版
 
    说明：
    ReactMarkdown 已经把 Markdown 转成 h/p/ul/li/table/pre 等 HTML 元素。
    因此 .markdown-body 不能使用 white-space: pre-wrap，否则元素之间的
    换行文本节点也会被当成可见空白渲染，出现标题下方大空行、列表行距过宽。
    只有 pre/code/table cell 这类需要保留空白的位置单独设置 white-space。
+
+   早期这里的行高被压到 1.48、段落间距压到 0.16rem，是为了让报告"看起来紧凑"，
+   结果是整份报告糊成一块、中文长段落几乎无法阅读。现在按正文阅读标准放大
+   行高与段间距：正文 1.85 行高 + 段间 0.9rem，标题上下留白明显分层。
    ──────────────────────────────────────────────────────────────── */
 
 .message .markdown-body,
 .message .markdown-body.timeline-text,
 .tool-trace-result.markdown-body {
   white-space: normal !important;
-  line-height: 1.48 !important;
+  line-height: 1.85 !important;
+  font-size: 0.94rem;
 }
 
 .message .markdown-body > :first-child,
@@ -1598,7 +1685,7 @@ button {
 .tool-trace-result.markdown-body h4,
 .tool-trace-result.markdown-body h5,
 .tool-trace-result.markdown-body h6 {
-  line-height: 1.5 !important;
+  line-height: 1.35 !important;
   padding: 0 !important;
   border: 0 !important;
   color: #0d0d0d;
@@ -1606,38 +1693,40 @@ button {
 
 .message .markdown-body h1,
 .tool-trace-result.markdown-body h1 {
-  margin: 0 0 0.45rem !important;
-  font-size: 1.35rem !important;
+  margin: 0 0 0.7rem !important;
+  font-size: 1.42rem !important;
 }
 
 .message .markdown-body h2,
 .tool-trace-result.markdown-body h2 {
-  margin: 0.55rem 0 0.32rem !important;
-  font-size: 1.22rem !important;
+  margin: 1.5rem 0 0.6rem !important;
+  font-size: 1.26rem !important;
+  padding-bottom: 0.3rem !important;
+  border-bottom: 1px solid rgba(13, 13, 13, 0.1) !important;
 }
 
 .message .markdown-body h3,
 .tool-trace-result.markdown-body h3 {
-  margin: 0.48rem 0 0.24rem !important;
-  font-size: 1.08rem !important;
+  margin: 1.25rem 0 0.5rem !important;
+  font-size: 1.12rem !important;
 }
 
 .message .markdown-body h4,
 .tool-trace-result.markdown-body h4 {
-  margin: 0.42rem 0 0.22rem !important;
-  font-size: 1rem !important;
+  margin: 1.05rem 0 0.42rem !important;
+  font-size: 1.02rem !important;
 }
 
 .message .markdown-body h5,
 .tool-trace-result.markdown-body h5 {
-  margin: 0.42rem 0 0.22rem !important;
-  font-size: 0.95rem !important;
+  margin: 0.95rem 0 0.4rem !important;
+  font-size: 0.98rem !important;
 }
 
 .message .markdown-body h6,
 .tool-trace-result.markdown-body h6 {
-  margin: 0.42rem 0 0.22rem !important;
-  font-size: 0.9rem !important;
+  margin: 0.9rem 0 0.38rem !important;
+  font-size: 0.94rem !important;
 }
 
 .message .markdown-body p,
@@ -1652,8 +1741,8 @@ button {
 .tool-trace-result.markdown-body pre,
 .tool-trace-result.markdown-body ul,
 .tool-trace-result.markdown-body ol {
-  margin-top: 0.16rem !important;
-  margin-bottom: 0.42rem !important;
+  margin-top: 0.35rem !important;
+  margin-bottom: 0.9rem !important;
 }
 
 .message .markdown-body ul,
@@ -1665,14 +1754,14 @@ button {
 
 .message .markdown-body li,
 .tool-trace-result.markdown-body li {
-  margin-top: 0.08rem !important;
-  margin-bottom: 0.08rem !important;
-  line-height: 1.8 !important;
+  margin-top: 0.14rem !important;
+  margin-bottom: 0.14rem !important;
+  line-height: 1.85 !important;
 }
 
 .message .markdown-body li + li,
 .tool-trace-result.markdown-body li + li {
-  margin-top: 0.5rem !important;
+  margin-top: 0.62rem !important;
 }
 
 .message .markdown-body li > p,
@@ -1694,6 +1783,16 @@ button {
   white-space: pre !important;
 }
 
+/* 引用块常用来放结论/提示，给足内边距与左侧色条，避免和正文糊在一起。 */
+.message .markdown-body blockquote,
+.tool-trace-result.markdown-body blockquote {
+  padding: 0.6rem 1rem !important;
+  border-left: 3px solid rgba(16, 163, 127, 0.5) !important;
+  border-radius: 0 10px 10px 0 !important;
+  background: rgba(16, 163, 127, 0.05) !important;
+  color: #3d4a52 !important;
+}
+
 .message .markdown-body code,
 .tool-trace-result.markdown-body code {
   white-space: pre-wrap;
@@ -1707,7 +1806,7 @@ button {
 }
 
 .assistant-timeline {
-  gap: 6px !important;
+  gap: 14px !important;
 }
 
 .assistant-timeline .timeline-text {
@@ -1721,7 +1820,7 @@ button {
 .assistant-timeline .timeline-text + .timeline-error,
 .assistant-timeline .timeline-tool + .timeline-error,
 .assistant-timeline .timeline-error + .timeline-tool {
-  margin-top: 0.45rem !important;
+  margin-top: 1rem !important;
 }
 
 .timeline-error {

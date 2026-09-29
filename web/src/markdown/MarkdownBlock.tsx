@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
 import { CodeBlock } from './CodeBlock';
 import { MermaidDiagram } from './MermaidDiagram';
-import { normalizeMarkdown } from './normalizeMarkdown';
+import { normalizeReadableMarkdown } from './readableMarkdown';
 
 function escapeCsvCell(value: string): string {
   const safeValue = value.replace(/"/g, '""');
@@ -140,7 +140,9 @@ export const markdownComponents = {
 };
 
 export const MarkdownBlock = memo(function MarkdownBlock({ content, className }: { content: string; className?: string }) {
-  const normalizedContent = useMemo(() => normalizeMarkdown(content), [content]);
+  // normalizeReadableMarkdown = normalizeMarkdown + 长段落拆句，
+  // 让"一大段一大段"的报告正文变成可阅读的短段落。
+  const normalizedContent = useMemo(() => normalizeReadableMarkdown(content), [content]);
 
   return (
       <div className={`markdown-body${className ? ` ${className}` : ''}`}>

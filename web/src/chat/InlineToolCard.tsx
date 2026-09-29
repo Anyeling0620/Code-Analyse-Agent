@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -18,39 +18,62 @@ function truncateResult(raw: string): string {
 }
 
 export const InlineToolCard = memo(function InlineToolCard({ tool }: { tool: ToolTrace }) {
+  // 一条历史回答可能带几百个工具卡片（真实数据里单条最多 400+ 个）。
+  // <details> 只是把内容视觉上收起来，DOM 和 Markdown 解析照样会跑，
+  // 所以这里改成"展开才渲染正文"，切换会话时不会再为每个工具结果解析一遍 Markdown。
+  const [userOpen, setUserOpen] = useState<boolean | null>(null);
+  const defaultOpen = tool.status === 'calling';
+  const expanded = userOpen ?? defaultOpen;
+
   const normalizedResult = useMemo(
-    () => normalizeMarkdown(truncateResult(tool.result), { looseTables: false }),
-    [tool.result],
+    () => (expanded ? normalizeMarkdown(truncateResult(tool.result), { looseTables: false }) : ''),
+    [expanded, tool.result],
   );
 
+  function handleToggle(event: React.SyntheticEvent<HTMLDetailsElement>) {
+    const next = event.currentTarget.open;
+    // 程序化的 open 变化（例如工具执行完成后自动收起）也会触发 toggle，
+    // 这类和受控值一致的事件要忽略，只把用户的手动切换记成覆写。
+    if (next === expanded) {
+      return;
+    }
+    setUserOpen(next);
+  }
+
   return (
-      <details className="tool-trace-card timeline-tool" open={tool.status === 'calling' || undefined}>
+      <details
+          className="tool-trace-card timeline-tool"
+          open={expanded || undefined}
+          onToggle={handleToggle}
+      >
         <summary className="tool-trace-header">
           <div className="tool-trace-title">
             <strong>{tool.name || 'unknown_tool'}</strong>
             <span className={`tool-status tool-status-${tool.status}`}>{tool.status === 'calling' ? '调用中...' : '已完成'}</span>
           </div>
         </summary>
-        <div className="tool-trace-content">
-          {tool.arguments && (
+        {expanded && (
+            <div className="tool-trace-content">
+              {tool.arguments && (
+                  <div className="tool-trace-block">
+                    <span className="tool-trace-label">参数</span>
+                    <pre className="tool-payload">{prettyPayload(tool.arguments)}</pre>
+                  </div>
+              )}
               <div className="tool-trace-block">
-                <span className="tool-trace-label">参数</span>
-                <pre className="tool-payload">{prettyPayload(tool.arguments)}</pre>
+                <span className="tool-trace-label">结果</span>
+                {tool.result ? (
+                    <div className="tool-trace-result markdown-body">
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
+                        {normalizedResult}
+                      </ReactMarkdown>
+                    </div>
+                ) : (
+                    <p className="tool-pending">等待工具返回结果...</p>
+                )}
               </div>
-          )}
-          <div className="tool-trace-block">
-            <span className="tool-trace-label">结果</span>
-            {tool.result ? (
-                <div className="tool-trace-result markdown-body">
-                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
-                    {normalizedResult}
-                  </ReactMarkdown>
-                </div>
-            ) : (
-                <p className="tool-pending">等待工具返回结果...</p>
-            )}
-          </div>
-        </div>
+            </div>
+        )}
       </details>
   );
 });

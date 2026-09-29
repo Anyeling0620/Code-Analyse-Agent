@@ -204,7 +204,6 @@ func (c *ComposeRunner) buildAnalyzerAgent() (tool.BaseTool, error) {
 		repo_analyzer.Options{
 			MaxIterations:         c.maxIterations.RepoAnalyzer,
 			SubAgentMaxIterations: c.maxIterations.RepoAnalyzerSubAgent,
-			Handlers:              c.agentHandler,
 		},
 	)
 	if err != nil {
@@ -222,7 +221,6 @@ func (c *ComposeRunner) buildProjectQaAgent() (tool.BaseTool, error) {
 		c.toolMiddleWare,
 		project_qa.Options{
 			MaxIterations: c.maxIterations.ProjectQA,
-			Handlers:      c.agentHandler,
 		},
 	)
 	if err != nil {
@@ -239,7 +237,6 @@ func (c *ComposeRunner) buildDBReportAgent() (tool.BaseTool, error) {
 		c.toolMiddleWare,
 		db_report.Options{
 			MaxIterations: c.maxIterations.DBReport,
-			Handlers:      c.agentHandler,
 		},
 	)
 	if err != nil {

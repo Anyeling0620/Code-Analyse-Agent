@@ -27,12 +27,6 @@ spec
 workspace
 .codex_tasks
 
-# 测试文件不纳入版本控制
-*_test.go
-*.test.js
-*.test.mjs
-*.test.ts
-*.test.tsx
 
 # 评测产物：可由 `go run ./eval/rag` 重跑生成，不入库
 eval/**/results*.json

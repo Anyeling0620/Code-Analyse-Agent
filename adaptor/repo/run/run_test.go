@@ -12,9 +12,9 @@ import (
 	"time"
 )
 
-// newTestDB 建一个临时 sqlite 库。
+// newRunRepoTestDB 建一个临时 sqlite 库。
 // Windows 下必须显式关连接池，否则 t.TempDir() 的清理会因为文件占用失败。
-func newTestDB(t *testing.T) *gorm.DB {
+func newRunRepoTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "run_test.db")), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
@@ -35,7 +35,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func newRun(runID, userID, sessionID, status string) *do.ChatRun {
+func sampleRun(runID, userID, sessionID, status string) *do.ChatRun {
 	now := time.Now()
 	return &do.ChatRun{
 		RunID:     runID,
@@ -51,9 +51,9 @@ func newRun(runID, userID, sessionID, status string) *do.ChatRun {
 
 func TestCreateAndGetRun(t *testing.T) {
 	ctx := context.Background()
-	repo := NewRunWithDB(newTestDB(t))
+	repo := NewRunWithDB(newRunRepoTestDB(t))
 
-	if err := repo.Create(ctx, newRun("run-1", "user-1", "session-1", do.RunStatusRunning)); err != nil {
+	if err := repo.Create(ctx, sampleRun("run-1", "user-1", "session-1", do.RunStatusRunning)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	got, err := repo.GetByID(ctx, "run-1")
@@ -104,9 +104,9 @@ func TestCreateAndGetRun(t *testing.T) {
 
 func TestGetByCheckpointID(t *testing.T) {
 	ctx := context.Background()
-	repo := NewRunWithDB(newTestDB(t))
+	repo := NewRunWithDB(newRunRepoTestDB(t))
 
-	item := newRun("run-1", "user-1", "session-1", do.RunStatusInterrupted)
+	item := sampleRun("run-1", "user-1", "session-1", do.RunStatusInterrupted)
 	item.CheckpointID = "cp-1"
 	if err := repo.Create(ctx, item); err != nil {
 		t.Fatalf("create: %v", err)
@@ -129,8 +129,8 @@ func TestGetByCheckpointID(t *testing.T) {
 
 func TestAppendEventAssignsMonotonicSeq(t *testing.T) {
 	ctx := context.Background()
-	repo := NewRunWithDB(newTestDB(t))
-	if err := repo.Create(ctx, newRun("run-1", "user-1", "session-1", do.RunStatusRunning)); err != nil {
+	repo := NewRunWithDB(newRunRepoTestDB(t))
+	if err := repo.Create(ctx, sampleRun("run-1", "user-1", "session-1", do.RunStatusRunning)); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -188,11 +188,11 @@ func TestAppendEventAssignsMonotonicSeq(t *testing.T) {
 
 func TestListEventsAfterIsolatesRuns(t *testing.T) {
 	ctx := context.Background()
-	repo := NewRunWithDB(newTestDB(t))
-	if err := repo.Create(ctx, newRun("run-1", "user-1", "session-1", do.RunStatusRunning)); err != nil {
+	repo := NewRunWithDB(newRunRepoTestDB(t))
+	if err := repo.Create(ctx, sampleRun("run-1", "user-1", "session-1", do.RunStatusRunning)); err != nil {
 		t.Fatalf("create run-1: %v", err)
 	}
-	if err := repo.Create(ctx, newRun("run-2", "user-1", "session-1", do.RunStatusRunning)); err != nil {
+	if err := repo.Create(ctx, sampleRun("run-2", "user-1", "session-1", do.RunStatusRunning)); err != nil {
 		t.Fatalf("create run-2: %v", err)
 	}
 	if _, err := repo.AppendEvent(ctx, "run-1", "session-1", "user-1", "delta", []byte(`{"type":"delta"}`)); err != nil {
@@ -213,13 +213,13 @@ func TestListEventsAfterIsolatesRuns(t *testing.T) {
 
 func TestMarkRunningAsInterrupted(t *testing.T) {
 	ctx := context.Background()
-	repo := NewRunWithDB(newTestDB(t))
+	repo := NewRunWithDB(newRunRepoTestDB(t))
 
 	for _, item := range []*do.ChatRun{
-		newRun("run-1", "user-1", "session-1", do.RunStatusRunning),
-		newRun("run-2", "user-2", "session-2", do.RunStatusRunning),
-		newRun("run-3", "user-3", "session-3", do.RunStatusDone),
-		newRun("run-4", "user-4", "session-4", do.RunStatusInterrupted),
+		sampleRun("run-1", "user-1", "session-1", do.RunStatusRunning),
+		sampleRun("run-2", "user-2", "session-2", do.RunStatusRunning),
+		sampleRun("run-3", "user-3", "session-3", do.RunStatusDone),
+		sampleRun("run-4", "user-4", "session-4", do.RunStatusInterrupted),
 	} {
 		if err := repo.Create(ctx, item); err != nil {
 			t.Fatalf("create %s: %v", item.RunID, err)

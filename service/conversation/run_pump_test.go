@@ -17,9 +17,9 @@ import (
 	"time"
 )
 
-// newTestService 构造一个只带 run 仓储与 broker 的 Service。
+// newRunPumpService 构造一个只带 run 仓储与 broker 的 Service。
 // 这些用例只验证"事件落库 + 广播 + 回放"这条链路，不需要模型/工具依赖。
-func newTestService(t *testing.T) (*Service, *runrepo.Run) {
+func newRunPumpService(t *testing.T) (*Service, *runrepo.Run) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "conv_run_test.db")), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
@@ -41,7 +41,7 @@ func newTestService(t *testing.T) (*Service, *runrepo.Run) {
 	return &Service{runs: repo, broker: newRunBroker()}, repo
 }
 
-func testRun(runID, status string) *do.ChatRun {
+func newRunPumpRun(runID, status string) *do.ChatRun {
 	now := time.Now()
 	return &do.ChatRun{
 		RunID:     runID,
@@ -55,7 +55,7 @@ func testRun(runID, status string) *do.ChatRun {
 	}
 }
 
-func testRunState(runID string) *dto.ChatRunState {
+func newRunPumpState(runID string) *dto.ChatRunState {
 	return &dto.ChatRunState{
 		UserID:      "user-1",
 		RunID:       runID,
@@ -65,7 +65,7 @@ func testRunState(runID string) *dto.ChatRunState {
 	}
 }
 
-func mustPublish(t *testing.T, svc *Service, ctx context.Context, runState *dto.ChatRunState, eventType string) dto.ChatStreamEvent {
+func publishRunEventOrFail(t *testing.T, svc *Service, ctx context.Context, runState *dto.ChatRunState, eventType string) dto.ChatStreamEvent {
 	t.Helper()
 	if err := svc.publishRunEvent(ctx, runState, dto.ChatStreamEvent{Type: eventType}); err != nil {
 		t.Fatalf("publish %s: %v", eventType, err)
@@ -74,16 +74,16 @@ func mustPublish(t *testing.T, svc *Service, ctx context.Context, runState *dto.
 }
 
 func TestPublishRunEventPersistsAndBroadcasts(t *testing.T) {
-	svc, repo := newTestService(t)
+	svc, repo := newRunPumpService(t)
 	ctx := context.Background()
-	if err := repo.Create(ctx, testRun("run-1", do.RunStatusRunning)); err != nil {
+	if err := repo.Create(ctx, newRunPumpRun("run-1", do.RunStatusRunning)); err != nil {
 		t.Fatalf("create run: %v", err)
 	}
 
 	live, cancel := svc.broker.Subscribe("run-1")
 	defer cancel()
 
-	runState := testRunState("run-1")
+	runState := newRunPumpState("run-1")
 	if err := svc.publishRunEvent(ctx, runState, dto.ChatStreamEvent{Type: "delta", Delta: "hello"}); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
@@ -123,16 +123,16 @@ func TestPublishRunEventPersistsAndBroadcasts(t *testing.T) {
 // TestPumpRunReplaysPersistedThenFollowsLive 覆盖最典型的断连续传场景：
 // 客户端错过的事件已经落库，重连后要把"历史 + 实时"无缝拼起来且不重复。
 func TestPumpRunReplaysPersistedThenFollowsLive(t *testing.T) {
-	svc, repo := newTestService(t)
+	svc, repo := newRunPumpService(t)
 	ctx := context.Background()
-	if err := repo.Create(ctx, testRun("run-1", do.RunStatusRunning)); err != nil {
+	if err := repo.Create(ctx, newRunPumpRun("run-1", do.RunStatusRunning)); err != nil {
 		t.Fatalf("create run: %v", err)
 	}
 
-	runState := testRunState("run-1")
+	runState := newRunPumpState("run-1")
 	// 订阅之前就已经产生（并落库）的事件。
-	mustPublish(t, svc, ctx, runState, "session")
-	mustPublish(t, svc, ctx, runState, "delta")
+	publishRunEventOrFail(t, svc, ctx, runState, "session")
+	publishRunEventOrFail(t, svc, ctx, runState, "delta")
 
 	var mu sync.Mutex
 	got := make([]int64, 0, 3)
@@ -148,7 +148,7 @@ func TestPumpRunReplaysPersistedThenFollowsLive(t *testing.T) {
 
 	// 等订阅生效后再发实时事件，模拟"断线期间执行仍在推进"。
 	time.Sleep(100 * time.Millisecond)
-	mustPublish(t, svc, ctx, runState, "done")
+	publishRunEventOrFail(t, svc, ctx, runState, "done")
 	svc.broker.Close("run-1")
 
 	select {
@@ -174,15 +174,15 @@ func TestPumpRunReplaysPersistedThenFollowsLive(t *testing.T) {
 
 // TestPumpRunAfterSeqOnlyReplaysTail 验证 after 游标语义：客户端只补缺失部分。
 func TestPumpRunAfterSeqOnlyReplaysTail(t *testing.T) {
-	svc, repo := newTestService(t)
+	svc, repo := newRunPumpService(t)
 	ctx := context.Background()
-	if err := repo.Create(ctx, testRun("run-1", do.RunStatusDone)); err != nil {
+	if err := repo.Create(ctx, newRunPumpRun("run-1", do.RunStatusDone)); err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	runState := testRunState("run-1")
-	first := mustPublish(t, svc, ctx, runState, "session")
-	mustPublish(t, svc, ctx, runState, "delta")
-	last := mustPublish(t, svc, ctx, runState, "done")
+	runState := newRunPumpState("run-1")
+	first := publishRunEventOrFail(t, svc, ctx, runState, "session")
+	publishRunEventOrFail(t, svc, ctx, runState, "delta")
+	last := publishRunEventOrFail(t, svc, ctx, runState, "done")
 
 	var got []int64
 	if err := svc.PumpRun(context.Background(), "run-1", first.Seq, func(event dto.ChatStreamEvent) error {
@@ -199,9 +199,9 @@ func TestPumpRunAfterSeqOnlyReplaysTail(t *testing.T) {
 // TestPumpRunClientDisconnectDoesNotAffectRun 是本次改造的核心断言：
 // 客户端断开只会让转发结束，run 本身继续处于 running 且事件照常落库。
 func TestPumpRunClientDisconnectDoesNotAffectRun(t *testing.T) {
-	svc, repo := newTestService(t)
+	svc, repo := newRunPumpService(t)
 	ctx := context.Background()
-	if err := repo.Create(ctx, testRun("run-1", do.RunStatusRunning)); err != nil {
+	if err := repo.Create(ctx, newRunPumpRun("run-1", do.RunStatusRunning)); err != nil {
 		t.Fatalf("create run: %v", err)
 	}
 
@@ -234,8 +234,8 @@ func TestPumpRunClientDisconnectDoesNotAffectRun(t *testing.T) {
 	}
 
 	// 断开之后执行仍然在推进：事件照常落库，重连能补齐。
-	runState := testRunState("run-1")
-	mustPublish(t, svc, ctx, runState, "delta")
+	runState := newRunPumpState("run-1")
+	publishRunEventOrFail(t, svc, ctx, runState, "delta")
 	events, err := repo.ListEventsAfter(ctx, "run-1", 0, 0)
 	if err != nil {
 		t.Fatalf("list events: %v", err)
@@ -248,13 +248,13 @@ func TestPumpRunClientDisconnectDoesNotAffectRun(t *testing.T) {
 // TestPumpRunSynthesizesErrorForInterruptedRun 覆盖进程重启留下的 run：
 // 没有任何终止事件，回放完必须补一条 error，避免客户端一直等。
 func TestPumpRunSynthesizesErrorForInterruptedRun(t *testing.T) {
-	svc, repo := newTestService(t)
+	svc, repo := newRunPumpService(t)
 	ctx := context.Background()
-	if err := repo.Create(ctx, testRun("run-1", do.RunStatusInterrupted)); err != nil {
+	if err := repo.Create(ctx, newRunPumpRun("run-1", do.RunStatusInterrupted)); err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	runState := testRunState("run-1")
-	mustPublish(t, svc, ctx, runState, "session")
+	runState := newRunPumpState("run-1")
+	publishRunEventOrFail(t, svc, ctx, runState, "session")
 
 	var got []dto.ChatStreamEvent
 	if err := svc.PumpRun(context.Background(), "run-1", 0, func(event dto.ChatStreamEvent) error {
@@ -279,16 +279,16 @@ func TestPumpRunSynthesizesErrorForInterruptedRun(t *testing.T) {
 // 中断后 run 还会继续产出"暂停占位 tool_result"和收尾 done，回放必须在
 // interrupt 处继续读下去，否则客户端永远等不到 done（而且会误判成断流重连）。
 func TestPumpRunReplaysFullStreamAcrossInterrupt(t *testing.T) {
-	svc, repo := newTestService(t)
+	svc, repo := newRunPumpService(t)
 	ctx := context.Background()
-	if err := repo.Create(ctx, testRun("run-1", do.RunStatusInterrupted)); err != nil {
+	if err := repo.Create(ctx, newRunPumpRun("run-1", do.RunStatusInterrupted)); err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	runState := testRunState("run-1")
-	mustPublish(t, svc, ctx, runState, "session")
-	mustPublish(t, svc, ctx, runState, consts.SseEventTypeInterrupt)
-	mustPublish(t, svc, ctx, runState, consts.SseEventTypeToolResult)
-	mustPublish(t, svc, ctx, runState, consts.SseEventTypeDone)
+	runState := newRunPumpState("run-1")
+	publishRunEventOrFail(t, svc, ctx, runState, "session")
+	publishRunEventOrFail(t, svc, ctx, runState, consts.SseEventTypeInterrupt)
+	publishRunEventOrFail(t, svc, ctx, runState, consts.SseEventTypeToolResult)
+	publishRunEventOrFail(t, svc, ctx, runState, consts.SseEventTypeDone)
 
 	var got []string
 	if err := svc.PumpRun(context.Background(), "run-1", 0, func(event dto.ChatStreamEvent) error {
@@ -310,14 +310,14 @@ func TestPumpRunReplaysFullStreamAcrossInterrupt(t *testing.T) {
 
 // TestPumpRunTerminalRunDoesNotSynthesizeError 正常跑完的 run 不应被补 error。
 func TestPumpRunTerminalRunDoesNotSynthesizeError(t *testing.T) {
-	svc, repo := newTestService(t)
+	svc, repo := newRunPumpService(t)
 	ctx := context.Background()
-	if err := repo.Create(ctx, testRun("run-1", do.RunStatusDone)); err != nil {
+	if err := repo.Create(ctx, newRunPumpRun("run-1", do.RunStatusDone)); err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	runState := testRunState("run-1")
-	mustPublish(t, svc, ctx, runState, "session")
-	mustPublish(t, svc, ctx, runState, "done")
+	runState := newRunPumpState("run-1")
+	publishRunEventOrFail(t, svc, ctx, runState, "session")
+	publishRunEventOrFail(t, svc, ctx, runState, "done")
 
 	var got []string
 	if err := svc.PumpRun(context.Background(), "run-1", 0, func(event dto.ChatStreamEvent) error {

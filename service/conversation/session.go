@@ -83,7 +83,7 @@ func (s *Service) persistSession(ctx context.Context, session *dto.SessionContex
 			CreatedAt: time.Now(),
 		})
 		if err != nil {
-			logger.Error("persistSession AppendMessage error", zap.Any("session", session), zap.Any("runState", runState))
+			logger.Error("persistSession AppendMessage error", zap.Any("session", session), runStateBrief(runState))
 			return err
 		}
 		if runState.Answer != "" {
@@ -98,7 +98,7 @@ func (s *Service) persistSession(ctx context.Context, session *dto.SessionContex
 				CreatedAt:    time.Now(),
 			})
 			if err != nil {
-				logger.Error("persistSession AppendMessage error", zap.Any("session", session), zap.Any("runState", runState), zap.Any("renderEvents", renderEvents))
+				logger.Error("persistSession AppendMessage error", zap.Any("session", session), runStateBrief(runState), zap.Any("renderEvents", renderEvents))
 				return err
 			}
 		}
@@ -112,7 +112,7 @@ func (s *Service) persistSession(ctx context.Context, session *dto.SessionContex
 	_ = copier.Copy(&doSession, session)
 
 	if err := s.sessions.Upsert(ctx, &doSession); err != nil {
-		logger.Error("persistSession Upsert error", zap.Any("session", session), zap.Any("runState", runState), zap.Any("doSession", doSession))
+		logger.Error("persistSession Upsert error", zap.Any("session", session), runStateBrief(runState), zap.Any("doSession", doSession))
 		return err
 	}
 	return nil

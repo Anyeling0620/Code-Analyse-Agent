@@ -503,7 +503,7 @@ func (s *Service) executeRun(ctx context.Context, prep *chatRunPrep) (*dto.ChatR
 	err := s.consumeAgentEvents(ctx, iter, runState, emitRun)
 	// 保存会话 就算中断报错了 也要把 runState 存起来
 	if err != nil {
-		logger.Error("run failed", zap.Error(err), zap.String("run_id", prep.runID), zap.Any("runState", runState))
+		logger.Error("run failed", zap.Error(err), zap.String("run_id", prep.runID), runStateBrief(runState))
 		if persistErr := s.persistSession(ctx, prep.session, runState); persistErr != nil {
 			logger.Error("persistSession failed", zap.Error(persistErr), zap.String("run_id", prep.runID))
 		}

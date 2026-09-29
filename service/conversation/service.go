@@ -110,7 +110,7 @@ func (s *Service) trackUsage(
 		logger.Error("cost.Track err",
 			zap.Any("modelName", s.modelName),
 			zap.Any("agentName", agentName),
-			zap.Any("runState", runState),
+			runStateBrief(runState),
 			zap.Any("msg", msg),
 			zap.Error(err))
 		return err

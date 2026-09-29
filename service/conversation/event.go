@@ -22,7 +22,7 @@ func (s *Service) consumeAgentEvents(
 	emit ChatEmit) error {
 	for event, ok := iter.Next(); ok; event, ok = iter.Next() {
 		if event.Err != nil {
-			logger.Error("consumeAgentEvents error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(event.Err))
+			logger.Error("consumeAgentEvents error", zap.Any("event", event), runStateBrief(runState), zap.Error(event.Err))
 			// 达到最大迭代次数不是"执行失败"：此时模型往往已经产出了大半结论，
 			// 直接按错误返回会把这份半成品丢掉，用户只看到一个错误气泡。
 			// 这里改为强制收尾，把已有内容当部分报告下发，让上层照常走 done 与落库。
@@ -34,14 +34,20 @@ func (s *Service) consumeAgentEvents(
 			if emit != nil {
 				err := emitMarkDownBlock(emit, runState, consts.SseEventTypeError, event.AgentName, event.Err.Error())
 				if err != nil {
-					logger.Error("consumeAgentEvents emitMarkdownBlock error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+					logger.Error("consumeAgentEvents emitMarkdownBlock error", zap.Any("event", event), runStateBrief(runState), zap.Error(err))
 					return err
 				}
 			}
 			return event.Err
 		}
-		logger.Info("consumeAgentEvents start", zap.Any("event", iter), zap.Any("runState", runState))
-		if event.Action != nil && event.Action.Interrupted != nil {
+		interruptedAction := event.Action != nil && event.Action.Interrupted != nil
+		// 原来这里打的是迭代器本身（zap.Any("event", iter)），既没有信息量又每事件一次；
+		// 换成 agent + 是否中断动作这两个标量。
+		logger.Info("consumeAgentEvents start",
+			zap.String("agent", event.AgentName),
+			zap.Bool("interrupted_action", interruptedAction),
+			runStateBrief(runState))
+		if interruptedAction {
 			// TODO 这里发生了中断 需要进入中断处理 恢复可以返回
 			return s.handleInterruptedEvent(ctx, event, runState, emit)
 		}
@@ -53,10 +59,10 @@ func (s *Service) consumeAgentEvents(
 			// 处理流式内容
 			err := s.consumeMessageStream(ctx, output, event, runState, emit)
 			if err != nil {
-				logger.Error("consumeAgentEvents consumeMessageStream error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+				logger.Error("consumeAgentEvents consumeMessageStream error", zap.Any("event", event), runStateBrief(runState), zap.Error(err))
 				err = emitMarkDownBlock(emit, runState, consts.SseEventTypeError, event.AgentName, err.Error())
 				if err != nil {
-					logger.Error("consumeAgentEvents emitMarkDownBlock error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+					logger.Error("consumeAgentEvents emitMarkDownBlock error", zap.Any("event", event), runStateBrief(runState), zap.Error(err))
 				}
 				return err
 			}
@@ -65,7 +71,7 @@ func (s *Service) consumeAgentEvents(
 		// 如果不是流式
 		msg, err := output.GetMessage()
 		if err != nil {
-			logger.Error("consumeAgentEvents getMessage error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+			logger.Error("consumeAgentEvents getMessage error", zap.Any("event", event), runStateBrief(runState), zap.Error(err))
 			return err
 		}
 		// 处理消息
@@ -183,7 +189,7 @@ func (s *Service) handleMessage(
 	// TODO 记录 token 消耗
 	err := s.trackUsage(ctx, runState, msg, event.AgentName)
 	if err != nil {
-		logger.Error("handleMessage trackUsage error", zap.Any("runState", runState), zap.Any("err", err))
+		logger.Error("handleMessage trackUsage error", runStateBrief(runState), zap.Any("err", err))
 		// 不要中断
 	}
 	if len(msg.ToolCalls) > 0 {
@@ -243,7 +249,7 @@ func (s *Service) handleToolCallResult(msg *schema.Message, runState *dto.ChatRu
 
 	if emit != nil {
 		if err := emit(emitEvent); err != nil {
-			logger.Error("handleMessage emitEvent error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+			logger.Error("handleMessage emitEvent error", zap.Any("event", event), runStateBrief(runState), zap.Error(err))
 			return err
 		}
 	}
@@ -258,7 +264,7 @@ func (s *Service) handleToolCall(emit ChatEmit, runState *dto.ChatRunState, even
 		event.AgentName,
 		msg.Content)
 	if err != nil {
-		logger.Error("handleToolCall error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+		logger.Error("handleToolCall error", zap.Any("event", event), runStateBrief(runState), zap.Error(err))
 
 		return err
 	}
@@ -290,7 +296,7 @@ func (s *Service) handleToolCall(emit ChatEmit, runState *dto.ChatRunState, even
 
 		if emit != nil {
 			if err := emit(emitEvent); err != nil {
-				logger.Error("handleToolCall emitEvent error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+				logger.Error("handleToolCall emitEvent error", zap.Any("event", event), runStateBrief(runState), zap.Error(err))
 				return err
 			}
 		}
@@ -328,7 +334,7 @@ func (s *Service) handleInterruptedEvent(
 		if s.approvals != nil {
 			err := s.approvals.BindInterrupt(ctx, info.PendingID, info.CheckpointID, interruptCtx.ID)
 			if err != nil {
-				logger.Error("handleInterrupt error", zap.Any("event", event), zap.Any("runState", runState), zap.Any("info", info), zap.Error(err))
+				logger.Error("handleInterrupt error", zap.Any("event", event), runStateBrief(runState), zap.Any("info", info), zap.Error(err))
 				return err
 			}
 		}
@@ -355,7 +361,7 @@ func (s *Service) handleInterruptedEvent(
 		if emit != nil {
 			err := emit(interruptEvent)
 			if err != nil {
-				logger.Error("handleInterruptedEvent interruptedEvent emit error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+				logger.Error("handleInterruptedEvent interruptedEvent emit error", zap.Any("event", event), runStateBrief(runState), zap.Error(err))
 				return err
 			}
 		}
@@ -375,7 +381,7 @@ func (s *Service) handleInterruptedEvent(
 		if emit != nil {
 			err := emit(pauseEvent)
 			if err != nil {
-				logger.Error("handleInterruptedEvent pauseEvent emit error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(err))
+				logger.Error("handleInterruptedEvent pauseEvent emit error", zap.Any("event", event), runStateBrief(runState), zap.Error(err))
 				return err
 			}
 		}

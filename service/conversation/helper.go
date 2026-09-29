@@ -5,7 +5,34 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 )
+
+// runStateBrief 把一轮运行状态压成一行标量摘要，供日志使用。
+//
+// 不要直接把 runState 交给 zap.Any：它的 RenderEvents 会随轮次线性累积，
+// 而 consumeAgentEvents 这条路径的日志是"每个事件一次"的高频调用，
+// 每次都整份序列化会退化成 O(n²) 的日志放大（实测单轮可到 MB 级）。
+//
+// 这里只保留定位问题需要的标量：谁（run/session/trace）、产出多少
+// （提问/回答的字符数）、事件条数、以及中断与降级两个状态位。
+func runStateBrief(runState *dto.ChatRunState) zap.Field {
+	if runState == nil {
+		return zap.String("run_state", "nil")
+	}
+	return zap.String("run_state", fmt.Sprintf(
+		"run_id=%s session_id=%s trace_id=%s question_runes=%d answer_runes=%d render_events=%d interrupted=%t degraded=%t",
+		runState.RunID,
+		runState.SessionID,
+		runState.TraceID,
+		len([]rune(runState.Question)),
+		len([]rune(runState.Answer)),
+		len(runState.RenderEvents),
+		runState.Interrupted,
+		runState.Degraded,
+	))
+}
 
 func appendIfMissing(slice []string, s string) []string {
 	if len(s) == 0 {

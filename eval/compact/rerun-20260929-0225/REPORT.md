@@ -1,5 +1,7 @@
 # 上下文压缩真实模型评估（feat-compact）
 
+> **中间产物，已被取代**：结论见最终版对比报告 [`eval/compact/REPORT.md`](../REPORT.md)。
+
 - 生成时间：2026-09-29T02:25:08+08:00
 - 摘要模型：`deepseek-flash` @ `https://api.deepseek.com`（真实网络调用）
 - token 口径：token 为 runes/4+1 估算口径，仅用于压缩前后相对比较；真实 token 见 usage 字段。

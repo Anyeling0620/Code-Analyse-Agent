@@ -1,5 +1,7 @@
 # 上下文压缩摘要保真与幻觉审计（feat-compact，真实模型）
 
+> **中间产物，已被取代**：v1 两臂审计，结论见最终版对比报告 [`eval/compact/REPORT.md`](../REPORT.md)。
+
 - 生成时间：2026-09-29T02:17:18+08:00
 - 模型：`deepseek-flash` @ `https://api.deepseek.com`（真实网络调用）
 - token 口径：token 为 runes/4+1 估算口径，仅用于压缩前后相对比较；真实 token 见 usage 字段。

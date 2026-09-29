@@ -1,5 +1,7 @@
 # 上下文压缩「前后幻觉」三臂对照报告（feat-compact，真实模型）
 
+> **已被取代**：数据已并入最终版对比报告 [`eval/compact/REPORT.md`](../REPORT.md) 第 2～8 节，结论以那份为准；本文件仅保留以便追溯。
+
 - 生成时间：2026-09-29T13:59:25+08:00
 - 模型：`deepseek-flash` @ `https://api.deepseek.com`（真实网络调用）
 - 对照臂：

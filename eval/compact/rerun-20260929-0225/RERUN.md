@@ -1,5 +1,7 @@
 # 上下文压缩真实模型评估 —— 独立复跑（feat-compact）
 
+> **中间产物，已被取代**：结论见最终版对比报告 [`eval/compact/REPORT.md`](../REPORT.md)。
+
 - 生成时间：2026-09-29T02:25:08+08:00
 - 摘要模型：`deepseek-flash` @ `https://api.deepseek.com`（真实网络调用）
 - 复跑命令：`go run ./eval/compact -config "C:/FullStack/Code Analyse Agent/agent_code_local.yml" -out eval/compact/rerun-20260929-0225`

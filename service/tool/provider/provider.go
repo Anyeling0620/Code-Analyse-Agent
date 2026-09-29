@@ -5,6 +5,7 @@ import (
 	"edu.agent.code/adaptor"
 	"edu.agent.code/adaptor/vector"
 	"edu.agent.code/config"
+	"edu.agent.code/service/rag"
 	"edu.agent.code/service/tool/rag_retriever"
 	"errors"
 	"fmt"
@@ -79,6 +80,8 @@ func (p *Provider) RetrieverTool(ctx context.Context) (tool.BaseTool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return rag_retriever.NewTool(store)
-
+	// 中文查询改写默认关闭：rewrite.enabled=false 时 NewQueryRewriter 返回 nil，
+	// 工具行为与"没有改写节点"完全一致（见 service/rag/rewrite.go）。
+	rewriter := rag.NewQueryRewriter(p.conf.RAG.Rewrite, p.conf.DeepSeek)
+	return rag_retriever.NewTool(store, rag_retriever.WithQueryRewriter(rewriter))
 }

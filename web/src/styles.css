@@ -191,8 +191,11 @@ button {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 0.8rem;
+  /* 状态/工具胶囊：字号提一档并加中粗，避免绿色小字在浅灰底上发虚看不清。 */
+  padding: 7px 12px;
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 .badge {
@@ -754,9 +757,10 @@ button {
 
 .markdown-body :not(pre) > code {
   background: rgba(36, 69, 57, 0.08);
-  padding: 0.12rem 0.4rem;
+  padding: 0.15rem 0.4rem;
   border-radius: 8px;
-  font-size: 0.92em;
+  font-size: 1.2em;
+  font-weight: lighter;
   color: #0d8f70;
   border: 1px solid rgba(13, 13, 13, 0.16);
 }
@@ -1072,8 +1076,10 @@ button {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 4px 9px;
-  font-size: 0.78rem;
+  padding: 5px 11px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 .tool-status-calling {
@@ -1727,4 +1733,561 @@ button {
   font-size: 0.88rem;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+/* ===== 会话只读分享 ===== */
+
+/* 会话列表里的「分享」按钮：与删除按钮同层，右移一点避免和 × 重叠。 */
+.session-share-button {
+  position: absolute;
+  top: 50%;
+  right: 30px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.96) 34%);
+  color: var(--text-soft);
+  font-size: 0.86rem;
+  line-height: 1;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 140ms ease, border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.session-item:hover .session-share-button,
+.session-item:focus-within .session-share-button,
+.session-item-active .session-share-button {
+  opacity: 1;
+}
+
+.session-share-button:hover:not(:disabled) {
+  border-color: rgba(16, 163, 127, 0.24);
+  background: rgba(16, 163, 127, 0.10);
+  color: var(--accent);
+}
+
+/* 悬停时同时露出「分享」和「删除」两个按钮，给标题多留一点右侧空间。 */
+.session-item:hover .session-item-main,
+.session-item:focus-within .session-item-main,
+.session-item-active .session-item-main {
+  padding-right: 58px;
+}
+
+.session-share-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.share-notice {
+  color: var(--wechat-dark);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+/* 公开只读分享页：独立布局，不复用登录态的左右两栏。 */
+.share-page {
+  display: grid;
+  /* 单列必须显式约束成容器宽度：否则 .share-page-title 的 nowrap 会让网格列按该标题的
+     max-content 宽度撑开（长会话标题可达数千 px），内容被推到视口外、再被 overflow:hidden
+     裁掉，整页看起来一片空白。 */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+          radial-gradient(circle at top left, rgba(16, 163, 127, 0.06), transparent 30%),
+          linear-gradient(180deg, #ffffff 0%, #f7f7f8 100%);
+}
+
+.share-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 24px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(6px);
+}
+
+.share-page-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  width: min(var(--chat-content-width), 100%);
+  margin: 0 auto;
+}
+
+.share-page-banner-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 11px;
+  background: rgba(16, 163, 127, 0.12);
+  border: 1px solid rgba(16, 163, 127, 0.26);
+  color: var(--wechat-dark);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.share-page-banner-text {
+  color: var(--text-soft);
+  font-size: 0.84rem;
+}
+
+.share-page-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(var(--chat-content-width), 100%);
+  margin: 0 auto;
+}
+
+.share-page-title {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #0d0d0d;
+  font-size: 1.1rem;
+  line-height: 1.3;
+}
+
+.share-page-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.share-page-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(13, 13, 13, 0.10);
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: rgba(13, 13, 13, 0.04);
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+
+.share-page-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-width: 0;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(13, 13, 13, 0.28) rgba(13, 13, 13, 0.06);
+}
+
+.share-page-scroll::-webkit-scrollbar {
+  height: 12px;
+  width: 12px;
+}
+
+.share-page-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(147, 161, 181, 0.76), rgba(111, 123, 142, 0.78));
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.share-page-scroll::-webkit-scrollbar-track {
+  background: rgba(20, 26, 33, 0.28);
+  border-radius: 999px;
+}
+
+.share-page-state {
+  width: min(var(--chat-content-width), calc(100% - 64px));
+  margin: 24px auto;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.share-page-error {
+  color: var(--danger);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   项目分析导出：右侧电梯导航
+
+   形态对齐对话站点的"电梯"：静息时是一列细横条，没有外框也没有数字，
+   悬停时横条变长，当前那条是拉长的蓝色胶囊。颜色语义：
+     灰色 = 普通消息；金色 = 可导出（项目分析回答）；蓝色 = 当前阅读位置。
+   导航固定在窗口右侧的空白区，不参与对话滚动。
+   ──────────────────────────────────────────────────────────────── */
+
+.elevator-nav {
+  position: fixed;
+  top: 50%;
+  right: 18px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-height: 76vh;
+  padding: 8px 6px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: translateY(-50%);
+}
+
+/* 电梯导航是浮在右侧空白上的固定层，正文需要主动让出这段宽度，
+   否则在中等宽度窗口里横条会压在消息气泡上（断点与导航的收窄/隐藏保持一致）。 */
+.conversation-scroll.has-elevator {
+  padding-right: 64px;
+}
+
+.elevator-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  overflow-y: auto;
+  padding: 2px 4px;
+  scrollbar-width: none;
+}
+
+.elevator-list::-webkit-scrollbar {
+  display: none;
+}
+
+.elevator-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 按钮只负责命中区域，可见形态全部交给里面的横条 */
+.elevator-item {
+  display: grid;
+  place-items: center;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.elevator-bar {
+  display: block;
+  width: 14px;
+  height: 3px;
+  border-radius: 999px;
+  background: #dedede;
+  transition: width 0.16s ease, height 0.16s ease, background 0.16s ease;
+}
+
+.elevator-item:hover .elevator-bar {
+  width: 22px;
+  background: #b9b9b9;
+}
+
+/* 金色：可导出的项目分析回答 */
+.elevator-item-exportable .elevator-bar {
+  background: #e6b422;
+}
+
+.elevator-item-exportable:hover .elevator-bar {
+  background: #d8a209;
+}
+
+/* 蓝色：当前阅读位置。写在金色之后，两者同时命中时蓝色优先。 */
+.elevator-item-active .elevator-bar {
+  width: 22px;
+  height: 4px;
+  background: #3b5bfd;
+}
+
+.elevator-item-active:hover .elevator-bar {
+  width: 24px;
+  background: #2f4ff0;
+}
+
+.export-menu {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 104px;
+  padding: 4px;
+  border: 1px solid rgba(13, 13, 13, 0.10);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.16);
+  /* 以锚点为右下角：向右对齐、向下展开 */
+  transform: translate(-100%, 0);
+}
+
+.export-menu button {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #0d0d0d;
+  font-size: 0.76rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.export-menu button:hover {
+  background: rgba(13, 13, 13, 0.06);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   项目分析导出：可导出回答卡片上的导出入口
+
+   常显（比复制按钮显眼），但用低饱和金色胶囊，避免打断阅读。
+   位置在复制按钮左侧：复制按钮占 right: 8px + 22px 宽。
+   ──────────────────────────────────────────────────────────────── */
+
+.message-export-button {
+  position: absolute;
+  top: 8px;
+  right: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid rgba(196, 146, 14, 0.42);
+  border-radius: 999px;
+  background: rgba(247, 205, 80, 0.20);
+  color: #8a6300;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1;
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.message-export-button:hover {
+  border-color: rgba(196, 146, 14, 0.72);
+  background: rgba(245, 197, 60, 0.42);
+  box-shadow: 0 4px 14px rgba(196, 146, 14, 0.22);
+}
+
+.message-export-caret {
+  font-size: 0.58rem;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+/* 导出按钮压在右上角，给同一行的工具 chip 让出位置，避免长 chip 列表顶到一起 */
+.message-exportable .message-meta {
+  padding-right: 104px;
+}
+
+/* 窄屏时对话正文会顶到这一列，收窄并降透明度，悬停时再完全显形 */
+@media (max-width: 1200px) {
+  .elevator-nav {
+    right: 8px;
+    opacity: 0.7;
+  }
+
+  .conversation-scroll.has-elevator {
+    padding-right: 52px;
+  }
+
+  .elevator-nav:hover,
+  .elevator-nav:focus-within {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .elevator-nav {
+    display: none;
+  }
+
+  .conversation-scroll.has-elevator {
+    padding-right: 2px;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   项目分析导出：PDF 打印样式
+
+   屏幕上隐藏打印文档，只在打印时显示；打印时把整个应用外壳摘掉，
+   保证导出内容之外没有任何界面元素进入 PDF。
+   ──────────────────────────────────────────────────────────────── */
+
+.export-print-root {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+
+  html,
+  body,
+  #root {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+
+  .app-shell {
+    display: none !important;
+  }
+
+  .export-print-root {
+    display: block !important;
+    color: #0d0d0d;
+    background: #ffffff;
+  }
+
+  .export-print-header h1 {
+    margin: 0 0 6px;
+    font-size: 1.6rem;
+  }
+
+  .export-print-header p {
+    margin: 0 0 18px;
+    color: #6b6b6b;
+    font-size: 0.78rem;
+  }
+
+  .export-print-entry {
+    margin-bottom: 22px;
+  }
+
+  /* 打印稿用纯白底，去掉气泡阴影和圆角，避免大面积色块浪费墨水 */
+  .export-print-root .message {
+    width: 100%;
+    margin: 0 0 12px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  .export-print-question .plain-text {
+    padding-left: 10px;
+    border-left: 3px solid rgba(13, 13, 13, 0.18);
+    color: #3c3c3c;
+  }
+
+  /* 交互控件对 PDF 没有意义 */
+  .export-print-root .message-copy-button,
+  .export-print-root .code-block-copy-button,
+  .export-print-root .markdown-table-download-button,
+  .export-print-root .mermaid-download-bar {
+    display: none !important;
+  }
+
+  /* 代码块是深色背景，不显式声明就会被打印成白底白字 */
+  .export-print-root .code-block-shell,
+  .export-print-root .idea-code-block {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .export-print-root .markdown-body {
+    line-height: 1.55;
+  }
+
+  .export-print-root .markdown-body pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* 长表格跨页时重复表头，单行/单图/单代码块不跨页断开 */
+  .export-print-root .markdown-body thead {
+    display: table-header-group;
+  }
+
+  .export-print-root .markdown-body tr,
+  .export-print-root .markdown-body img,
+  .export-print-root .mermaid-diagram,
+  .export-print-root .markdown-body pre {
+    page-break-inside: avoid;
+  }
+
+  .export-print-root .markdown-body h1,
+  .export-print-root .markdown-body h2,
+  .export-print-root .markdown-body h3 {
+    page-break-after: avoid;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   PDF 导出：准备阶段的等待提示
+
+   点「导出 PDF」后，打印文档要挂载、Mermaid 图要出图（0.5~2.5s），
+   这段时间原本没有任何界面反馈，用户会以为没反应。
+
+   遮罩渲染在 .app-shell 内部，而打印媒体下 .app-shell 整块 display:none，
+   所以它不会被带进 PDF；末尾的 @media print 只是再加一道保险。
+   ──────────────────────────────────────────────────────────────── */
+
+.print-wait-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 28, 24, 0.42);
+  backdrop-filter: blur(4px);
+}
+
+.print-wait-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 260px;
+  max-width: min(420px, 92vw);
+  padding: 22px 28px;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(24, 35, 31, 0.24);
+  text-align: center;
+}
+
+.print-wait-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid rgba(16, 163, 127, 0.22);
+  border-top-color: var(--accent);
+  animation: print-wait-spin 0.8s linear infinite;
+}
+
+@keyframes print-wait-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.print-wait-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0d0d0d;
+}
+
+.print-wait-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+@media print {
+  .print-wait-overlay {
+    display: none !important;
+  }
 }

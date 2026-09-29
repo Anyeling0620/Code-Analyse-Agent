@@ -36,7 +36,10 @@ type Milvus struct {
 	retriever  *milvusretriever.Retriever
 	conf       config.RAG
 	reranker   IReranker
-	topN       int
+	// candidateK 是融合后保留的候选池大小（重排的输入条数）。
+	candidateK int
+	// topN 是重排后保留的条数上限。
+	topN int
 	// TODO 如果知道是哪个模块 可以直接传一个模块 “更快更准？”
 }
 
@@ -71,6 +74,17 @@ func withDefault(conf config.RAG) config.RAG {
 	}
 	if conf.Milvus.MetricsType == "" {
 		conf.Milvus.MetricsType = defaultMetricType
+	}
+	// 候选池相关配置缺省时回落到 TopK，保证"未配置 = 与旧行为一致"。
+	// 注意顺序：先补 TopK 默认值，再让它兜底其它三个字段。
+	if conf.Milvus.DenseTopK <= 0 {
+		conf.Milvus.DenseTopK = conf.TopK
+	}
+	if conf.Milvus.SparseTopK <= 0 {
+		conf.Milvus.SparseTopK = conf.TopK
+	}
+	if conf.Milvus.CandidateK <= 0 {
+		conf.Milvus.CandidateK = conf.TopK
 	}
 	return conf
 }
@@ -113,8 +127,15 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 	for _, opt := range opts {
 		opt(milvusOpt)
 	}
-	if milvusOpt.reranker != nil && conf.Rerank.TopN > 0 {
-		conf.TopK = max(conf.TopK, conf.Rerank.TopN)
+	// rerank 是否真正参与，由 Rerank.Enabled 决定：只注入 reranker 但配置里关闭重排时，
+	// 这里直接丢弃它，让 Retrieve 走"不重排"的分支。
+	reranker := milvusOpt.reranker
+	if !conf.Rerank.Enabled {
+		reranker = nil
+	}
+	// 候选池至少要装得下重排想保留的条数，否则重排拿不到足够候选。
+	if reranker != nil && conf.Rerank.TopN > conf.Milvus.CandidateK {
+		conf.Milvus.CandidateK = conf.Rerank.TopN
 	}
 	metricType := parseMetricType(conf.Milvus.MetricsType)
 	partition := strings.TrimSpace(conf.Milvus.Partition)
@@ -130,7 +151,9 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 			client:     client,
 			collection: conf.Milvus.Collection,
 			retriever:  newRetriever,
-			reranker:   milvusOpt.reranker,
+			conf:       conf,
+			reranker:   reranker,
+			candidateK: conf.Milvus.CandidateK,
 			topN:       conf.Rerank.TopN,
 		}, nil
 	}
@@ -161,7 +184,8 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 		indexer:    indexer,
 		retriever:  newRetriever,
 		conf:       conf,
-		reranker:   milvusOpt.reranker,
+		reranker:   reranker,
+		candidateK: conf.Milvus.CandidateK,
 		topN:       conf.Rerank.TopN,
 	}
 	return m, nil
@@ -180,13 +204,15 @@ func buildRetrieverConfig(
 	collection, partition string,
 	metricType milvusindexer.MetricType,
 	embedder *openaiembedding.Embedder) *milvusretriever.RetrieverConfig {
+	// 融合/单路检索的候选池：hybrid 时由 dense_top_k / sparse_top_k 决定两路召回的宽度，
+	// RRF 融合后保留 candidate_k 条；非 hybrid 时只有一路，直接取 candidate_k。
 	retrieverConfig := &milvusretriever.RetrieverConfig{
 		Client:       cli,
 		Collection:   collection,
 		Partitions:   partitionList(partition),
 		VectorField:  defaultVectorFiled,
 		OutputFields: []string{fieldID, fieldContent, defaultMetadataFiled},
-		TopK:         conf.TopK,
+		TopK:         conf.Milvus.CandidateK,
 		SearchMode:   search_mode.NewApproximate(milvusretriever.MetricType(metricType)),
 		Embedding:    embedder,
 	}
@@ -196,13 +222,13 @@ func buildRetrieverConfig(
 			&search_mode.SubRequest{
 				VectorField: defaultVectorFiled,
 				MetricType:  milvusretriever.MetricType(metricType),
-				TopK:        conf.TopK,
+				TopK:        conf.Milvus.DenseTopK,
 				VectorType:  milvusretriever.DenseVector,
 			},
 			&search_mode.SubRequest{
 				VectorField: defaultSparseVectorFiled,
 				MetricType:  milvusretriever.BM25,
-				TopK:        conf.TopK,
+				TopK:        conf.Milvus.SparseTopK,
 				VectorType:  milvusretriever.SparseVector,
 			},
 		)
@@ -234,7 +260,16 @@ func buildIndexerConfig(
 			MetricType:  milvusindexer.BM25,
 			Method:      milvusindexer.SparseMethodAuto,
 		}
-		// TODO 怎么去验证他用中文进行稀疏向量后的结果
+		// analyzer_params 选择 chinese（jieba）而非 standard，是实测对比后的结论：
+		//   1) chinese 不会把代码标识符切碎——查询 getUserInfoByPhone 能命中含有该标识符的文档，
+		//      而查询 phone 只命中把它当独立单词的文档，说明整标识符被当作一个 token 保留；
+		//   2) 中文查询只有 chinese 能召回——查询"鉴权"在 chinese 下命中，standard 会把 CJK
+		//      逐字切分，导致完全召不回；
+		//   3) 两者都做不到 camelCase 子词匹配：查询 getUserInfo 都召不回 getUserInfoByPhone，
+		//      这部分语义目前依赖 dense 向量兜底。
+		// 因此这里保持 chinese；若要支持子词匹配，需要另外引入标识符展开/自定义 tokenizer，
+		// 不能靠换成 standard 解决。
+		// 注意：analyzer 是建集合时写进 schema 的，改动这里必须重建 collection 才会生效。
 		indexerConfig.FieldParams = map[string]map[string]string{
 			fieldContent: {
 				"enable_analyzer": "true",
@@ -260,12 +295,28 @@ func (m *Milvus) Retrieve(ctx context.Context, query string, opts ...retriever.O
 	if m == nil || m.retriever == nil {
 		return nil, nil
 	}
-	docs, err := m.retriever.Retrieve(ctx, query, opts...)
+	// 调用方用 retriever.WithTopK 表达的是"最终想要几条"。候选池（融合阶段保留的条数）
+	// 由 candidate_k 决定，两者解耦：这里把检索时的 TopK 兜到 max(candidate_k, 调用方 TopK)，
+	// 避免调用方传 5/10 时把单路召回面和融合结果一起压小——那正是 hybrid F@20 反而低于
+	// dense 单路的原因（融合后只剩下 TopK 条，单路本来能召回的目标被截掉）。
+	// 后追加的同名 option 会覆盖先前的，所以直接 append 就能保证生效。
+	requested := retriever.GetCommonOptions(&retriever.Options{}, opts...).TopK
+	pool := m.candidateK
+	if requested != nil && *requested > pool {
+		pool = *requested
+	}
+	searchOpts := make([]retriever.Option, 0, len(opts)+1)
+	searchOpts = append(searchOpts, opts...)
+	if pool > 0 {
+		searchOpts = append(searchOpts, retriever.WithTopK(pool))
+	}
+	docs, err := m.retriever.Retrieve(ctx, query, searchOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("Milvus_Retrieve: %w", err)
 	}
-	if m.reranker == nil {
-		return docs, nil
+	// 重排关闭（未注入 reranker，或配置里 rerank.enabled=false）时直接返回候选池。
+	if m.reranker == nil || !m.conf.Rerank.Enabled {
+		return limitDocs(docs, requested), nil
 	}
 
 	// 召回后的数据重排
@@ -273,11 +324,19 @@ func (m *Milvus) Retrieve(ctx context.Context, query string, opts ...retriever.O
 	if err != nil {
 		logger.Error("Milvus Retrieve Rerank", zap.Error(err), zap.String("query", query), zap.Int("topN", m.topN))
 		if m.topN >= len(docs) {
-			return docs, nil
+			return limitDocs(docs, requested), nil
 		}
-		return docs[:m.topN], nil
+		return limitDocs(docs[:m.topN], requested), nil
 	}
-	return reranked, nil
+	return limitDocs(reranked, requested), nil
+}
+
+// limitDocs 在调用方显式给出 TopK 时，把结果裁剪到该条数；未给出时原样返回。
+func limitDocs(docs []*schema.Document, topK *int) []*schema.Document {
+	if topK == nil || *topK <= 0 || len(docs) <= *topK {
+		return docs
+	}
+	return docs[:*topK]
 }
 func (m *Milvus) Close() error {
 	if m == nil || m.client == nil {

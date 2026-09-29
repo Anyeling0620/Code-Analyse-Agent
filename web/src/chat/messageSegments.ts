@@ -13,6 +13,7 @@ export function messageRecordToChatMessage(record: ChatMessageRecord): ChatMessa
     segments: [],
     traceEvents: [],
     status: 'done',
+    createdAt: record.created_at,
   };
 
   if (record.role !== 'assistant') {
@@ -29,7 +30,7 @@ export function messageRecordToChatMessage(record: ChatMessageRecord): ChatMessa
 
   let replayed = base;
   for (const payload of events) {
-    switch (payload.type) {
+    switch (resolveStreamEventType(payload.type, payload)) {
       case 'progress':
         replayed = appendTextBlockSegment(replayed, payload.delta ?? payload.message ?? payload.detail ?? '', payload, false, 'progress');
         break;
@@ -59,6 +60,19 @@ export function messageRecordToChatMessage(record: ChatMessageRecord): ChatMessa
     segments: finalizeAssistantSegments(replayed.segments, finalContent),
     status: 'done',
   };
+}
+
+/**
+ * 归一化事件类型：只有 tool_call 与 tool_result 两种工具事件。
+ *
+ * 历史数据里（以及早期后端）工具执行结果也标成 tool_call，仅靠 tool_result 字段区分。
+ * 这类事件必须按 tool_result 处理，否则结果永远渲染不出来、卡片状态也停在“调用中”。
+ */
+export function resolveStreamEventType(eventType: string, payload: StreamPayload) {
+  if (eventType === 'tool_call' && !isBlankText(payload.tool_result ?? '')) {
+    return 'tool_result';
+  }
+  return eventType;
 }
 
 export function getMessageCopyText(message: ChatMessage) {

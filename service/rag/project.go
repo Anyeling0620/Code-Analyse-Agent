@@ -100,10 +100,17 @@ type ProjectIndexer struct {
 	base     adaptor.IAdaptor
 	conf     config.RAG
 	sessions sessionLookup
+	// rewriter 是可选的中文查询改写节点；为 nil 时检索行为与不加改写完全一致。
+	rewriter *QueryRewriter
 
 	// storeMu 保护 stores；建集合是一次网络调用，不能和其它项目互相阻塞。
 	storeMu sync.Mutex
 	stores  map[string]vector.IStore
+
+	// retrieverStores 缓存"只读检索"视图，必须与 stores 分开：
+	// 索引视图带 indexer（可写入，且 drop_before_index=true 时会重建集合），
+	// 检索视图不带 indexer、也不初始化集合，避免一次召回把已有索引清空。
+	retrieverStores map[string]vector.IStore
 
 	// mu 保护下面这些内存状态。
 	mu             sync.Mutex
@@ -117,18 +124,21 @@ type ProjectIndexer struct {
 // 它不在这里创建 Milvus 实例：集合是按项目惰性创建的，避免启动时对每个项目都建索引。
 func NewProjectIndexer(a adaptor.IAdaptor) *ProjectIndexer {
 	indexer := &ProjectIndexer{
-		base:           a,
-		stores:         make(map[string]vector.IStore),
-		statuses:       make(map[string]Status),
-		running:        make(map[string]bool),
-		rootProject:    make(map[string]string),
-		sessionProject: make(map[string]ProjectRef),
+		base:            a,
+		stores:          make(map[string]vector.IStore),
+		retrieverStores: make(map[string]vector.IStore),
+		statuses:        make(map[string]Status),
+		running:         make(map[string]bool),
+		rootProject:     make(map[string]string),
+		sessionProject:  make(map[string]ProjectRef),
 	}
 	if a == nil {
 		return indexer
 	}
 	if conf := a.GetConfig(); conf != nil {
 		indexer.conf = withDefault(conf.RAG)
+		// 改写默认关闭：conf.RAG.Rewrite.Enabled 为 false 时这里得到 nil，检索走原路径。
+		indexer.rewriter = NewQueryRewriter(indexer.conf.Rewrite, conf.DeepSeek)
 	}
 	if a.GetDB() != nil {
 		indexer.sessions = sessionrepo.NewSession(a)
@@ -210,7 +220,7 @@ func (p *ProjectIndexer) Retrieve(ctx context.Context, projectID, query string, 
 		if p.Status(ctx, projectID).Status != StatusReady {
 			return nil, nil
 		}
-		rebuilt, err := p.storeFor(ctx, projectID)
+		rebuilt, err := p.retrieverStoreFor(ctx, projectID)
 		if err != nil {
 			return nil, fmt.Errorf("project rag rebuild store project_id=%s: %w", projectID, err)
 		}
@@ -219,11 +229,41 @@ func (p *ProjectIndexer) Retrieve(ctx context.Context, projectID, query string, 
 	if topK <= 0 {
 		topK = p.conf.TopK
 	}
-	docs, err := store.Retrieve(ctx, query, retriever.WithTopK(topK))
+	docs, err := p.retrieveVariants(ctx, store, query, topK)
 	if err != nil {
 		return nil, fmt.Errorf("project rag retrieve project_id=%s: %w", projectID, err)
 	}
 	return filterByProject(docs, projectID), nil
+}
+
+// retrieveVariants 执行一次（或改写后的多路）召回。
+// 改写未启用、未触发、超时或报错时只剩原始查询，行为与单路检索完全一致；
+// 多路时各路分别召回，再用 RRF 融合并截断到 topK，最后仍交给上层做项目校验与展示。
+func (p *ProjectIndexer) retrieveVariants(ctx context.Context, store vector.IStore, query string, topK int) ([]*schema.Document, error) {
+	variants := p.rewriter.Variants(ctx, query)
+	if len(variants) <= 1 {
+		return store.Retrieve(ctx, query, retriever.WithTopK(topK))
+	}
+	sets := make([][]*schema.Document, 0, len(variants))
+	var firstErr error
+	for _, variant := range variants {
+		docs, err := store.Retrieve(ctx, variant, retriever.WithTopK(topK))
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			logger.Warn("project rag 多路召回单路失败，已跳过 query=%q err=%v", variant, err)
+			continue
+		}
+		sets = append(sets, docs)
+	}
+	if len(sets) == 0 {
+		return nil, firstErr
+	}
+	if len(sets) == 1 {
+		return sets[0], nil
+	}
+	return MergeRRF(sets, topK), nil
 }
 
 // Status 返回项目索引状态；未登记过的项目返回 StatusNone。
@@ -437,6 +477,39 @@ func (p *ProjectIndexer) cachedStore(projectID string) vector.IStore {
 	p.storeMu.Lock()
 	defer p.storeMu.Unlock()
 	return p.stores[projectID]
+}
+
+// retrieverStoreFor 构造"只读检索"视图：不传 WithInitCollection，
+// 因此不会创建/重建集合，也就不会在 drop_before_index=true 时
+// 把已经建好的索引 drop 掉。
+//
+// 这与 storeFor 的差别是必需的：召回路径只读，绝不能有写副作用。
+func (p *ProjectIndexer) retrieverStoreFor(ctx context.Context, projectID string) (vector.IStore, error) {
+	if store := p.cachedRetrieverStore(projectID); store != nil {
+		return store, nil
+	}
+	scoped := &collectionAdaptor{
+		IAdaptor:   p.base,
+		collection: projectCollectionName(p.conf.Milvus.Collection, projectID),
+	}
+	store, err := vector.NewMilvus(ctx, scoped,
+		vector.WithReranker(vector.NewReranker(p.conf.Rerank)))
+	if err != nil {
+		return nil, fmt.Errorf("create project milvus retriever store: %w", err)
+	}
+	p.storeMu.Lock()
+	defer p.storeMu.Unlock()
+	if existing, ok := p.retrieverStores[projectID]; ok {
+		return existing, nil
+	}
+	p.retrieverStores[projectID] = store
+	return store, nil
+}
+
+func (p *ProjectIndexer) cachedRetrieverStore(projectID string) vector.IStore {
+	p.storeMu.Lock()
+	defer p.storeMu.Unlock()
+	return p.retrieverStores[projectID]
 }
 
 // purge 清掉该项目集合内已有的 chunk。集合本就只属于这个项目，因此按 project_id 删除等于清空。

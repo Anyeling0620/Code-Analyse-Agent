@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "node --experimental-strip-types src/chat/messageSegments.test.mjs",
+    "test": "node --experimental-strip-types src/chat/messageSegments.test.mjs && node --experimental-strip-types src/auth/session.test.mjs && node --experimental-strip-types src/export/exportDocument.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

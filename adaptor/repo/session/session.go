@@ -33,6 +33,11 @@ func NewSession(adaptor adaptor.IAdaptor) *Session {
 	}
 }
 
+// NewSessionWithDB 用现成的 *gorm.DB 构造仓储，供单测复用。
+func NewSessionWithDB(db *gorm.DB) *Session {
+	return &Session{db: db}
+}
+
 func (s *Session) GetByID(ctx context.Context, sessionID string) (*do.SessionContext, error) {
 	var row model.Session
 	err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&row).Error

@@ -163,7 +163,10 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 	}
 	agentTools = append(agentTools, c.directTool...)
 
-	// TODO 超过最大迭代次数 强制出报告的handler
+	// 主 Agent 不加"最后一轮强制出报告"的中间件：eino 的 chat-model 前置钩子在
+	// remaining <= 0 时会先返回 ErrExceedMaxIterations，中间件来不及改写提示词。
+	// 超过最大迭代次数的收尾统一由 conversation.consumeAgentEvents 的错误分支兜底
+	// （见 handleMaxIterationsExceeded：把已产出内容当部分报告下发，而不是报错）。
 
 	mainAgent, err := adk.NewChatModelAgent(
 		c.ctx,

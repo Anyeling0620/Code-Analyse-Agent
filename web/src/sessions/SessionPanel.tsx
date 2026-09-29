@@ -20,7 +20,9 @@ export const SessionPanel = memo(function SessionPanel({
   onLoadSession,
   onLoadMoreSessions,
   onDeleteSession,
+  onShareSession,
   onOpenProfile,
+  shareNotice,
 }: {
   health: 'checking' | 'online' | 'offline';
   panelError: string;
@@ -33,7 +35,9 @@ export const SessionPanel = memo(function SessionPanel({
   onLoadSession: (sessionId: string) => void;
   onLoadMoreSessions: () => void;
   onDeleteSession: (sessionId: string) => void;
+  onShareSession: (sessionId: string) => void;
   onOpenProfile: () => void;
+  shareNotice: string;
 }) {
   function handleSessionListScroll(event: UIEvent<HTMLDivElement>) {
     const element = event.currentTarget;
@@ -60,6 +64,7 @@ export const SessionPanel = memo(function SessionPanel({
           <span className="session-list-heading">新聊天</span>
         </button>
         {panelError && <span className="panel-error">{panelError}</span>}
+        {shareNotice && <span className="share-notice">{shareNotice}</span>}
         <div className="session-list-section">
           <div className="session-list-heading">最近</div>
           <div className="session-list" onScroll={handleSessionListScroll}>
@@ -80,6 +85,19 @@ export const SessionPanel = memo(function SessionPanel({
                           <span className="session-title-line">
                             {item.last_user_message || item.summary || '未命名会话'}
                           </span>
+                        </button>
+                        <button
+                            className="session-share-button"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onShareSession(item.session_id);
+                            }}
+                            disabled={isStreaming}
+                            aria-label="分享会话"
+                            title="生成只读分享链接"
+                        >
+                          ⤴
                         </button>
                         {item.session_id !== sessionId && (
                             <button

@@ -11,6 +11,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"go.uber.org/zap"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -22,8 +23,13 @@ func (s *Service) consumeAgentEvents(
 	for event, ok := iter.Next(); ok; event, ok = iter.Next() {
 		if event.Err != nil {
 			logger.Error("consumeAgentEvents error", zap.Any("event", event), zap.Any("runState", runState), zap.Error(event.Err))
-			if errors.Is(event.Err, context.Canceled) {
-				// TODO 达到最大迭代次数， 这里应该处理强制输出报告
+			// 达到最大迭代次数不是"执行失败"：此时模型往往已经产出了大半结论，
+			// 直接按错误返回会把这份半成品丢掉，用户只看到一个错误气泡。
+			// 这里改为强制收尾，把已有内容当部分报告下发，让上层照常走 done 与落库。
+			// 注意：判定必须用 adk.ErrExceedMaxIterations；early 版本这里误写成
+			// context.Canceled，而超限走的根本不是取消路径，永远不会命中。
+			if errors.Is(event.Err, adk.ErrExceedMaxIterations) {
+				return s.handleMaxIterationsExceeded(ctx, event, runState, emit)
 			}
 			if emit != nil {
 				err := emitMarkDownBlock(emit, runState, consts.SseEventTypeError, event.AgentName, event.Err.Error())
@@ -66,6 +72,48 @@ func (s *Service) consumeAgentEvents(
 		err = s.handleMessage(ctx, msg, output, event, runState, emit)
 	}
 	return nil
+}
+
+// maxIterationsNoticeKey 是兜底文案的标志句，用来做"只追加一次"的幂等判定。
+const maxIterationsNoticeKey = "已达到本轮最大工具调用轮次"
+
+// maxIterationsFallback 生成达到最大迭代次数时追加到正文的收尾文案。
+//
+// 分两种口径：
+//   - 正文为空：模型还没产出任何结论（多半一直在调工具），只能提示用户缩小范围重试；
+//   - 正文非空：把已产出的内容明确标注为"部分报告"，避免用户误以为是完整结论。
+func maxIterationsFallback(answer string) string {
+	if strings.TrimSpace(answer) == "" {
+		return maxIterationsNoticeKey + "。系统已停止继续调用工具，以避免陷入循环；" +
+			"请缩小问题范围后重试，例如明确项目路径、模块、函数、接口 URL 或要执行的具体命令。"
+	}
+	return "\n\n" + maxIterationsNoticeKey + "，系统已停止继续调用工具。" +
+		"以上内容基于当前已返回结果生成，未确认部分请缩小范围后继续追问。"
+}
+
+// handleMaxIterationsExceeded 处理"超过最大迭代次数"：把兜底文案当作正文的一部分下发。
+//
+// 关键点是**不返回错误**。返回错误会让 executeChat 走失败分支，用户看到红色错误气泡、
+// 拿不到已经生成的内容；这里返回 nil，上层会照常发 done 事件并把本轮落库。
+func (s *Service) handleMaxIterationsExceeded(
+	ctx context.Context,
+	event *adk.AgentEvent,
+	runState *dto.ChatRunState,
+	emit ChatEmit) error {
+	if runState == nil {
+		return nil
+	}
+	// 幂等：子 Agent 超限会向上冒泡，父 Agent 可能再次收到同类错误，只收尾一次。
+	if strings.Contains(runState.Answer, maxIterationsNoticeKey) {
+		return nil
+	}
+	message := maxIterationsFallback(runState.Answer)
+	runState.Answer += message
+	agentName := ""
+	if event != nil {
+		agentName = event.AgentName
+	}
+	return emitMarkDownBlock(emit, runState, consts.SseEventTypeDelta, agentName, message)
 }
 
 func (s *Service) consumeMessageStream(
@@ -161,8 +209,11 @@ func (s *Service) handleToolCallResult(msg *schema.Message, runState *dto.ChatRu
 		toolName = runState.ToolCallMap[msg.ToolCallID].Name
 	}
 	runState.UsedTools = appendIfMissing(runState.UsedTools, toolName)
+	// 工具执行结果必须用 tool_result 事件下发：前端按事件名分发，
+	// 事件名若仍是 tool_call，卡片会一直停在“调用中”，tool_result 字段也不会被渲染。
+	// 该事件同时会写入 runState.RenderEvents 供历史回放，实时流与回放必须同名。
 	emitEvent := dto.ChatStreamEvent{
-		Type:        consts.SseEventTypeToolCall,
+		Type:        consts.SseEventTypeToolResult,
 		TraceID:     runState.TraceID,
 		SessionID:   runState.SessionID,
 		ToolName:    toolName,

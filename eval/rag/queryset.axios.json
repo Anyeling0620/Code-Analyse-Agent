@@ -1,0 +1,191 @@
+{
+  "project_id": "p24e1f35abce5e675",
+  "collection": "edu_agent_code_docs_p24e1f35abce5e675",
+  "commit_sha": "2426e03ba9020be31ed013873423cea6b7cd2e67",
+  "source_root": "C:\\FullStack\\Code Analyse Agent\\workspace\\repos\\axios-axios",
+  "generated_by": "陌生仓库验证（axios/axios）：以已合并 PR 的标题/描述作为问题来源，PR 改动的主文件作为 ground truth；每题只取一个主文件",
+  "generated_at": "2026-09-29",
+  "notes": "target_symbol 一律留空：本次只统计文件级 F@k 与 MRR，符号级指标（S@）已被判定口径无效并废弃。",
+  "queries": [
+    {
+      "id": "a001",
+      "question_zh": "Node 环境下发请求时，默认的请求配置是怎么在不同运行时之间统一处理的？",
+      "target_source_path": "lib/adapters/http.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "a002",
+      "question_zh": "请求被中途取消之后，抛出来的错误对象长什么样、里面有哪些信息？",
+      "target_source_path": "lib/core/Axios.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "a003",
+      "question_zh": "用 fetch 方式发请求时，默认的缓存模式是怎么处理的？",
+      "target_source_path": "lib/adapters/fetch.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "a004",
+      "question_zh": "配置里写了代理地址但没带协议前缀，程序会怎么处理？",
+      "target_source_path": "lib/adapters/http.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "locating"
+    },
+    {
+      "id": "a005",
+      "question_zh": "响应内容超过大小上限时，报错信息会不会在运行时的多层包装里丢掉？",
+      "target_source_path": "lib/adapters/fetch.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "a006",
+      "question_zh": "设置了不走代理的地址名单后，是怎么判断某个目标地址该不该绕过代理的？",
+      "target_source_path": "lib/helpers/shouldBypassProxy.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "a007",
+      "question_zh": "处理请求选项的过程中都做了哪些防御性校验？",
+      "target_source_path": "lib/utils.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "a008",
+      "question_zh": "用 xhr 上传时，最后一次的进度事件是怎么保证不丢的？",
+      "target_source_path": "lib/adapters/xhr.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "a009",
+      "question_zh": "注册拦截器的时候如果传进来的是空值，会怎么处理？",
+      "target_source_path": "lib/core/InterceptorManager.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "a010",
+      "question_zh": "请求出错时如果拿到的不是标准错误对象，最终抛出去的信息长什么样？",
+      "target_source_path": "lib/core/Axios.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "a011",
+      "question_zh": "这个库都支持哪些 HTTP 方法？这份方法清单是在哪里维护的？",
+      "target_source_path": "lib/core/methodList.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "locating"
+    },
+    {
+      "id": "a012",
+      "question_zh": "用户点击跳转页面导致请求被中断，这种情况会被归成哪一类错误？",
+      "target_source_path": "lib/adapters/xhr.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "a013",
+      "question_zh": "每个网络连接上的错误监听是怎么避免一直持有请求对象、造成内存泄漏的？",
+      "target_source_path": "lib/adapters/http.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "a014",
+      "question_zh": "拦截器被移除之后，内部的处理器列表是怎么整理的？",
+      "target_source_path": "lib/core/InterceptorManager.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "a015",
+      "question_zh": "413 和 422 这两个状态码有没有提供可读的别名？分别叫什么？",
+      "target_source_path": "lib/helpers/HttpStatusCode.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "locating"
+    },
+    {
+      "id": "a016",
+      "question_zh": "请求配置里的参数对象能不能声明成具体类型而不是任意类型？该怎么写？",
+      "target_source_path": "index.d.ts",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "descriptive"
+    },
+    {
+      "id": "a017",
+      "question_zh": "同步执行的拦截器里如果抛出了异常，请求还会继续发出去吗？",
+      "target_source_path": "lib/core/Axios.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "a018",
+      "question_zh": "以 data: 开头的内联地址在解码成二进制之前，怎么估算它的大小？",
+      "target_source_path": "lib/helpers/estimateDataURLDecodedBytes.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "a019",
+      "question_zh": "多个错误被聚合成一个的时候，最终展示的错误消息是怎么拼出来的？",
+      "target_source_path": "lib/core/AxiosError.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "explaining"
+    },
+    {
+      "id": "a020",
+      "question_zh": "不走代理的地址名单里能不能写通配符形式的条目？",
+      "target_source_path": "lib/helpers/shouldBypassProxy.js",
+      "target_symbol": "",
+      "target_kind": "",
+      "target_line_start": 0,
+      "difficulty": "locating"
+    }
+  ]
+}

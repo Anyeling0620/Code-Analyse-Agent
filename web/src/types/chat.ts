@@ -1,16 +1,18 @@
 import type { InterruptEvent } from '../InterruptModal';
 
+// 以下三个联合类型只作为输入建议（datalist）的候选值保留，
+// 画像字段本身允许用户自由填写，因此 ProfileForm 里统一是 string。
 export type SkillLevel = '零基础' | '入门' | '熟悉';
 export type GoalType = '补基础' | '做项目' | '学Agent';
 export type CurrentStage = '学习中' | '开发中' | '联调收尾' | '复盘中';
 
 export type ProfileForm = {
   user_type: string;
-  skill_level: SkillLevel;
-  goal_type: GoalType;
+  skill_level: string;
+  goal_type: string;
   purchased_courses: string[];
   current_topic: string;
-  current_stage: CurrentStage;
+  current_stage: string;
 };
 
 export type ToolTrace = {
@@ -36,6 +38,8 @@ export type ChatMessage = {
   segments: MessageSegment[];
   traceEvents: TraceEvent[];
   status: 'idle' | 'streaming' | 'error' | 'done';
+  /** 历史消息的落库时间；实时流新增的消息没有该字段。 */
+  createdAt?: string;
 };
 
 export type ChatResult = {
@@ -77,6 +81,9 @@ export type SessionListItem = {
   last_user_message: string;
   last_assistant_msg: string;
   update_at: string;
+  // 后端 SessionContext 会带上项目根/项目名；列表接口不保证返回，故为可选。
+  current_project_root?: string;
+  current_project_name?: string;
 };
 
 export type ChatMessageRecord = {
@@ -146,4 +153,18 @@ export type QuotaToday = {
   date: string;
   used: number;
   limit: number;
+};
+
+// ShareCreateResult 是创建只读分享后后端返回的分享凭据。
+export type ShareCreateResult = {
+  share_token: string;
+  share_path: string;
+  created_at: string;
+  expires_at: string | null;
+};
+
+// SharedSessionDetail 是只读分享页拿到的快照内容（按令牌读取，无需登录）。
+export type SharedSessionDetail = SessionDetail & {
+  shared_at: string;
+  expires_at: string | null;
 };

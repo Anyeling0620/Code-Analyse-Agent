@@ -12,7 +12,7 @@ import (
 type ICost interface {
 	Insert(ctx context.Context, req *do.CostRecord) error
 	DailyTotal(ctx context.Context, date time.Time) (float64, error)
-	DailyUsage(ctx context.Context, date time.Time) (do.CostDailyUsage, error)
+	DailyUsage(ctx context.Context, userID string, date time.Time) (do.CostDailyUsage, error)
 	GroupByUser(ctx context.Context, from, to time.Time) ([]do.CostByUser, error)
 	GroupByTool(ctx context.Context, from, to time.Time) ([]do.CostByTool, error)
 }
@@ -57,16 +57,18 @@ func (c *Cost) DailyTotal(ctx context.Context, date time.Time) (float64, error) 
 	return total, err
 }
 
-// DailyUsage 汇总某天的用量与成本，含缓存命中 / 未命中的拆分。
+// DailyUsage 汇总某天、某个用户的用量与成本，含缓存命中 / 未命中的拆分。
+// 必须按 user_id 过滤：成本记录是按用户记账的，不带条件就是全站汇总，
+// 会让每个账号都看到同一份"全站成本"。
 // 未命中 token 用 SUM(prompt_tokens) - SUM(cached_tokens) 而不是 SUM(cache_miss_tokens)：
 // 加列之前写入的历史记录 cache_miss_tokens 为 0，取差值才能与 prompt_tokens 保持一致。
-func (c *Cost) DailyUsage(ctx context.Context, date time.Time) (do.CostDailyUsage, error) {
+func (c *Cost) DailyUsage(ctx context.Context, userID string, date time.Time) (do.CostDailyUsage, error) {
 	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	end := start.Add(24 * time.Hour)
 
 	var row do.CostDailyUsage
 	err := c.db.WithContext(ctx).Model(&model.CostRecord{}).
-		Where("occurred_at >= ? AND occurred_at < ?", start, end).
+		Where("user_id = ? AND occurred_at >= ? AND occurred_at < ?", userID, start, end).
 		Select("COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, " +
 			"COALESCE(SUM(completion_tokens), 0) AS completion_tokens, " +
 			"COALESCE(SUM(cached_tokens), 0) AS cached_tokens, " +

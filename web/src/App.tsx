@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { InterruptModal } from './InterruptModal';
-import { fetchJSON, updateQuotaFromHeaders, withAuth } from './api/client';
+import { fetchAuthorized, fetchJSON, updateQuotaFromHeaders } from './api/client';
 import { consumeSSE } from './api/sse';
 import { LoginModal } from './auth/LoginModal';
 import { clearSession, getSession, saveSession, subscribeSession } from './auth/session';
@@ -17,16 +17,31 @@ import {
   hasMeaningfulAssistantState,
   hasToolName,
   messageRecordToChatMessage,
+  resolveStreamEventType,
 } from './chat/messageSegments';
 import { Composer } from './composer/Composer';
 import { initialProfile } from './constants/profile';
+import { ExportPrintRoot } from './export/ExportPrintRoot';
+import {
+  buildEntryAt,
+  buildExportFilename,
+  buildMarkdownDocument,
+  downloadTextFile,
+  type ExportEntry,
+  type ExportFormat,
+} from './export/exportDocument';
 import { normalizeMarkdown } from './markdown/normalizeMarkdown';
+import { ElevatorNav, shouldShowElevatorNav } from './nav/ElevatorNav';
 import { ProfileModal } from './profile/ProfileModal';
 import { SessionPanel } from './sessions/SessionPanel';
+import { createShareLink } from './share/api';
+import { SharedSessionView } from './share/SharedSessionView';
 import type { ChatMessage, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent } from './types/chat';
 
 const SESSION_PAGE_LIMIT = 20;
 const MESSAGE_PAGE_LIMIT = 50;
+// SHARE_NOTICE_TTL_MS 是「已复制分享链接」提示的停留时长。
+const SHARE_NOTICE_TTL_MS = 4000;
 
 export default function App() {
   const [authSession, setAuthSession] = useState(() => getSession());
@@ -46,12 +61,28 @@ export default function App() {
     saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
   }
 
+  // 分享链接是公开只读页：命中 ?share=<token> 时直接渲染快照，
+  // 既不弹登录框，也不进入需要登录的工作区。
+  const shareToken = readShareToken();
+  if (shareToken) {
+    return <SharedSessionView token={shareToken} />;
+  }
+
   if (!authSession) {
     return <LoginModal onSubmit={handleLogin} />;
   }
   // 用 user_id 作 key：换账号时整棵工作区重新挂载，
   // 画像、会话、消息等本地状态不会残留到下一个账号。
   return <ChatWorkspace key={authSession.user_id} authSession={authSession} />;
+}
+
+// readShareToken 从地址栏读取分享令牌；没有就返回空串，走正常的登录流程。
+function readShareToken(): string {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+  const params = new URLSearchParams(window.location.search);
+  return (params.get('share') ?? '').trim();
 }
 
 // ChatWorkspace 承载单个登录用户的全部界面状态。换账号由上层通过 key 重新挂载来清空。
@@ -76,8 +107,13 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const [isComposerExpanded, setIsComposerExpanded] = useState(true);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [shareNotice, setShareNotice] = useState('');
+  const [printEntries, setPrintEntries] = useState<ExportEntry[] | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const sessionIdRef = useRef('');
+  // 导出入口在消息卡片上，回调需要保持引用稳定（见 handleExportMessage），
+  // 所以最新的消息列表通过 ref 读取。
+  const messagesRef = useRef<ChatMessage[]>([]);
   const isStreamingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const conversationScrollRef = useRef<HTMLDivElement | null>(null);
@@ -96,6 +132,10 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     isStreamingRef.current = isStreaming;
@@ -119,6 +159,91 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!shareNotice) {
+      return;
+    }
+    const timer = window.setTimeout(() => setShareNotice(''), SHARE_NOTICE_TTL_MS);
+    return () => window.clearTimeout(timer);
+  }, [shareNotice]);
+  // PDF 导出：先把打印文档挂到 DOM，等 Mermaid 这类异步渲染完成后再唤起系统打印，
+  // 打印结束（或兜底超时）后卸载这份隐藏文档。
+  //
+  // 这里不能只靠固定延时：Mermaid 图是异步渲染的，过早打印会把还没画出来的图
+  // 变成一段代码块。判定标准是"所有 Mermaid 块都已经产出 svg"。
+  //
+  // 等待期间界面上有 .print-wait-overlay 遮罩（跟随 printEntries 挂载/卸载），
+  // 否则用户点完「导出 PDF」到打印框弹出之间看不到任何反馈。
+  useEffect(() => {
+    if (!printEntries) {
+      return;
+    }
+    let cancelled = false;
+    let timer = 0;
+    const startedAt = Date.now();
+    const MIN_WAIT_MS = 500;
+    const MAX_WAIT_MS = 2500;
+
+    const hasPendingDiagram = () => {
+      const root = document.getElementById('export-print-root');
+      if (!root) {
+        return false;
+      }
+      const blocks = root.querySelectorAll('.mermaid-fallback, .mermaid-diagram').length;
+      if (blocks === 0) {
+        return false;
+      }
+      return root.querySelectorAll('.mermaid-diagram svg').length < blocks;
+    };
+
+    const attemptPrint = () => {
+      if (cancelled) {
+        return;
+      }
+      const waited = Date.now() - startedAt;
+      if (waited < MIN_WAIT_MS || (hasPendingDiagram() && waited < MAX_WAIT_MS)) {
+        timer = window.setTimeout(attemptPrint, 150);
+        return;
+      }
+      // window.print() 会阻塞主线程。遮罩与打印文档是同一次提交挂载的，
+      // MIN_WAIT_MS 已保证它有足够时间绘制；这里再让出两帧，
+      // 避免打印框弹出时遮罩还没画出来。
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          if (cancelled) {
+            return;
+          }
+          try {
+            window.print();
+          } catch {
+            // 个别环境（无打印能力的嵌入式浏览器）会直接抛错，
+            // 兜底卸载打印文档与等待遮罩，避免界面卡在等待态。
+            setPrintEntries(null);
+          }
+        });
+      });
+    };
+
+    timer = window.setTimeout(attemptPrint, 150);
+    const fallback = window.setTimeout(() => {
+      if (!cancelled) {
+        setPrintEntries(null);
+      }
+    }, 60000);
+    const afterPrint = () => {
+      if (!cancelled) {
+        setPrintEntries(null);
+      }
+    };
+    window.addEventListener('afterprint', afterPrint);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.clearTimeout(fallback);
+      window.removeEventListener('afterprint', afterPrint);
+    };
+  }, [printEntries]);
 
   async function checkHealth() {
     try {
@@ -281,6 +406,32 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     }
   }
 
+  async function shareSession(targetSessionId: string) {
+    if (isStreaming) {
+      return;
+    }
+    try {
+      const result = await createShareLink(targetSessionId);
+      const link = window.location.origin + result.share_path;
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(link);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+      if (copied) {
+        setShareNotice('已复制分享链接');
+      } else {
+        // 剪贴板不可用（非安全上下文、无权限等）时至少把链接交给用户。
+        window.alert(link);
+      }
+      setPanelError('');
+    } catch (error) {
+      setPanelError(error instanceof Error ? error.message : '创建分享失败');
+    }
+  }
+
   function startNewSession() {
     if (isStreaming) {
       return;
@@ -291,6 +442,29 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     setHasMoreMessages(false);
     setLastTraceId('');
   }
+
+  // ── 项目分析导出 ──────────────────────────────────────────────
+  // 只有项目分析（repo_analyzer）的回答可导出，判定见 export/exportDocument.ts。
+  //
+  // 回调会被 memo 过的 MessageItem 持有，引用必须稳定，否则每次流式更新
+  // 都会让整列消息重新渲染。
+  const handleExportMessage = useCallback((messageId: string, format: ExportFormat) => {
+    const current = messagesRef.current;
+    const index = current.findIndex((item) => item.id === messageId);
+    const entry = index >= 0 ? buildEntryAt(current, index) : null;
+    if (!entry) {
+      setPanelError('这条回答不可导出：只有项目分析的回答支持导出');
+      return;
+    }
+    setPanelError('');
+    const meta = { sessionId: sessionIdRef.current };
+    if (format === 'md') {
+      downloadTextFile(buildExportFilename(meta, 'md'), buildMarkdownDocument([entry], meta));
+      return;
+    }
+    // PDF 交给浏览器打印（见 printEntries 对应的副作用）。
+    setPrintEntries([entry]);
+  }, []);
 
   const handleSubmit = useCallback(async (messageText: string) => {
     const message = messageText.trim();
@@ -331,7 +505,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     let sawDone = false;
 
     try {
-      const response = await fetch('/api/chat/stream', withAuth({
+      const response = await fetchAuthorized('/api/chat/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
@@ -342,7 +516,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
           profile,
         }),
         signal: controller.signal,
-      }));
+      });
 
       updateQuotaFromHeaders(response);
       if (!response.ok || !response.body) {
@@ -388,7 +562,8 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   }, [profile]);
 
   function handleStreamEvent(assistantId: string, eventName: string, payload: StreamPayload) {
-    switch (eventName) {
+    // 后端历史版本把工具结果也发成 tool_call，这里统一归一化后再分发。
+    switch (resolveStreamEventType(eventName, payload)) {
       case 'ready':
         updateTrace(payload);
         break;
@@ -482,7 +657,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     setIsStreaming(true);
     patchAssistant(ev.assistant_message_id, (item) => ({ ...item, status: 'streaming' }));
     try {
-      const response = await fetch('/api/chat/resume', withAuth({
+      const response = await fetchAuthorized('/api/chat/resume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({
@@ -490,7 +665,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
           pending_id: ev.pending_approval_id,
           approved,
         }),
-      }));
+      });
       updateQuotaFromHeaders(response);
       if (!response.ok || !response.body) {
         const text = await response.text();
@@ -634,12 +809,18 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
               onLoadSession={loadSession}
               onLoadMoreSessions={loadMoreSessions}
               onDeleteSession={deleteSession}
+              onShareSession={shareSession}
               onOpenProfile={() => setIsProfileModalOpen(true)}
+              shareNotice={shareNotice}
           />
         </aside>
 
         <main className="chat-stage">
-          <div ref={conversationScrollRef} className="conversation-scroll" onScroll={handleConversationScroll}>
+          <div
+              ref={conversationScrollRef}
+              className={`conversation-scroll${shouldShowElevatorNav(messages) ? ' has-elevator' : ''}`}
+              onScroll={handleConversationScroll}
+          >
             <section className="workspace-meta-bar">
               <span className="workspace-meta-chip">账号: {authSession.user_id}（{authSession.plan}）</span>
               {sessionId && <span className="workspace-meta-chip">Session: {sessionId}</span>}
@@ -649,8 +830,19 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
               </button>
             </section>
 
-            <MessageList messages={messages} bottomRef={bottomRef} isLoadingOlderMessages={isLoadingOlderMessages} hasMoreMessages={hasMoreMessages} />
+            <MessageList
+                messages={messages}
+                bottomRef={bottomRef}
+                isLoadingOlderMessages={isLoadingOlderMessages}
+                hasMoreMessages={hasMoreMessages}
+                onExportMessage={handleExportMessage}
+            />
           </div>
+
+          <ElevatorNav
+              messages={messages}
+              containerRef={conversationScrollRef}
+          />
 
           <Composer
               isStreaming={isStreaming}
@@ -684,6 +876,22 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
                 }}
             />
         )}
+        {printEntries && (
+            <div
+                className="print-wait-overlay"
+                role="dialog"
+                aria-modal="true"
+                aria-busy="true"
+                aria-label="正在准备打印稿"
+            >
+              <div className="print-wait-card">
+                <span className="print-wait-spinner" aria-hidden="true" />
+                <p className="print-wait-title">正在准备打印稿…</p>
+                <p className="print-wait-hint">正在等待图表渲染完成，随后会弹出系统打印对话框。</p>
+              </div>
+            </div>
+        )}
+        {printEntries && <ExportPrintRoot entries={printEntries} meta={{ sessionId }} />}
       </div>
   );
 }

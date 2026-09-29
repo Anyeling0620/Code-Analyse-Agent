@@ -109,6 +109,9 @@ func (s *Service) handleMaxIterationsExceeded(
 	}
 	message := maxIterationsFallback(runState.Answer)
 	runState.Answer += message
+	// 超限收尾产出的是"部分报告"，不是完整结论：标记降级，
+	// 落库后 run.degraded 可以为前端/后续分析区分这份结果的可信范围。
+	runState.Degraded = true
 	agentName := ""
 	if event != nil {
 		agentName = event.AgentName
@@ -133,10 +136,21 @@ func (s *Service) consumeMessageStream(
 			msg, err := stream.Recv()
 			if err != nil {
 				if errors.Is(err, io.EOF) {
-					logger.Info("consumeMessageStream EOF",
-						zap.Any("event", event),
-						zap.Any("runState", runState),
-						zap.Any("message", fullMsg))
+					// 只记录定位需要的标量字段：runState 里的 render_events 会随轮次
+					// 累积，每次 EOF 都把整份 runState（以及整段 message）序列化进日志
+					// 是 O(n²) 的日志放大，单轮就能到 MB 级。
+					agentName, runID, sessionID, answerRunes, renderEvents := "", "", "", 0, 0
+					if event != nil {
+						agentName = event.AgentName
+					}
+					if runState != nil {
+						runID = runState.RunID
+						sessionID = runState.SessionID
+						answerRunes = len([]rune(runState.Answer))
+						renderEvents = len(runState.RenderEvents)
+					}
+					logger.Info("consumeMessageStream EOF agent=%s run_id=%s session_id=%s answer_runes=%d message_runes=%d render_events=%d",
+						agentName, runID, sessionID, answerRunes, len([]rune(fullMsg)), renderEvents)
 					break
 				}
 				return err

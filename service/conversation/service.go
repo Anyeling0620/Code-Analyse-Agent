@@ -5,6 +5,7 @@ import (
 	"edu.agent.code/adaptor"
 	"edu.agent.code/adaptor/repo/approval"
 	"edu.agent.code/adaptor/repo/profile"
+	"edu.agent.code/adaptor/repo/run"
 	"edu.agent.code/adaptor/repo/session"
 	"edu.agent.code/config"
 	"edu.agent.code/service/cost"
@@ -36,6 +37,10 @@ type Service struct {
 	approvals approval.IApproval
 	// shares 负责会话只读分享：快照落库、按令牌读取、撤销。
 	shares session.IShare
+	// runs 是 run 状态机 + 事件流的仓储，broker 负责把事件实时推给在线客户端。
+	// 事件真身在 chat_run_events，broker 只做"正在看这条 run 的客户端"的转发。
+	runs   run.IRun
+	broker *runBroker
 
 	cost *cost.Service
 	rag  *rag.Service
@@ -51,7 +56,7 @@ func NewService(ctx context.Context, adaptor adaptor.IAdaptor, projectIndexer *r
 	if err != nil {
 		return nil, err
 	}
-	return &Service{
+	svc := &Service{
 		modelName:      conf.DeepSeek.Model,
 		conf:           conf,
 		toolProvider:   deps.toolProvider,
@@ -64,7 +69,17 @@ func NewService(ctx context.Context, adaptor adaptor.IAdaptor, projectIndexer *r
 		cost:           deps.cost,
 		rag:            nil,
 		projectIndexer: projectIndexer,
-	}, nil
+		runs:           run.NewRun(adaptor),
+		broker:         newRunBroker(),
+	}
+	// 启动扫描：上一次进程留下的 running 不可能再推进，统一标成 interrupted。
+	// 不这么做的话，那些 run 会永远显示"执行中"，前端也会一直等一个不会来的 done。
+	if count, err := svc.runs.MarkRunningAsInterrupted(ctx); err != nil {
+		logger.Error("mark stale running runs as interrupted failed: %v", err)
+	} else if count > 0 {
+		logger.Info("marked stale running runs as interrupted count=%d", count)
+	}
+	return svc, nil
 }
 
 func (s *Service) Close() error {

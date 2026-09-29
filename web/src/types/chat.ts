@@ -50,6 +50,10 @@ export type ChatResult = {
 
 export type StreamPayload = {
   type: string;
+  // run_id / seq 用于断连续传：seq 对应后端 chat_run_events.id，
+  // 重连时按 Last-Event-ID 只补 seq 之后的事件。
+  run_id?: string;
+  seq?: number;
   trace_id?: string;
   session_id?: string;
   tool_name?: string;
@@ -94,6 +98,25 @@ export type ChatMessageRecord = {
   content: string;
   render_events?: StreamPayload[];
   created_at: string;
+};
+
+// ChatRunInfo / ChatRunActiveResp 对应后端 run 状态机查询接口。
+export type ChatRunInfo = {
+  run_id: string;
+  session_id: string;
+  status: 'running' | 'interrupted' | 'done' | 'failed' | string;
+  degraded: boolean;
+  question: string;
+  pending_approval_id: string;
+  project_root: string;
+  project_name: string;
+  last_seq: number;
+  started_at: string;
+  ended_at: string;
+};
+
+export type ChatRunActiveResp = {
+  run: ChatRunInfo | null;
 };
 
 export type PendingInterruptEvent = InterruptEvent & { assistant_message_id: string };

@@ -37,5 +37,7 @@ func routeRegister(app *gin.Engine, h *api.Handler) {
 	chatRoot := app.Group("/api/chat", chatQuota)
 	chatRoot.POST("/completion", h.ChatCompletion) //阻塞等待一次性输出
 	chatRoot.POST("/stream", h.ChatStream)         // sse流式输出
+	chatRoot.GET("/stream/run", h.ChatStreamRun)   // 断连续传：按 Last-Event-ID 回放并继续跟随
+	chatRoot.GET("/run/active", h.ChatRunActive)   // 查询会话下仍可续跑的 run
 	chatRoot.POST("/resume", h.ChatResume)         // 中断等待审批之后进行恢复流式
 }

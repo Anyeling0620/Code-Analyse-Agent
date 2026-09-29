@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { InterruptModal } from './InterruptModal';
-import { fetchAuthorized, fetchJSON, updateQuotaFromHeaders } from './api/client';
-import { consumeSSE } from './api/sse';
+import { fetchJSON } from './api/client';
+import { attachRun, readActiveRun, resumeChatRun, streamChatRun, type RunStreamPhase } from './api/runStream';
 import { LoginModal } from './auth/LoginModal';
 import { clearSession, getSession, saveSession, subscribeSession } from './auth/session';
 import type { AuthSession } from './auth/session';
@@ -37,7 +37,7 @@ import { ProfileModal } from './profile/ProfileModal';
 import { SessionPanel } from './sessions/SessionPanel';
 import { createShareLink } from './share/api';
 import { SharedSessionView } from './share/SharedSessionView';
-import type { ChatMessage, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent } from './types/chat';
+import type { ChatMessage, ChatRunActiveResp, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent } from './types/chat';
 
 // 会话列表项在后端已截断到 200 字，负载很小，保持 20 条一页。
 const SESSION_PAGE_LIMIT = 20;
@@ -158,6 +158,8 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   const scrollAnchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const assistantUpdateQueueRef = useRef<Map<string, Array<(item: ChatMessage) => ChatMessage>>>(new Map());
   const assistantUpdateTimerRef = useRef<number | null>(null);
+  // 已经尝试过"重新挂载在跑的 run"的会话集合，避免同一会话重复挂载。
+  const reattachedSessionsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     void checkHealth();
@@ -191,6 +193,20 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   useEffect(() => {
     isStreamingRef.current = isStreaming;
   }, [isStreaming]);
+
+  // 进入会话（含刷新后重新点开会话）时，如果服务端还有正在跑的 run，
+  // 就按 run_id 重新挂载，把断连期间错过的事件补齐。
+  // 放在历史消息加载完成之后，避免与 loadSession 的 setMessages([]) 抢 state。
+  useEffect(() => {
+    if (!sessionId || isLoadingSessionDetail || isStreaming) {
+      return;
+    }
+    if (reattachedSessionsRef.current.has(sessionId)) {
+      return;
+    }
+    reattachedSessionsRef.current.add(sessionId);
+    void reattachActiveRun(sessionId);
+  }, [sessionId, isLoadingSessionDetail, isStreaming]);
 
   useEffect(() => {
     if (!shouldStickToBottomRef.current) {
@@ -682,31 +698,24 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     let sawDone = false;
 
     try {
-      const response = await fetchAuthorized('/api/chat/stream', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-        },
-        body: JSON.stringify({
-          session_id: sessionIdRef.current,
-          message,
-          profile,
-        }),
+      // streamChatRun 内部负责断线自动续传：连接被掐断时会带着
+      // Last-Event-ID 重新挂上这条 run，把漏掉的事件补齐，UI 无需感知。
+      const outcome = await streamChatRun({
+        sessionId: sessionIdRef.current,
+        message,
+        profile,
         signal: controller.signal,
+        onPhase: (phase) => notifyRunPhase(assistantId, phase),
+        onEvent: (eventName, payload) => {
+          if (eventName === 'done') {
+            sawDone = true;
+          }
+          handleStreamEvent(assistantId, eventName, payload);
+        },
       });
-
-      updateQuotaFromHeaders(response);
-      if (!response.ok || !response.body) {
-        const text = await response.text();
-        throw new Error(text || `stream request failed: ${response.status}`);
+      if (outcome.done) {
+        sawDone = true;
       }
-
-      await consumeSSE(response.body, (eventName, payload) => {
-        if (eventName === 'done') {
-          sawDone = true;
-        }
-        handleStreamEvent(assistantId, eventName, payload);
-      });
 
       patchAssistant(assistantId, (item) => ({
         ...item,
@@ -738,6 +747,142 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
       void refreshSessions();
     }
   }, [profile]);
+
+  // notifyRunPhase 把"连接中断，正在重连"这类传输层状态显示出来。
+  // 关键点：重连中不能把消息标成 error——执行其实还在服务端继续跑。
+  function notifyRunPhase(assistantId: string, phase: RunStreamPhase) {
+    if (phase === 'reconnecting') {
+      appendTraceEvent(assistantId, {
+        type: 'observe',
+        stage: 'connection',
+        detail: '连接中断，正在重连并补齐事件…',
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+    if (phase === 'reconnected') {
+      appendTraceEvent(assistantId, {
+        type: 'observe',
+        stage: 'connection',
+        detail: '已重新连接，继续接收结果',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  // reattachActiveRun 处理"刷新页面 / 切回会话时这一轮还在跑"：
+  // 按 run_id 重新挂载，服务端会回放断连期间错过的事件。
+  async function reattachActiveRun(targetSessionId: string) {
+    if (!targetSessionId || isStreamingRef.current) {
+      return;
+    }
+
+    let runId = '';
+    let status = 'running';
+    let lastSeq = 0;
+    try {
+      const resp = await fetchJSON<ChatRunActiveResp>(
+          `/api/chat/run/active?session_id=${encodeURIComponent(targetSessionId)}`,
+      );
+      if (resp?.run?.run_id) {
+        runId = resp.run.run_id;
+        status = resp.run.status || 'running';
+        lastSeq = typeof resp.run.last_seq === 'number' ? resp.run.last_seq : 0;
+      }
+    } catch {
+      // 接口不可用（例如后端版本较旧）时退回本地标记，不打断页面。
+    }
+    if (!runId) {
+      const cached = readActiveRun(targetSessionId);
+      if (!cached) {
+        return;
+      }
+      runId = cached.runId;
+      lastSeq = cached.lastSeq;
+    }
+    if (isStreamingRef.current) {
+      return;
+    }
+
+    // 审批中断的 run：历史消息里已经存下了中断前的正文与 render_events，
+    // 这时整段回放会重复渲染，所以只把 interrupt/done/error 重新投给 UI
+    // （让审批弹窗恢复出来），正文沿用列表里已有的那条 assistant 消息。
+    const interrupted = status === 'interrupted';
+    let targetMessageId = interrupted ? findLastAssistantMessageId() : '';
+    if (!targetMessageId) {
+      targetMessageId = crypto.randomUUID();
+      setMessages((current) => [
+        ...current,
+        {
+          id: targetMessageId,
+          role: 'assistant',
+          content: '',
+          tools: [],
+          toolEvents: [],
+          segments: [],
+          traceEvents: [],
+          status: 'streaming',
+        },
+      ]);
+    }
+
+    shouldStickToBottomRef.current = true;
+    setIsStreaming(true);
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    let sawDone = false;
+    try {
+      const outcome = await attachRun({
+        runId,
+        sessionId: targetSessionId,
+        afterSeq: interrupted ? 0 : lastSeq,
+        signal: controller.signal,
+        onPhase: (phase) => notifyRunPhase(targetMessageId, phase),
+        onEvent: (eventName, payload) => {
+          const resolved = resolveStreamEventType(eventName, payload);
+          if (interrupted && resolved !== 'interrupt' && resolved !== 'done' && resolved !== 'error') {
+            return;
+          }
+          if (resolved === 'done') {
+            sawDone = true;
+          }
+          handleStreamEvent(targetMessageId, eventName, payload);
+        },
+      });
+      if (outcome.done) {
+        sawDone = true;
+      }
+    } catch (error) {
+      // 重新挂载失败（例如连接仍不可用）不弹错误气泡：用户继续追问即可，
+      // 或者下次进入该会话时再挂一次。
+      if (!(error instanceof Error && error.name === 'AbortError')) {
+        console.warn('reattach run failed', error);
+      }
+    } finally {
+      controllerRef.current = null;
+      setIsStreaming(false);
+      patchAssistant(targetMessageId, (item) => ({
+        ...item,
+        toolEvents: finalizeToolEvents(item.toolEvents),
+        segments: finalizeSegments(item.segments),
+        status: sawDone || hasMeaningfulAssistantState(item) ? 'done' : item.status,
+      }));
+      invalidateActiveSessionCache();
+      void checkHealth();
+      void refreshMetrics();
+      void refreshSessions();
+    }
+  }
+
+  function findLastAssistantMessageId(): string {
+    const list = messagesRef.current;
+    for (let index = list.length - 1; index >= 0; index -= 1) {
+      if (list[index].role === 'assistant') {
+        return list[index].id;
+      }
+    }
+    return '';
+  }
 
   function handleStreamEvent(assistantId: string, eventName: string, payload: StreamPayload) {
     // 后端历史版本把工具结果也发成 tool_call，这里统一归一化后再分发。
@@ -835,22 +980,16 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     setIsStreaming(true);
     patchAssistant(ev.assistant_message_id, (item) => ({ ...item, status: 'streaming' }));
     try {
-      const response = await fetchAuthorized('/api/chat/resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json; charset=utf-8' },
-        body: JSON.stringify({
-          session_id: ev.session_id ?? sessionId,
-          pending_id: ev.pending_approval_id,
-          approved,
-        }),
-      });
-      updateQuotaFromHeaders(response);
-      if (!response.ok || !response.body) {
-        const text = await response.text();
-        throw new Error(text || `resume request failed: ${response.status}`);
-      }
-      await consumeSSE(response.body, (eventName, payload) => {
-        handleStreamEvent(ev.assistant_message_id, eventName, payload);
+      // 与普通对话一致：审批恢复同样支持断线续传，续传起点由服务端按
+      // 这条 run 的当前游标决定，不会把中断前的事件重复回放一遍。
+      await resumeChatRun({
+        sessionId: ev.session_id ?? sessionId,
+        pendingId: ev.pending_approval_id,
+        approved,
+        onPhase: (phase) => notifyRunPhase(ev.assistant_message_id, phase),
+        onEvent: (eventName, payload) => {
+          handleStreamEvent(ev.assistant_message_id, eventName, payload);
+        },
       });
       patchAssistant(ev.assistant_message_id, (item) => ({
         ...item,

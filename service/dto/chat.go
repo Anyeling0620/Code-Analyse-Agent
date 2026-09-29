@@ -47,6 +47,10 @@ type ChatResult struct {
 
 type ChatStreamEvent struct {
 	Type          string      `json:"type"` // ready / session /observe/ progress / tool_call /tool_result /delta / interrupt / done / error
+	// RunID / Seq 是断连续传的锚点：Seq 对应 chat_run_events.id，
+	// 客户端按 Last-Event-ID 重连时只补 seq 之后的事件。
+	RunID         string      `json:"run_id"`
+	Seq           int64       `json:"seq"`
 	TraceID       string      `json:"trace_id"`
 	SessionID     string      `json:"session_id"`
 	ToolName      string      `json:"tool_name"`
@@ -90,6 +94,7 @@ type ToolCallState struct {
 
 type ChatRunState struct {
 	UserID            string                   `json:"user_id"`
+	RunID             string                   `json:"run_id"`
 	TraceID           string                   `json:"trace_id"`
 	SessionID         string                   `json:"session_id"`
 	Question          string                   `json:"question"`
@@ -100,6 +105,34 @@ type ChatRunState struct {
 	RenderEvents      []ChatStreamEvent        `json:"render_events"`
 	PendingApprovalID string                   `json:"pending_approval_id"`
 	Interrupted       bool                     `json:"interrupted"`
+	// Degraded 标记本轮是"降级完成"：例如达到最大工具轮次后只输出部分报告，
+	// 或出错但仍保留了半成品内容。落库后可直接用来区分完整结论与部分结论。
+	Degraded          bool                     `json:"degraded"`
+	// LastSeq 是本轮已落库的最后一个事件 seq，审批恢复时用它作为续传起点。
+	LastSeq           int64                    `json:"last_seq"`
+}
+
+// ChatRunInfo 是对外的 run 摘要（不含 question/answer 大字段以外的内部数据）。
+type ChatRunInfo struct {
+	RunID             string `json:"run_id"`
+	SessionID         string `json:"session_id"`
+	Status            string `json:"status"`
+	Degraded          bool   `json:"degraded"`
+	Question          string `json:"question"`
+	PendingApprovalID string `json:"pending_approval_id"`
+	ProjectRoot       string `json:"project_root"`
+	ProjectName       string `json:"project_name"`
+	LastSeq           int64  `json:"last_seq"`
+	StartedAt         string `json:"started_at"`
+	EndedAt           string `json:"ended_at"`
+}
+
+type ChatRunActiveReq struct {
+	SessionID string `form:"session_id" json:"session_id"`
+}
+
+type ChatRunActiveResp struct {
+	Run *ChatRunInfo `json:"run"`
 }
 
 type ChatResumeRequest struct {

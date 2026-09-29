@@ -498,6 +498,11 @@ func main() {
 	outDir := flag.String("out", "eval/compact/hallucination", "output directory")
 	modelOverride := flag.String("model", "", "override model name")
 	rescore := flag.Bool("rescore", false, "不调用模型，只按当前判定规则重算已有 results.json 的判定 / 计数，并重写 REPORT.md")
+	compare := flag.Bool("compare", false, "跑三臂对照（full/legacy/structured），写 results_compare.json 与 REPORT_COMPARE.md")
+	shapesFlag := flag.String("shapes", "audit-6x2k:6:2000,audit-12x8k:12:8000", "对照案例，格式 name:rounds:runes，逗号分隔")
+	triggerFlag := flag.Int("trigger-tokens", 500, "压缩触发阈值（token）")
+	limitProbes := flag.Int("limit-probes", 0, "只跑前 N 条探针（冒烟用，0=全部）")
+	onlyArms := flag.String("arms", "", "只跑指定臂，逗号分隔（full,legacy,structured）；空=全部")
 	flag.Parse()
 
 	if *rescore {
@@ -536,6 +541,27 @@ func main() {
 		os.Exit(1)
 	}
 	real := &recordingModel{inner: base}
+
+	if *compare {
+		shapes, err := parseShapes(*shapesFlag)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "parse -shapes: %v\n", err)
+			os.Exit(1)
+		}
+		if err := runCompare(ctx, real, modelName, conf.DeepSeek.BaseURL, shapes,
+			*triggerFlag, *limitProbes, *outDir, *onlyArms); err != nil {
+			fmt.Fprintf(os.Stderr, "compare: %v\n", err)
+			os.Exit(1)
+		}
+		calls := real.snapshot()
+		total := 0
+		for _, c := range calls {
+			total += c.TotalTok
+		}
+		fmt.Printf("compare done: %d real model calls, %d total tokens, %d ms\n",
+			len(calls), total, time.Since(start).Milliseconds())
+		return
+	}
 
 	rep := report{
 		GeneratedAt:  time.Now().Format(time.RFC3339),
@@ -775,7 +801,21 @@ func ask(ctx context.Context, real *recordingModel, ctxMsgs []*schema.Message, q
 
 // runJudge 让真实模型以原始历史为唯一依据审计摘要文本。
 func runJudge(ctx context.Context, real *recordingModel, history []*schema.Message, summary string) judgeResult {
-	prompt := "你是严格的审计员。下面【原始对话】是压缩前的完整历史，【摘要】是模型生成的压缩摘要。\n" +
+	return runJudgeScoped(ctx, real, history, summary, "")
+}
+
+// runJudgeScoped 与 runJudge 相同，但允许声明"这份摘要覆盖的范围"。
+//
+// structured 策略只把【较早的部分】交给摘要模型：system 与最近 keep_recent 条原文
+// 按设计不进摘要。此时若仍拿完整历史当唯一依据，审计员会把"只有最近几轮才出现的事实"
+// 记成摘要的遗漏或矛盾——那是口径错配，不是摘要能力问题。scopeNote 非空时用它替换
+// "压缩前的完整历史"这个默认描述，使审计范围与摘要范围对齐。
+func runJudgeScoped(ctx context.Context, real *recordingModel, history []*schema.Message, summary, scopeNote string) judgeResult {
+	scope := "压缩前的完整历史"
+	if strings.TrimSpace(scopeNote) != "" {
+		scope = scopeNote
+	}
+	prompt := "你是严格的审计员。下面【原始对话】是" + scope + "，【摘要】是模型生成的压缩摘要。\n" +
 		"请只依据【原始对话】审计【摘要】，不要引入任何外部知识，也不要因为摘要看起来合理就放过。\n" +
 		"【原始对话】以 [system]/[user]/[assistant]/[tool] 标注角色，工具调用的名称与参数写在 [tool_call ...] 行里；\n" +
 		"凡在工具调用参数、工具结果或任一轮正文中出现过的信息，都算原文存在，不算编造。\n" +

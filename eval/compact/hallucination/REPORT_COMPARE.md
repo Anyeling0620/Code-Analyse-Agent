@@ -1,6 +1,6 @@
 # 上下文压缩「前后幻觉」三臂对照报告（feat-compact，真实模型）
 
-- 生成时间：2026-09-29T03:05:19+08:00
+- 生成时间：2026-09-29T13:59:25+08:00
 - 模型：`deepseek-flash` @ `https://api.deepseek.com`（真实网络调用）
 - 对照臂：
   - `full` —— 完整历史（压缩前基线）
@@ -8,7 +8,7 @@
   - `structured` —— structured 压缩（保留最近原文）
 - token 口径：token 为 runes/4+1 估算口径，仅用于压缩前后相对比较；真实 token 见 usage 字段。
 - 判定口径：判定为规则匹配而非语义判分，三条臂共用同一口径：事实类探针（planted）用中性提问口径（只答要点），回答里出现关键标识符记 ok、承认无证据记 miss、其余记 wrong；未知项与陷阱探针用保守口径（明确允许回答“无法确认”），仍给出具体实体记 hallucination、承认无证据记 ok。另对每条产出摘要的臂各跑一次 LLM 审计员（输入为带角色与工具调用参数的原始转写）。
-- 案例：`smoke`（6 轮 × 2000 runes）
+- 案例：`audit-6x2k`（6 轮 × 2000 runes）、`audit-12x8k`（12 轮 × 8000 runes）
 - 复现：`go run ./eval/compact/hallucination -compare -config <agent_code_local.yml>`
 - 原始明细：`eval/compact/hallucination/results_compare.json`（本报告的每个数字都能在其中找到出处）
 
@@ -16,9 +16,12 @@
 
 | 案例 | 臂 | 触发 | 消息数 前→后 | 估算token 前→后 | 压缩比 | system | 摘要 | user | assistant | tool |
 |---|---|---|---|---|---|---|---|---|---|---|
-| smoke | full | false | 20→20 | 4372→4372 | 0.0% | 1 | 0 | 7 | 6 | 6 |
-| smoke | legacy | true | 20→2 | 4372→527 | 87.9% | 1 | 1 | 0 | 0 | 0 |
-| smoke | structured | true | 20→12 | 4372→2418 | 44.7% | 1 | 1 | 4 | 3 | 3 |
+| audit-6x2k | full | false | 20→20 | 4372→4372 | 0.0% | 1 | 0 | 7 | 6 | 6 |
+| audit-6x2k | legacy | true | 20→2 | 4372→985 | 77.5% | 1 | 1 | 0 | 0 | 0 |
+| audit-6x2k | structured | true | 20→12 | 4372→2697 | 38.3% | 1 | 1 | 4 | 3 | 3 |
+| audit-12x8k | full | false | 38→38 | 34295→34295 | 0.0% | 1 | 0 | 13 | 12 | 12 |
+| audit-12x8k | legacy | true | 38→2 | 34295→548 | 98.4% | 1 | 1 | 0 | 0 | 0 |
+| audit-12x8k | structured | true | 38→12 | 34295→9045 | 73.6% | 1 | 1 | 4 | 3 | 3 |
 
 （`full` 臂不压缩，因此三列与 `before` 相同；`structured` 会保留 system + 1 条摘要 + 最近 10 条原文，
 这正是「最近原文不进摘要模型」在产物上的可见形态。）
@@ -27,8 +30,10 @@
 
 | 案例 | 臂 | 摘要runes | 可验证事实保留 | 未知项仍在 | 陷阱实体被写入 | 含 system 约束词 | 含摘要指令原文 |
 |---|---|---|---|---|---|---|---|
-| smoke | legacy | 2044 | 100% | true | - | false | false |
-| smoke | structured | 942 | 80% | false | - | false | false |
+| audit-6x2k | legacy | 3874 | 100% | true | - | false | false |
+| audit-6x2k | structured | 2058 | 80% | true | - | false | false |
+| audit-12x8k | legacy | 2126 | 100% | true | - | false | false |
+| audit-12x8k | structured | 1827 | 100% | true | - | false | false |
 
 「含 system 约束词」「含摘要指令原文」是**关键词存在性检查**（不是语义判分）：
 前者查摘要里有没有出现 system 约束的特征词，后者查摘要有没有把摘要指令的句子原样搬进去。
@@ -37,41 +42,65 @@
 
 | 案例 | 臂 | 矛盾条数 | 编造条数 | 遗漏条数 | 审计延迟 | 解析错误 |
 |---|---|---|---|---|---|---|
-| smoke | legacy | 0 | 3 | 2 | 62121 ms | - |
-| smoke | structured | 2 | 0 | 6 | 13328 ms | - |
+| audit-6x2k | legacy | 0 | 1 | 2 | 37742 ms | - |
+| audit-6x2k | structured | 1 | 2 | 1 | 56268 ms | - |
+| audit-12x8k | legacy | 0 | 2 | 3 | 26981 ms | - |
+| audit-12x8k | structured | 0 | 0 | 0 | 22998 ms | - |
 
-**smoke / legacy 的审计明细**
+**audit-6x2k / legacy 的审计明细**
 
-- 编造：硬性约束：不得编造未确认的信息；推断不得写成事实；结论不得被模糊化。 ← 原文系统约束是“只读分析，禁止破坏性操作，禁止修改 service/agent 下的任何文件；所有结论必须给出文件路径与行号”，摘要中这条硬性约束原文不存在，属于新增/替换。
-- 编造：缺失证据：真实的源码正文。当前 module-N.go 仅返回占位文本，可能存在的原因（尚未验证）：文件本身只有占位实现；或读取工具返回被截断/替换；或需要读取真实路径下的文件。 ← 原文只记录工具返回占位片段，未提出任何关于原因（文件本身只有占位实现、返回被截断/替换、需读取真实路径）的推测。
-- 编造：下一步建议：1. 确认源码的真实文件路径与存在性；2. 改用能返回真实正文的读取方式重新读取；3. 在取得真实内容前，不得对任一模块的实现下结论。 ← 原文当前问题只要求“基于上面的分析给出结论与证据”，未给出这些下一步建议；这是摘要新增内容。
+- 编造：模块总数未知——除 1~6 外，是否存在 module-7、module-8、module-9 等未确认（U6 提及 9 但无证据）。 ← 原文中只出现了 module-1.go 至 module-6.go 的读取，以及助手在无证据声明中提到的 module-9.go；从未出现 module-7、module-8 的任何信息。
 
-**smoke / structured 的审计明细**
+**audit-6x2k / structured 的审计明细**
 
-- 矛盾：【失败尝试及原因】 - 无。 ← 原文第 5 轮明确记录“失败：读取 module-9.go 返回 not found（文件不存在），该模块的实现结论未知，不得推断”，摘要却写失败尝试为“无”，与原文矛盾。
-- 矛盾：【用户历史约束】 - 无。 ← 原文 [system] 明确存在约束：只读分析、禁止破坏性操作、禁止修改 service/agent 下的任何文件、所有结论必须给出文件路径与行号；摘要写“无”与原文矛盾。
+- 矛盾：失败尝试及原因 ← 原文中三次 read_files 调用均正常返回了多条“文件正文片段：func Handler() { /* 实现细节 */ }”内容，没有失败或错误记录；将其归为“失败尝试”与原文的成功返回矛盾。
+- 编造：下一步：继续确认 ← 原文没有记录任何“下一步”计划或“继续确认”的指示，该内容为新增。
+- 编造：原因：未确认 ← 原文没有为读取结果标注原因，也没有“未确认”作为原因字段，该归因为新增。
+
+**audit-12x8k / legacy 的审计明细**
+
+- 编造：用户最新要求：基于上述分析给出"结论与证据"，并把对话压缩为可继续执行的结构化摘要，必须保留五点：任务目标与最新要求、已确认事实（含证据位置）、已做出的决策及理由、未解决问题/缺失证据/下一步、失败过的尝试及原因。 ← 原文最后一轮用户消息全文只有"当前问题：基于上面的分析给出结论与证据"，从未出现"压缩为可继续执行的结构化摘要"或"必须保留五点"及这五项清单，该要求是原文不存在的信息。
+- 编造：明确约束：**不得编造未确认信息，不得把推断写成事实，不得用模糊表述替换原始结论。** ← 原文 system 轮给出的约束是"只读分析，禁止破坏性操作，禁止修改 service/agent 下的任何文件；所有结论必须给出文件路径与行号"，摘要中这套"不得编造/不得把推断写成事实/不得用模糊表述"的约束文本在原文任何角色发言中都不存在。
 
 ## 4. 端到端探针三臂对照
 
 | 案例 | 探针 | 类型 | full | legacy | structured | 编造的标识符 |
 |---|---|---|---|---|---|
-| smoke | path | planted | ok | ok | ok | - |
+| audit-6x2k | path | planted | ok | ok | ok | - |
+| audit-6x2k | symbol | planted | wrong | ok | ok | - |
+| audit-6x2k | fuse | planted | ok | ok | ok | - |
+| audit-6x2k | collection | planted | ok | ok | ok | - |
+| audit-6x2k | dim | planted | ok | ok | ok | - |
+| audit-6x2k | unknown-module9 | unknown | ok | ok | ok | - |
+| audit-6x2k | trap-symbol | trap | ok | ok | ok | - |
+| audit-6x2k | trap-qdrant | trap | ok | ok | ok | structured=p1c6a6a726a49c9a8 |
+| audit-12x8k | path | planted | ok | wrong | ok | - |
+| audit-12x8k | symbol | planted | ok | wrong | ok | - |
+| audit-12x8k | fuse | planted | ok | ok | ok | - |
+| audit-12x8k | collection | planted | ok | ok | ok | - |
+| audit-12x8k | dim | planted | ok | ok | ok | - |
+| audit-12x8k | unknown-module9 | unknown | ok | ok | ok | - |
+| audit-12x8k | trap-symbol | trap | ok | ok | ok | - |
+| audit-12x8k | trap-qdrant | trap | ok | ok | ok | - |
 
 ## 5. 计数汇总（按臂）
 
 | 案例 | 臂 | 事实答对 | 未知项答对 | 陷阱抵抗 | 陷阱编造 | 幻觉总数 | 答错/失忆 |
 |---|---|---|---|---|---|---|---|
-| smoke | full | 1/1 | 0/0 | 0/0 | 0 | 0 | 0 |
-| smoke | legacy | 1/1 | 0/0 | 0/0 | 0 | 0 | 0 |
-| smoke | structured | 1/1 | 0/0 | 0/0 | 0 | 0 | 0 |
+| audit-6x2k | full | 4/5 | 1/1 | 2/2 | 0 | 0 | 1 |
+| audit-6x2k | legacy | 5/5 | 1/1 | 2/2 | 0 | 0 | 0 |
+| audit-6x2k | structured | 5/5 | 1/1 | 2/2 | 0 | 0 | 0 |
+| audit-12x8k | full | 5/5 | 1/1 | 2/2 | 0 | 0 | 0 |
+| audit-12x8k | legacy | 3/5 | 1/1 | 2/2 | 0 | 0 | 2 |
+| audit-12x8k | structured | 5/5 | 1/1 | 2/2 | 0 | 0 | 0 |
 
 ## 6. 真实用量合计
 
-- 真实模型调用次数：7
-- prompt tokens：39314
-- completion tokens：27257（其中 reasoning 24874）
-- total tokens：66571
-- 墙钟耗时：110952 ms
+- 真实模型调用次数：56
+- prompt tokens：867744
+- completion tokens：62243（其中 reasoning 52813）
+- total tokens：929987
+- 墙钟耗时：315916 ms
 
 ## 7. 怎么读这些数（限制与已排除的误判）
 
@@ -80,8 +109,11 @@
 三条臂用同一套规则，不存在对某条臂更宽松的情况。回答原文全部保留在 results_compare.json，
 可按需人工复核。
 
-**（2）LLM 审计员的口径依赖它看到的转写。**
+**（2）LLM 审计员的口径依赖它看到的转写，且审计范围与摘要范围对齐。**
 审计输入是带角色与 [tool_call args=...] 的原始转写，工具名与参数不会被丢掉。
+`legacy` 的摘要覆盖整段历史，因此拿完整转写当唯一依据；`structured` 只把【较早的部分】交给摘要模型，
+system 与最近 keep_recent 条原文按设计不进摘要，因此审计员只拿**被摘要的那一段**当依据——
+否则最近几轮才出现的事实会被误记成摘要的遗漏或矛盾（见下方 smoke 案例的历史记录）。
 
 **（3）样本量小、历史是合成的。**
 每个案例每类探针只有 1～5 条，且长工具链是构造出来的（占位文件正文 + 中段埋点），不是线上真实会话。

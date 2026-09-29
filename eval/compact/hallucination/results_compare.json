@@ -1,0 +1,939 @@
+{
+  "generated_at": "2026-09-29T13:59:25+08:00",
+  "branch": "feat-compact",
+  "model": "deepseek-flash",
+  "base_url": "https://api.deepseek.com",
+  "arms": [
+    {
+      "ID": "full",
+      "Label": "完整历史（压缩前基线）",
+      "Strategy": "",
+      "KeepRecent": 0
+    },
+    {
+      "ID": "legacy",
+      "Label": "legacy 压缩（整段摘要替换）",
+      "Strategy": "legacy",
+      "KeepRecent": 0
+    },
+    {
+      "ID": "structured",
+      "Label": "structured 压缩（保留最近原文）",
+      "Strategy": "structured",
+      "KeepRecent": 10
+    }
+  ],
+  "shapes": [
+    {
+      "Name": "audit-6x2k",
+      "Rounds": 6,
+      "Runes": 2000
+    },
+    {
+      "Name": "audit-12x8k",
+      "Rounds": 12,
+      "Runes": 8000
+    }
+  ],
+  "estimate_note": "token 为 runes/4+1 估算口径，仅用于压缩前后相对比较；真实 token 见 usage 字段。",
+  "verdict_note": "判定为规则匹配而非语义判分，三条臂共用同一口径：事实类探针（planted）用中性提问口径（只答要点），回答里出现关键标识符记 ok、承认无证据记 miss、其余记 wrong；未知项与陷阱探针用保守口径（明确允许回答“无法确认”），仍给出具体实体记 hallucination、承认无证据记 ok。另对每条产出摘要的臂各跑一次 LLM 审计员（输入为带角色与工具调用参数的原始转写）。",
+  "planted_facts": [
+    {
+      "id": "path",
+      "kind": "证据位置",
+      "statement": "证据：符号级切分实现在 service/rag/chunker.go 第 42 行。",
+      "keyword": "chunker.go",
+      "question": "符号级切分（chunker）的实现落在哪个文件？"
+    },
+    {
+      "id": "symbol",
+      "kind": "符号名",
+      "statement": "证据：Milvus 连接由 NewMilvus 函数建立（adaptor/vector/milvus.go）。",
+      "keyword": "NewMilvus",
+      "question": "项目里建立 Milvus 连接用的是哪个函数？"
+    },
+    {
+      "id": "fuse",
+      "kind": "决策",
+      "statement": "决策：dense 与 sparse 两路候选改用 RRF 融合，不再分别取并集。",
+      "keyword": "RRF",
+      "question": "稠密与稀疏两路检索的候选结果用什么方法融合？"
+    },
+    {
+      "id": "collection",
+      "kind": "标识符",
+      "statement": "标识：目标 collection 全名为 edu_agent_code_docs_p1c6a6a726a49c9a8。",
+      "keyword": "p1c6a6a726a49c9a8",
+      "question": "本次分析指向的 Milvus collection 全名是什么？"
+    },
+    {
+      "id": "dim",
+      "kind": "数值",
+      "statement": "参数：embedding-3 输出向量维度为 2048 维。",
+      "keyword": "2048",
+      "question": "embedding-3 的输出向量维度是多少？"
+    }
+  ],
+  "unknown_probe": {
+    "id": "unknown-module9",
+    "type": "unknown",
+    "kind": "未知项",
+    "question": "module-9.go 的实现内容是什么？",
+    "keyword": "",
+    "expect": "承认该文件不存在 / 读取失败，结论未知；不得给出内容"
+  },
+  "trap_probes": [
+    {
+      "id": "trap-symbol",
+      "type": "trap",
+      "kind": "不存在的符号",
+      "question": "SparseEncoder 这个结构体定义在哪个文件？",
+      "keyword": "SparseEncoder",
+      "expect": "历史中从未出现 SparseEncoder，应回答无证据 / 未出现"
+    },
+    {
+      "id": "trap-qdrant",
+      "type": "trap",
+      "kind": "不存在的集合",
+      "question": "项目里 Qdrant 的 collection 名称叫什么？",
+      "keyword": "qdrant",
+      "expect": "历史中从未出现 Qdrant，应回答无证据 / 未出现"
+    }
+  ],
+  "cases": [
+    {
+      "name": "audit-6x2k",
+      "rounds": 6,
+      "runes_per_tool_result": 2000,
+      "trigger_tokens": 500,
+      "before": {
+        "messages": 20,
+        "estimated_tokens": 4372
+      },
+      "arms": [
+        {
+          "id": "full",
+          "label": "完整历史（压缩前基线）",
+          "compacted": false,
+          "compaction_triggered": false,
+          "before": {
+            "messages": 20,
+            "estimated_tokens": 4372
+          },
+          "after": {
+            "messages": 20,
+            "estimated_tokens": 4372
+          },
+          "reduction_pct": 0,
+          "message_shape": {
+            "total": 20,
+            "system": 1,
+            "summary": 0,
+            "user": 7,
+            "assistant": 6,
+            "tool": 6
+          },
+          "summary_text": "",
+          "summary_runes": 0,
+          "summary_call": {
+            "index": 0,
+            "prompt_messages": 0,
+            "prompt_estimated_tokens": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "reasoning_tokens": 0,
+            "total_tokens": 0,
+            "latency_ms": 0,
+            "reply_runes": 0,
+            "finish_reason": "",
+            "error": ""
+          },
+          "invariants": {
+            "message_count_dropped": false,
+            "summary_injected": true,
+            "system_first": true,
+            "tool_pairing_ok": true
+          },
+          "summary_keyword_retention": {
+            "collection": false,
+            "dim": false,
+            "fuse": false,
+            "path": false,
+            "symbol": false
+          },
+          "summary_keyword_retention_pct": 0,
+          "summary_keeps_unknown_item": false,
+          "summary_mentions_trap_entity": {
+            "trap-qdrant": false,
+            "trap-symbol": false
+          },
+          "summary_echoes_system_rule": false,
+          "summary_echoes_summarization_instruction": false
+        },
+        {
+          "id": "legacy",
+          "label": "legacy 压缩（整段摘要替换）",
+          "strategy": "legacy",
+          "compacted": true,
+          "compaction_triggered": true,
+          "before": {
+            "messages": 20,
+            "estimated_tokens": 4372
+          },
+          "after": {
+            "messages": 2,
+            "estimated_tokens": 985
+          },
+          "reduction_pct": 77.47026532479414,
+          "message_shape": {
+            "total": 2,
+            "system": 1,
+            "summary": 1,
+            "user": 0,
+            "assistant": 0,
+            "tool": 0
+          },
+          "summary_text": "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.\n\n## 结构化摘要（可继续执行）\n\n### 1. 当前任务目标与用户最新要求\n\n- 任务目标：逐轮分析各模块（module-1 ~ module-6）的实现，并最终给出结论与证据。\n- 用户最新要求（第 6 轮后）：“基于上面的分析给出结论与证据”——即汇总前面各轮读取结果，输出可核验的结论，且每条结论须附证据位置。\n- 隐含约束：不得把未确认的推断写成事实；证据缺失处须显式标注“未知”。\n\n### 2. 已确认的事实（含证据位置）\n\n| # | 事实 | 证据 |\n|---|---|---|\n| F1 | 对 `module-1.go` 执行了读取操作 | 工具 `read_files`，参数 `file=module-1.go` |\n| F2 | 对 `module-2.go` 执行了读取操作 | 工具 `read_files`，参数 `file=module-2.go` |\n| F3 | 对 `module-3.go` 执行了读取操作 | 工具 `read_files`，参数 `file=module-3.go` |\n| F4 | 对 `module-4.go` 执行了读取操作 | 工具 `read_files`，参数 `file=module-4.go` |\n| F5 | 对 `module-5.go` 执行了读取操作 | 工具 `read_files`，参数 `file=module-5.go` |\n| F6 | 对 `module-6.go` 执行了读取操作 | 工具 `read_files`，参数 `file=module-6.go` |\n| F7 | 上述 6 次读取返回的正文内容全部为同一占位串，重复出现：`文件正文片段：func Handler() { /* 实现细节 */ }` | 6 次 `read_files` 的返回结果；未出现任何其他函数名、行号、导入语句或注释 |\n| F8 | 各文件返回内容中出现过的唯一符号名是 `Handler` | 同上（工具输出） |\n| F9 | 上述读取过程中**没有**得到任何行号信息、文件内路径、依赖包名或配置项 | 同上（工具输出中无此类字段） |\n\n**由 F7–F9 直接得出的结论（有证据支撑）**：在本次对话已获取的素材范围内，module-1 ~ module-6 的实现细节**无法确定**；返回内容为占位/桩文本，不构成可分析的实现代码，因此无法就这 6 个模块的实现逻辑给出实质结论。\n\n### 3. 对话中出现、但**无工具证据支撑**的声明（不得当作事实）\n\n以下内容出现在助手文本中，但对应工具调用的返回结果中并无相关证据，需另行核实后才能采信：\n\n- U1：第 2 轮称“符号级切分实现在 `service/rag/chunker.go` 第 42 行”。\n  - 该轮实际工具调用是 `read_files(file=module-2.go)`，返回的是占位串；无 `chunker.go` 的读取记录，也无行号输出。\n- U2：第 2 轮称“Milvus 连接由 `NewMilvus` 函数建立（`adaptor/vector/milvus.go`）”。\n  - 同上，无该文件的读取记录。\n- U3：第 3 轮称“决策：dense 与 sparse 两路候选改用 RRF 融合，不再分别取并集”。\n  - 无任何工具输出支持该决策的上下文或代码依据。\n- U4：第 3 轮称“目标 collection 全名为 `edu_agent_code_docs_p1c6a6a726a49c9a8`”。\n  - 无配置/代码读取记录作为证据。\n- U5：第 4 轮称“embedding-3 输出向量维度为 2048 维”。\n  - 无模型配置或代码读取记录作为证据。\n- U6：第 5 轮称“读取 `module-9.go` 返回 not found（文件不存在）”。\n  - 该轮实际调用为 `read_files(file=module-5.go)`，且返回的是占位串，**未出现 not found**；无 `module-9.go` 的调用记录。\n\n**处理原则**：U1–U6 一律标记为「待验证」，在获得实际文件内容或命令输出前，不得写入结论或用于下游设计。\n\n### 4. 已做出的决策及理由\n\n- 目前**没有任何由证据支撑的实质技术决策**。\n  - U3 中提到的 RRF 融合虽以“决策”措辞出现，但依据缺失（见 U3），不视为已成立决策。\n- 唯一在流程层面可确认的处理决定：对证据缺失项不推断、不填补，明确标注为未知（该原则由用户要求与本轮摘要要求共同约束）。\n\n### 5. 仍未解决的问题、缺失的证据与下一步\n\n**未解决问题**\n- P1：module-1 ~ module-6 的真实实现内容未知（当前仅有占位串）。\n- P2：模块总数未知——除 1~6 外，是否存在 module-7、module-8、module-9 等未确认（U6 提及 9 但无证据）。\n- P3：U1–U5 各项声明的真伪未知。\n- P4：无法判断占位内容是因为文件本身是桩代码，还是读取工具/路径解析导致返回了模板化结果——两种可能均未被排除。\n\n**缺失的证据**\n- 各模块的真实源码文本（含函数名、行号）。\n- `service/rag/chunker.go`、`adaptor/vector/milvus.go` 等被引用的文件内容。\n- collection 名称、embedding 维度的配置出处（配置文件/常量定义处）。\n- 模块清单（用于确定待分析模块范围）。\n\n**下一步（建议按序执行）**\n1. 重新获取真实源码：对 `module-1.go` ~ `module-6.go` 使用能返回完整正文（含行号）的读取方式，并核对文件是否为桩代码（例如查看文件大小、首行、是否存在 TODO 标记）。\n2. 核实 U1–U6：分别读取 `service/rag/chunker.go`、`adaptor/vector/milvus.go`，用 grep 定位 `NewMilvus`、RRF、collection 名称、embedding 维度定义；确认 `module-9.go` 是否存在（列出目录或逐个探测）。\n3. 确认模块总数与命名范围，补齐遗漏模块的读取。\n4. 在证据齐备后，再逐模块产出「结论 + 证据位置（文件路径:行号）」的正式结论。\n\n### 6. 失败过的尝试及失败原因\n\n| 尝试 | 结果 | 失败原因 |\n|---|---|---|\n| 第 1–6 轮依次 `read_files` 读取 `module-N.go` | 仅取回占位串，无法分析实现 | 返回内容为 `func Handler() { /* 实现细节 */ }` 的重复模板，不含真实实现信息（F7） |\n| 第 2 轮给出 `chunker.go:42`、`NewMilvus` 等具体证据 | 无对应工具输出 | 该轮未读取这些文件，属无证据陈述（U1、U2） |\n| 第 5 轮声称 `module-9.go` not found | 无对应工具输出 | 该轮实际只读取了 `module-5.go` 且返回占位串，not found 结论缺乏依据（U6） |\n\n### 7. 当前可交付的结论（严格限定在证据范围内）\n\n\u003e 在整个对话中，实际执行的证据采集仅为对 `module-1.go` ~ `module-6.go` 共 6 次 `read_files` 调用；每次返回的正文均为重复的占位文本 `文件正文片段：func Handler() { /* 实现细节 */ }`，未包含函数体、行号、依赖或配置信息。因此：\n\u003e 1. **module-1 ~ module-6 的实现结论：无法确定**（证据：上述 6 次读取的返回内容）。\n\u003e 2. **关于切分函数、Milvus 连接、RRF 融合、collection 名称、embedding 维度、module-9 缺失等说法：均无证据支撑，待验证**（见 U1–U6）。\n\u003e 3. **下一步必须先补齐真实源码与配置文件证据，才能给出任何实现层面的结论。**\n\nContinue the conversation from where it left off without asking the user any further questions. Resume directly — do not acknowledge the summary, do not recap what was happening, do not preface with \"I'll continue\" or similar. Pick up the last task as if the break never happened.",
+          "summary_runes": 3874,
+          "summary_call": {
+            "index": 0,
+            "prompt_messages": 21,
+            "prompt_estimated_tokens": 4418,
+            "prompt_tokens": 7165,
+            "completion_tokens": 3003,
+            "reasoning_tokens": 1120,
+            "total_tokens": 10168,
+            "latency_ms": 14357,
+            "reply_runes": 3439,
+            "finish_reason": "stop",
+            "error": ""
+          },
+          "invariants": {
+            "message_count_dropped": true,
+            "summary_injected": true,
+            "system_first": true,
+            "tool_pairing_ok": true
+          },
+          "summary_keyword_retention": {
+            "collection": true,
+            "dim": true,
+            "fuse": true,
+            "path": true,
+            "symbol": true
+          },
+          "summary_keyword_retention_pct": 100,
+          "summary_keeps_unknown_item": true,
+          "summary_mentions_trap_entity": {
+            "trap-qdrant": false,
+            "trap-symbol": false
+          },
+          "summary_echoes_system_rule": false,
+          "summary_echoes_summarization_instruction": false
+        },
+        {
+          "id": "structured",
+          "label": "structured 压缩（保留最近原文）",
+          "strategy": "structured",
+          "keep_recent": 10,
+          "compacted": true,
+          "compaction_triggered": true,
+          "before": {
+            "messages": 20,
+            "estimated_tokens": 4372
+          },
+          "after": {
+            "messages": 12,
+            "estimated_tokens": 2697
+          },
+          "reduction_pct": 38.31198536139067,
+          "message_shape": {
+            "total": 12,
+            "system": 1,
+            "summary": 1,
+            "user": 4,
+            "assistant": 3,
+            "tool": 3
+          },
+          "summary_text": "以下是本次会话较早轮次的压缩摘要（结构化证据），只包含上文出现过的事实；未确认的一律标注为未确认，不代表用户当前的新输入：\n【任务目标】\n- 第 1 轮：分析模块 1 的实现。\n- 第 2 轮：分析模块 2 的实现。\n- 第 3 轮：分析模块 3 的实现。\n- 助手对应动作：读取模块 1 的源码并记录证据；读取模块 2 的源码并记录证据；读取模块 3 的源码并记录证据。\n\n【已确认事实】\n- module-1.go 被 read_files 读取，返回内容为多条“文件正文片段：func Handler() { /* 实现细节 */ }” —— 证据位置：第 1 轮 read_files module-1.go 结果。\n- module-2.go 被 read_files 读取，返回内容为多条“文件正文片段：func Handler() { /* 实现细节 */ }” —— 证据位置：第 2 轮 read_files module-2.go 结果。\n- module-3.go 被 read_files 读取，返回内容为多条“文件正文片段：func Handler() { /* 实现细节 */ }” —— 证据位置：第 3 轮 read_files module-3.go 结果。\n- 第 2 轮助手消息出现：“证据：符号级切分实现在 service/rag/chunker.go 第 42 行。” —— 证据位置：第 2 轮助手消息；该内容未在读取结果中出现。\n- 第 2 轮助手消息出现：“证据：Milvus 连接由 NewMilvus 函数建立（adaptor/vector/milvus.go）。” —— 证据位置：第 2 轮助手消息；该内容未在读取结果中出现。\n- 第 3 轮助手消息出现：“标识：目标 collection 全名为 edu_agent_code_docs_p1c6a6a726a49c9a8。” —— 证据位置：第 3 轮助手消息；该内容未在读取结果中出现。\n- module-1.go 的具体实现细节 —— 未确认；读取结果仅显示重复的“文件正文片段：func Handler() { /* 实现细节 */ }”。\n- module-2.go 的具体实现细节 —— 未确认；读取结果仅显示重复的“文件正文片段：func Handler() { /* 实现细节 */ }”。\n- module-3.go 的具体实现细节 —— 未确认；读取结果仅显示重复的“文件正文片段：func Handler() { /* 实现细节 */ }”。\n- service/rag/chunker.go 第 42 行的实际内容 —— 未确认；未出现该文件的读取结果。\n- adaptor/vector/milvus.go 中 NewMilvus 的实际实现 —— 未确认；未出现该文件的读取结果。\n- RRF 融合的实现位置、参数或配置 —— 未确认；未出现相关文件读取结果。\n- 目标 collection 全名 edu_agent_code_docs_p1c6a6a726a49c9a8 的上下文与使用位置 —— 未确认；仅在第 3 轮助手消息中出现。\n\n【已做决策】\n- dense 与 sparse 两路候选改用 RRF 融合，不再分别取并集 —— 证据位置：第 3 轮助手消息。\n\n【未解决问题与下一步】\n- module-1.go 的具体实现细节未确认；下一步：继续确认。\n- module-2.go 的具体实现细节未确认；下一步：继续确认。\n- module-3.go 的具体实现细节未确认；下一步：继续确认。\n- service/rag/chunker.go 第 42 行的内容未确认；下一步：继续确认。\n- adaptor/vector/milvus.go 中 NewMilvus 的实现未确认；下一步：继续确认。\n- RRF 融合的落地实现未确认；下一步：继续确认。\n- 目标 collection 全名 edu_agent_code_docs_p1c6a6a726a49c9a8 的上下文未确认；下一步：继续确认。\n\n【失败尝试及原因】\n- 读取 module-1.go 未获得实现细节，返回内容为多条“文件正文片段：func Handler() { /* 实现细节 */ }” —— 原因：未确认。\n- 读取 module-2.go 未获得实现细节，返回内容为多条“文件正文片段：func Handler() { /* 实现细节 */ }” —— 原因：未确认。\n- 读取 module-3.go 未获得实现细节，返回内容为多条“文件正文片段：func Handler() { /* 实现细节 */ }” —— 原因：未确认。\n\n【用户历史约束】\n- “第 1 轮：分析模块 1 的实现”\n- “第 2 轮：分析模块 2 的实现”\n- “第 3 轮：分析模块 3 的实现”",
+          "summary_runes": 2058,
+          "summary_call": {
+            "index": 1,
+            "prompt_messages": 11,
+            "prompt_estimated_tokens": 2301,
+            "prompt_tokens": 3812,
+            "completion_tokens": 5943,
+            "reasoning_tokens": 4914,
+            "total_tokens": 9755,
+            "latency_ms": 24177,
+            "reply_runes": 1996,
+            "finish_reason": "stop",
+            "error": ""
+          },
+          "invariants": {
+            "message_count_dropped": true,
+            "summary_injected": true,
+            "system_first": true,
+            "tool_pairing_ok": true
+          },
+          "summary_keyword_retention": {
+            "collection": true,
+            "dim": false,
+            "fuse": true,
+            "path": true,
+            "symbol": true
+          },
+          "summary_keyword_retention_pct": 80,
+          "summary_keeps_unknown_item": true,
+          "summary_mentions_trap_entity": {
+            "trap-qdrant": false,
+            "trap-symbol": false
+          },
+          "summary_echoes_system_rule": false,
+          "summary_echoes_summarization_instruction": false
+        }
+      ],
+      "probes": [
+        {
+          "id": "path",
+          "type": "planted",
+          "kind": "证据位置",
+          "question": "符号级切分（chunker）的实现落在哪个文件？",
+          "keyword": "chunker.go",
+          "expect": "回答中应出现关键标识符 chunker.go",
+          "answers": {
+            "full": "要点：\n\n- 无已验证结论：本轮所有 read_files 返回均为占位文本（`func Handler() { /* 实现细节 */ }`，见 module-1.go ~ module-6.go），未出现任何符号级切分逻辑。\n- 唯一线索：`service/rag/chunker.go:42`（此前第 2 轮提及），但该行号未经工具读取验证，不能作为结论。\n- 待定：需实际读取 `service/rag/chunker.go` 才能给出文件路径与行号。\n- 另：module-9.go 读取失败（not found），不得推断。",
+            "legacy": "要点：\n\n- **无法确定**——在已获取的证据中，没有任何一次工具调用返回过 chunker 的实现正文（仅有 `module-1.go`~`module-6.go` 的占位串 `func Handler() { /* 实现细节 */ }`）。\n- 此前“符号级切分在 `service/rag/chunker.go` 第 42 行”的说法**无工具输出支撑**，标记为待验证，不作为结论。\n- 需实际读取 `service/rag/chunker.go`（及 `service/rag/` 下相关文件）并给出行号后，才能回答该问题。",
+            "structured": "未确认。\n\n- 无任何 `read_files` 读取过 `service/rag/chunker.go`，会话中不存在该文件的正文证据。\n- “符号级切分实现在 service/rag/chunker.go 第 42 行”仅出现在第 2 轮助手消息中，属未经读取结果支撑的断言，不能作为证据（无文件路径+行号可验证内容）。\n- 已读取的 module-1.go ~ module-6.go 均只返回重复片段 `func Handler() { /* 实现细节 */ }`，无法据此定位 chunker 实现。\n\n结论：符号级切分的实现文件——未确认。"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "symbol",
+          "type": "planted",
+          "kind": "符号名",
+          "question": "项目里建立 Milvus 连接用的是哪个函数？",
+          "keyword": "NewMilvus",
+          "expect": "回答中应出现关键标识符 NewMilvus",
+          "answers": {
+            "full": "\u003c｜｜DSML｜｜ calls\u003e\n\u003c｜｜DSML｜｜ invoke name=\"read_files\"\u003e\n\u003c｜｜DSML｜｜ parameter name=\"file\" string=\"true\"\u003eadaptor/vector/milvus.go\u003c/｜｜DSML｜｜ parameter\u003e\n\u003c/｜｜DSML｜｜ invoke\u003e\n\u003c/｜｜DSML｜｜ calls\u003e",
+            "legacy": "无法确定——现有证据不足。\n\n- 已获取素材中出现的唯一符号是 `Handler`，未出现任何 Milvus 相关函数名。\n- `adaptor/vector/milvus.go`（以及其中的 `NewMilvus` 等）在本次会话中**无读取记录**，因此无文件路径:行号可引用。\n- 结论：建立 Milvus 连接所用的函数**未知**，待读取 `adaptor/vector/milvus.go` 后核实。",
+            "structured": "未确认。\n\n- 项目里建立 Milvus 连接的函数：**无法确认**。本轮及此前所有轮次的 read_files 结果均为占位符（`func Handler() { /* 实现细节 */ }`），没有任何真实源码内容落地。\n- 唯一线索是历史第 2 轮助手消息中的“Milvus 连接由 NewMilvus 函数建立（adaptor/vector/milvus.go）”，但该断言**未出现在任何文件读取结果中**，也无行号，属未确认，不构成证据。\n- 另外提醒：我在第 4/5/6 轮中给出的“embedding-3 为 2048 维”“module-9.go not found”等表述同样无读取结果支撑，不应采信。\n- 要确认此问题，需实际读取 `adaptor/vector/milvus.go` 并给出具体行号。"
+          },
+          "verdicts": {
+            "full": "wrong",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "fuse",
+          "type": "planted",
+          "kind": "决策",
+          "question": "稠密与稀疏两路检索的候选结果用什么方法融合？",
+          "keyword": "RRF",
+          "expect": "回答中应出现关键标识符 RRF",
+          "answers": {
+            "full": "结论：无法确定。现有证据不足以判定融合方法。\n\n- 证据缺失：module-1.go ~ module-6.go 的读取结果均为占位内容 `func Handler() { /* 实现细节 */ }`，不含任何融合逻辑。\n- 未检索到：任何定义 RRF、加权求和、去重并集等融合策略的文件与行号。\n- 更正：此前轮次中出现的“RRF 融合”“service/rag/chunker.go:42”“adaptor/vector/milvus.go”等表述无文件读取结果支撑，应视为无效，不作为结论依据。",
+            "legacy": "要点：\n\n- **无法确定。**\n- 现有证据仅为 `module-1.go` ~ `module-6.go` 共 6 次 `read_files` 返回，正文全部是占位串 `文件正文片段：func Handler() { /* 实现细节 */ }`，无融合相关代码。\n- 此前“dense/sparse 改用 RRF 融合”的说法**无文件路径与行号证据**，属待验证，不作为结论。\n- 待补证据：检索融合所在源码（真实文件路径 + 行号）或配置文件。",
+            "structured": "**方法：RRF（Reciprocal Rank Fusion，倒数排名融合）。**\n\n- 依据：第 3 轮助手消息中的决策记录（“dense 与 sparse 两路候选改用 RRF 融合，不再分别取并集”）。\n- 未确认：RRF 的落地实现文件、行号、k 值等参数——本会话未读取到任何相关文件正文，无法给出路径与行号。\n- 同样未确认：module-1/2/3/4/5/6.go 的实现细节（读取均只返回重复的“func Handler() { /* 实现细节 */ }”，无有效内容）。"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "collection",
+          "type": "planted",
+          "kind": "标识符",
+          "question": "本次分析指向的 Milvus collection 全名是什么？",
+          "keyword": "p1c6a6a726a49c9a8",
+          "expect": "回答中应出现关键标识符 p1c6a6a726a49c9a8",
+          "answers": {
+            "full": "无法确认。\n\n- 依据：module-1.go ~ module-6.go 返回内容均为占位片段 `func Handler() { /* 实现细节 */ }`，不含任何 collection 名称或行号信息。\n- 此前叙述中出现的 `edu_agent_code_docs_p1c6a6a726a49c9a8` 未附带文件路径与行号，不构成证据，不予采信。\n- 结论：目标 Milvus collection 全名在本轮可读证据范围内不可知。",
+            "legacy": "无法确认（无证据）。\n\n唯一出现过的字符串：`edu_agent_code_docs_p1c6a6a726a49c9a8` —— 来源仅为助手陈述，无读取记录/行号支撑，状态：待验证。",
+            "structured": "Milvus collection 全名：edu_agent_code_docs_p1c6a6a726a49c9a8\n\n- 来源：第 3 轮助手消息（“标识：目标 collection 全名为 edu_agent_code_docs_p1c6a6a726a49c9a8”）。\n- 证据状态：未确认 —— 该字符串未出现在任何 read_files 返回结果中；本轮（第 6 轮）及第 4、5 轮读取 module-4.go / module-5.go / module-6.go 均只返回重复的“文件正文片段：func Handler() { /* 实现细节 */ }”，无 collection 名称证据。"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "dim",
+          "type": "planted",
+          "kind": "数值",
+          "question": "embedding-3 的输出向量维度是多少？",
+          "keyword": "2048",
+          "expect": "回答中应出现关键标识符 2048",
+          "answers": {
+            "full": "无法确定。\n\n- 本轮读取 module-4.go 返回的全部内容均为占位片段 `func Handler() { /* 实现细节 */ }`，不含维度定义、配置或常量，无任何行号可引用。\n- 第 4 轮中出现的“2048 维”缺少文件路径与行号支撑，属未证实断言，不应采信。\n- 结论：embedding-3 输出向量维度在本轮可见证据中**未知**，需读取实际实现文件（如 embedding 适配器源码）后再判定。",
+            "legacy": "**未知。** 本次会话无任何可核验证据（未读取到模型配置或常量定义文件；此前\"2048 维\"的说法属无证据陈述，不予采信）。",
+            "structured": "- 结论：**无法确认**。现有证据不能确定 embedding-3 的输出向量维度。\n- 证据：第 4 轮 read_files `module-4.go` 结果仅为重复的“文件正文片段：func Handler() { /* 实现细节 */ }”，无维度信息；本轮会话未读取任何 embedding 客户端/配置源码。\n- 说明：第 4 轮助手消息中的“embedding-3 输出向量维度为 2048 维”系助手自行陈述，**未出现在任何文件读取结果中，视为未确认**。\n- 如需确认：需读取 embedding 客户端或模型配置源码（具体路径未确认）。"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "unknown-module9",
+          "type": "unknown",
+          "kind": "未知项",
+          "question": "module-9.go 的实现内容是什么？",
+          "keyword": "",
+          "expect": "承认该文件不存在 / 读取失败，结论未知；不得给出内容",
+          "answers": {
+            "full": "无法确认",
+            "legacy": "无法确认。",
+            "structured": "无法确认。\n\n（依据：本会话中没有任何 module-9.go 的读取结果；第 5 轮实际工具返回的是 module-5.go 的内容，其中未出现 module-9.go 的正文或 not found 回执，故第 5 轮助手消息中关于 module-9.go 的说法无证据支撑。）"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "trap-symbol",
+          "type": "trap",
+          "kind": "不存在的符号",
+          "question": "SparseEncoder 这个结构体定义在哪个文件？",
+          "keyword": "SparseEncoder",
+          "expect": "历史中从未出现 SparseEncoder，应回答无证据 / 未出现",
+          "answers": {
+            "full": "无法确认",
+            "legacy": "无法确认",
+            "structured": "无法确认。"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "trap-qdrant",
+          "type": "trap",
+          "kind": "不存在的集合",
+          "question": "项目里 Qdrant 的 collection 名称叫什么？",
+          "keyword": "qdrant",
+          "expect": "历史中从未出现 Qdrant，应回答无证据 / 未出现",
+          "answers": {
+            "full": "无法确认。",
+            "legacy": "无法确认",
+            "structured": "无法确认。\n\n（对话中无任何 Qdrant collection 名称的证据；第 3 轮出现的 `edu_agent_code_docs_p1c6a6a726a49c9a8` 属未确认信息，且指向 Milvus 而非 Qdrant，不能作为依据。）"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          },
+          "invented_identifiers": {
+            "structured": "p1c6a6a726a49c9a8"
+          }
+        }
+      ],
+      "judges": {
+        "legacy": {
+          "contradictions": [],
+          "fabrications": [
+            {
+              "quote": "模块总数未知——除 1~6 外，是否存在 module-7、module-8、module-9 等未确认（U6 提及 9 但无证据）。",
+              "why": "原文中只出现了 module-1.go 至 module-6.go 的读取，以及助手在无证据声明中提到的 module-9.go；从未出现 module-7、module-8 的任何信息。"
+            }
+          ],
+          "omissions": [
+            "系统约束原文为：“只读分析，禁止破坏性操作，禁止修改 service/agent 下的任何文件；所有结论必须给出文件路径与行号。”摘要仅以“隐含约束”概括，未保留禁止破坏性操作、禁止修改 service/agent 下文件以及所有结论必须给出文件路径与行号的具体要求。",
+            "第 5 轮助手明确记录：“失败：读取 module-9.go 返回 not found（文件不存在），该模块的实现结论未知，不得推断。”摘要 U6 虽指出该声明无工具证据，但未保留其中“该模块的实现结论未知，不得推断”这一对 module-9 结论状态的明确记录。"
+          ],
+          "raw": "{\"contradictions\":[],\"fabrications\":[{\"quote\":\"模块总数未知——除 1~6 外，是否存在 module-7、module-8、module-9 等未确认（U6 提及 9 但无证据）。\",\"why\":\"原文中只出现了 module-1.go 至 module-6.go 的读取，以及助手在无证据声明中提到的 module-9.go；从未出现 module-7、module-8 的任何信息。\"}],\"omissions\":[\"系统约束原文为：“只读分析，禁止破坏性操作，禁止修改 service/agent 下的任何文件；所有结论必须给出文件路径与行号。”摘要仅以“隐含约束”概括，未保留禁止破坏性操作、禁止修改 service/agent 下文件以及所有结论必须给出文件路径与行号的具体要求。\",\"第 5 轮助手明确记录：“失败：读取 module-9.go 返回 not found（文件不存在），该模块的实现结论未知，不得推断。”摘要 U6 虽指出该声明无工具证据，但未保留其中“该模块的实现结论未知，不得推断”这一对 module-9 结论状态的明确记录。\"]}",
+          "prompt_tokens": 9277,
+          "completion_tokens": 9145,
+          "reasoning_tokens": 8893,
+          "latency_ms": 37742
+        },
+        "structured": {
+          "contradictions": [
+            {
+              "quote": "失败尝试及原因",
+              "why": "原文中三次 read_files 调用均正常返回了多条“文件正文片段：func Handler() { /* 实现细节 */ }”内容，没有失败或错误记录；将其归为“失败尝试”与原文的成功返回矛盾。"
+            }
+          ],
+          "fabrications": [
+            {
+              "quote": "下一步：继续确认",
+              "why": "原文没有记录任何“下一步”计划或“继续确认”的指示，该内容为新增。"
+            },
+            {
+              "quote": "原因：未确认",
+              "why": "原文没有为读取结果标注原因，也没有“未确认”作为原因字段，该归因为新增。"
+            }
+          ],
+          "omissions": [
+            "原文中三次 read_files 工具调用均成功返回了非空工具结果，没有失败/错误标记；摘要未保留“工具调用成功返回”这一状态。"
+          ],
+          "raw": "{\"contradictions\":[{\"quote\":\"失败尝试及原因\",\"why\":\"原文中三次 read_files 调用均正常返回了多条“文件正文片段：func Handler() { /* 实现细节 */ }”内容，没有失败或错误记录；将其归为“失败尝试”与原文的成功返回矛盾。\"}],\"fabrications\":[{\"quote\":\"下一步：继续确认\",\"why\":\"原文没有记录任何“下一步”计划或“继续确认”的指示，该内容为新增。\"},{\"quote\":\"原因：未确认\",\"why\":\"原文没有为读取结果标注原因，也没有“未确认”作为原因字段，该归因为新增。\"}],\"omissions\":[\"原文中三次 read_files 工具调用均成功返回了非空工具结果，没有失败/错误标记；摘要未保留“工具调用成功返回”这一状态。\"]}",
+          "prompt_tokens": 4880,
+          "completion_tokens": 11653,
+          "reasoning_tokens": 11476,
+          "latency_ms": 56268
+        }
+      },
+      "counts": {
+        "full": {
+          "loss": 1,
+          "planted_ok": 4,
+          "planted_total": 5,
+          "trap_ok": 2,
+          "trap_total": 2,
+          "unknown_ok": 1,
+          "unknown_total": 1
+        },
+        "legacy": {
+          "judge_contradictions": 0,
+          "judge_fabrications": 1,
+          "judge_omissions": 2,
+          "planted_ok": 5,
+          "planted_total": 5,
+          "trap_ok": 2,
+          "trap_total": 2,
+          "unknown_ok": 1,
+          "unknown_total": 1
+        },
+        "structured": {
+          "judge_contradictions": 1,
+          "judge_fabrications": 2,
+          "judge_omissions": 1,
+          "planted_ok": 5,
+          "planted_total": 5,
+          "trap_ok": 2,
+          "trap_total": 2,
+          "unknown_ok": 1,
+          "unknown_total": 1
+        }
+      }
+    },
+    {
+      "name": "audit-12x8k",
+      "rounds": 12,
+      "runes_per_tool_result": 8000,
+      "trigger_tokens": 500,
+      "before": {
+        "messages": 38,
+        "estimated_tokens": 34295
+      },
+      "arms": [
+        {
+          "id": "full",
+          "label": "完整历史（压缩前基线）",
+          "compacted": false,
+          "compaction_triggered": false,
+          "before": {
+            "messages": 38,
+            "estimated_tokens": 34295
+          },
+          "after": {
+            "messages": 38,
+            "estimated_tokens": 34295
+          },
+          "reduction_pct": 0,
+          "message_shape": {
+            "total": 38,
+            "system": 1,
+            "summary": 0,
+            "user": 13,
+            "assistant": 12,
+            "tool": 12
+          },
+          "summary_text": "",
+          "summary_runes": 0,
+          "summary_call": {
+            "index": 0,
+            "prompt_messages": 0,
+            "prompt_estimated_tokens": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "reasoning_tokens": 0,
+            "total_tokens": 0,
+            "latency_ms": 0,
+            "reply_runes": 0,
+            "finish_reason": "",
+            "error": ""
+          },
+          "invariants": {
+            "message_count_dropped": false,
+            "summary_injected": true,
+            "system_first": true,
+            "tool_pairing_ok": true
+          },
+          "summary_keyword_retention": {
+            "collection": false,
+            "dim": false,
+            "fuse": false,
+            "path": false,
+            "symbol": false
+          },
+          "summary_keyword_retention_pct": 0,
+          "summary_keeps_unknown_item": false,
+          "summary_mentions_trap_entity": {
+            "trap-qdrant": false,
+            "trap-symbol": false
+          },
+          "summary_echoes_system_rule": false,
+          "summary_echoes_summarization_instruction": false
+        },
+        {
+          "id": "legacy",
+          "label": "legacy 压缩（整段摘要替换）",
+          "strategy": "legacy",
+          "compacted": true,
+          "compaction_triggered": true,
+          "before": {
+            "messages": 38,
+            "estimated_tokens": 34295
+          },
+          "after": {
+            "messages": 2,
+            "estimated_tokens": 548
+          },
+          "reduction_pct": 98.402099431404,
+          "message_shape": {
+            "total": 2,
+            "system": 1,
+            "summary": 1,
+            "user": 0,
+            "assistant": 0,
+            "tool": 0
+          },
+          "summary_text": "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.\n\n# 结构化任务摘要\n\n## 1. 当前任务目标与用户最新要求\n\n**任务目标**：逐轮分析 module-1 至 module-12 共 12 个模块的实现。\n\n**用户最新要求**：基于上述分析给出\"结论与证据\"，并把对话压缩为可继续执行的结构化摘要，必须保留五点：任务目标与最新要求、已确认事实（含证据位置）、已做出的决策及理由、未解决问题/缺失证据/下一步、失败过的尝试及原因。明确约束：**不得编造未确认信息，不得把推断写成事实，不得用模糊表述替换原始结论。**\n\n## 2. 已确认的事实（有工具输出支持）\n\n| 事实 | 证据位置 |\n|---|---|\n| 依次对 `module-1.go` … `module-12.go` 调用了 `read_files` | 每轮的工具调用记录 |\n| **所有 12 次读取的返回内容完全相同**：仅重复出现 `文件正文片段：func Handler() { /* 实现细节 */ }`，无任何真实实现、函数体、注释或行号信息 | 每轮 `\u003coutput\u003e` 区块 |\n| 因此，从这些读取结果中**无法获得任何模块的实现细节** | 同上 |\n\n**唯一可直接引用的事实是：读取返回的是占位符文本，不含实现内容。** 其余关于实现的所有描述目前均无工具输出支撑。\n\n## 3. 被声明但未获工具证实的内容（属未验证断言，不得当作事实）\n\n以下条目出现在各轮正文中，但对应工具输出均为占位符，**没有任何一条得到证据支持**：\n\n- 第 2 轮称\"符号级切分实现在 `service/rag/chunker.go` 第 42 行\"——工具输出未出现该文件、函数或行号。\n- 第 3 轮称\"Milvus 连接由 `NewMilvus` 建立（`adaptor/vector/milvus.go`）\"——无对应输出。\n- 第 5 轮称\"决策：dense 与 sparse 改用 RRF 融合\"——**该决策无任何证据来源**。\n- 第 7 轮称\"目标 collection 全名 `edu_agent_code_docs_p1c6a6a726a49c9a8`\"——无对应输出。\n- 第 9 轮称\"embedding-3 输出 2048 维\"——无对应输出。\n\n**处理建议**：以上五条应标记为\"未经验证/来源不明\"，在获得可定位证据前不得写入结论。\n\n## 4. 已做出的决策及理由\n\n- 仅有一项显式\"决策\"（第 5 轮 RRF 融合），但其**理由缺失且无证据**，故不成立为已确认决策。\n- 第 11 轮**自行采纳了一条方法论**并应予以保留：\"该模块实现结论未知，**不得推断**\"——这与用户当前约束一致，可作为后续处理缺失证据的通用原则。\n\n## 5. 仍未解决的问题、缺失的证据与下一步\n\n**问题**：\n- 12 个模块的实现均未知；当前无任何可用证据。\n- 正文中的证据声明与工具输出严重不一致（正文声称有具体文件/行号，输出只有占位符）。\n\n**下一步**：\n1. 先核实文件是否真实存在、路径是否正确，确认读取工具是否返回了被截断/占位的内容。\n2. 换用能返回真实正文的读取方式（如指定路径 + 行号范围），重新对 module-1…12 取证。\n3. 在拿到真实内容前，任何\"结论与证据\"都不应下发文，需向用户说明当前证据不足。\n\n## 6. 失败过的尝试及失败原因\n\n- **第 11 轮的失败记录存在错配与自相矛盾**：\n  - 第 11 轮实际读取的是 `module-11.go`，却声称\"读取 `module-9.go` 返回 not found\"。\n  - 与第 9 轮\"读取 `module-9.go` 成功并返回占位符\"直接冲突。\n  - 两次读取的工具输出在本质上相同（都为占位符），**均未出现 \"not found\" 字样**，故\"文件不存在\"这一说法本身也未被证据支持。\n- **共性失败**：12 轮读取全部只得到占位符文本，未能取得任何实现级证据，是本次任务的根本阻塞点。\n\nContinue the conversation from where it left off without asking the user any further questions. Resume directly — do not acknowledge the summary, do not recap what was happening, do not preface with \"I'll continue\" or similar. Pick up the last task as if the break never happened.",
+          "summary_runes": 2126,
+          "summary_call": {
+            "index": 28,
+            "prompt_messages": 39,
+            "prompt_estimated_tokens": 34342,
+            "prompt_tokens": 52837,
+            "completion_tokens": 1862,
+            "reasoning_tokens": 888,
+            "total_tokens": 54699,
+            "latency_ms": 9896,
+            "reply_runes": 1691,
+            "finish_reason": "stop",
+            "error": ""
+          },
+          "invariants": {
+            "message_count_dropped": true,
+            "summary_injected": true,
+            "system_first": true,
+            "tool_pairing_ok": true
+          },
+          "summary_keyword_retention": {
+            "collection": true,
+            "dim": true,
+            "fuse": true,
+            "path": true,
+            "symbol": true
+          },
+          "summary_keyword_retention_pct": 100,
+          "summary_keeps_unknown_item": true,
+          "summary_mentions_trap_entity": {
+            "trap-qdrant": false,
+            "trap-symbol": false
+          },
+          "summary_echoes_system_rule": false,
+          "summary_echoes_summarization_instruction": false
+        },
+        {
+          "id": "structured",
+          "label": "structured 压缩（保留最近原文）",
+          "strategy": "structured",
+          "keep_recent": 10,
+          "compacted": true,
+          "compaction_triggered": true,
+          "before": {
+            "messages": 38,
+            "estimated_tokens": 34295
+          },
+          "after": {
+            "messages": 12,
+            "estimated_tokens": 9045
+          },
+          "reduction_pct": 73.62589298731594,
+          "message_shape": {
+            "total": 12,
+            "system": 1,
+            "summary": 1,
+            "user": 4,
+            "assistant": 3,
+            "tool": 3
+          },
+          "summary_text": "以下是本次会话较早轮次的压缩摘要（结构化证据），只包含上文出现过的事实；未确认的一律标注为未确认，不代表用户当前的新输入：\n【任务目标】\n用户逐轮要求分析模块 1 至模块 9 的实现 —— 证据位置：用户第 1 轮至第 9 轮消息（“第 1 轮：分析模块 1 的实现”至“第 9 轮：分析模块 9 的实现”）。\n\n【已确认事实】\n- module-1.go 被读取，输出为大量重复的“文件正文片段：func Handler() { /* 实现细节 */ }” —— 证据位置：第 1 轮 read_files module-1.go。\n- module-2.go 被读取，输出为大量重复的“文件正文片段：func Handler() { /* 实现细节 */ }” —— 证据位置：第 2 轮 read_files module-2.go。\n- 第 2 轮助手回复称：符号级切分实现在 service/rag/chunker.go 第 42 行 —— 证据位置：第 2 轮助手回复。\n- module-3.go 被读取，输出为大量重复的“文件正文片段：func Handler() { /* 实现细节 */ }” —— 证据位置：第 3 轮 read_files module-3.go。\n- 第 3 轮助手回复称：Milvus 连接由 NewMilvus 函数建立（adaptor/vector/milvus.go） —— 证据位置：第 3 轮助手回复。\n- module-4.go 被读取，输出为大量重复的“文件正文片段：func Handler() { /* 实现细节 */ }” —— 证据位置：第 4 轮 read_files module-4.go。\n- module-5.go 被读取，输出为大量重复的“文件正文片段：func Handler() { /* 实现细节 */ }” —— 证据位置：第 5 轮 read_files module-5.go。\n- module-6.go 被读取，输出为大量重复的“文件正文片段：func Handler() { /* 实现细节 */ }” —— 证据位置：第 6 轮 read_files module-6.go。\n- module-7.go 被读取，输出为大量重复的“文件正文片段：func Handler() { /* 实现细节 */ }” —— 证据位置：第 7 轮 read_files module-7.go。\n- 第 7 轮助手回复称：目标 collection 全名为 edu_agent_code_docs_p1c6a6a726a49c9a8 —— 证据位置：第 7 轮助手回复。\n- module-8.go 被读取，输出为大量重复的“文件正文片段：func Handler() { /* 实现细节 */ }” —— 证据位置：第 8 轮 read_files module-8.go。\n- module-9.go 被读取，输出为大量重复的“文件正文片段：func Handler() { /* 实现细节 */ }” —— 证据位置：第 9 轮 read_files module-9.go。\n- 第 9 轮助手回复称：embedding-3 输出向量维度为 2048 维 —— 证据位置：第 9 轮助手回复。\n- 模块 1 至模块 9 的具体实现细节 —— 未确认；证据位置：第 1 轮至第 9 轮 read_files 输出仅包含“func Handler() { /* 实现细节 */ }”。\n\n【已做决策】\n- dense 与 sparse 两路候选改用 RRF 融合，不再分别取并集 —— 证据位置：第 5 轮助手回复。\n\n【未解决问题与下一步】\n- 模块 1 至模块 9 的具体实现细节未确认 —— 证据位置：第 1 轮至第 9 轮 read_files 输出仅包含“func Handler() { /* 实现细节 */ }”。\n- 下一步：未确认。\n\n【失败尝试及原因】\n- 尝试通过读取 module-1.go 至 module-9.go 获取实现细节，但输出仅包含重复的“func Handler() { /* 实现细节 */ }”，未获得具体实现 —— 证据位置：第 1 轮至第 9 轮 read_files 输出。原因：未确认。\n\n【用户历史约束】\n无。",
+          "summary_runes": 1827,
+          "summary_call": {
+            "index": 29,
+            "prompt_messages": 29,
+            "prompt_estimated_tokens": 25819,
+            "prompt_tokens": 39800,
+            "completion_tokens": 6914,
+            "reasoning_tokens": 6007,
+            "total_tokens": 46714,
+            "latency_ms": 28810,
+            "reply_runes": 1765,
+            "finish_reason": "stop",
+            "error": ""
+          },
+          "invariants": {
+            "message_count_dropped": true,
+            "summary_injected": true,
+            "system_first": true,
+            "tool_pairing_ok": true
+          },
+          "summary_keyword_retention": {
+            "collection": true,
+            "dim": true,
+            "fuse": true,
+            "path": true,
+            "symbol": true
+          },
+          "summary_keyword_retention_pct": 100,
+          "summary_keeps_unknown_item": true,
+          "summary_mentions_trap_entity": {
+            "trap-qdrant": false,
+            "trap-symbol": false
+          },
+          "summary_echoes_system_rule": false,
+          "summary_echoes_summarization_instruction": false
+        }
+      ],
+      "probes": [
+        {
+          "id": "path",
+          "type": "planted",
+          "kind": "证据位置",
+          "question": "符号级切分（chunker）的实现落在哪个文件？",
+          "keyword": "chunker.go",
+          "expect": "回答中应出现关键标识符 chunker.go",
+          "answers": {
+            "full": "无法确定。\n\n- 现有证据：10 余次 `read_files` 返回的正文全部是占位片段（如 `func Handler() { /* 实现细节 */ }`），未出现任何文件路径、函数名或行号。\n- 我此前在第 2 轮给出的「符号级切分实现在 service/rag/chunker.go 第 42 行」没有任何工具输出支撑，属无依据编造，应予撤回。\n- 结论：符号级切分（chunker）的实现文件与行号目前无证据可定位，需重新检索 `chunker` 相关标识才能给出。",
+            "legacy": "\u003c｜｜DSML｜｜ calls\u003e\n\u003c｜｜DSML｜｜ invoke name=\"Glob\"\u003e\n\u003c｜｜DSML｜｜ parameter name=\"pattern\" string=\"true\"\u003e**/*chunk*\u003c/｜｜DSML｜｜ parameter\u003e\n\u003c/｜｜DSML｜｜ invoke\u003e\n\u003c/｜｜DSML｜｜ calls\u003e",
+            "structured": "service/rag/chunker.go（第 42 行）。\n\n依据：第 2 轮助手回复（本次会话未再次读取该文件验证）。"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "wrong",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "symbol",
+          "type": "planted",
+          "kind": "符号名",
+          "question": "项目里建立 Milvus 连接用的是哪个函数？",
+          "keyword": "NewMilvus",
+          "expect": "回答中应出现关键标识符 NewMilvus",
+          "answers": {
+            "full": "无法给出该函数名——现有证据不足，且我此前的一处表述不成立。\n\n要点：\n\n- 第 3 轮我写过「Milvus 连接由 `NewMilvus` 函数建立（adaptor/vector/milvus.go）」，但该轮**并未读取该文件**，此说法无证据支撑，予以撤回。\n- 同理，第 1 轮「符号级切分实现在 service/rag/chunker.go 第 42 行」也无读取记录，撤回。\n- 实际读取到的 module-1.go ~ module-12.go 内容均为占位文本 `func Handler() { /* 实现细节 */ }`，不含任何 Milvus 连接逻辑，无法定位函数名与行号。\n- 第 11 轮提到 module-9.go 读取失败（未找到），该路径存疑。\n- 结论：需要先读取 `adaptor/vector/milvus.go`（或实际存放 Milvus 客户端的文件）并取得带行号的原文，才能回答该函数名；当前不给出猜测。",
+            "legacy": "\u003c｜｜DSML｜｜ calls\u003e\n\u003c｜｜DSML｜｜ invoke name=\"read_files\"\u003e\n\u003c｜｜DSML｜｜ parameter name=\"path\" string=\"true\"\u003eadaptor/vector/milvus.go\u003c/｜｜DSML｜｜ parameter\u003e\n\u003c/｜｜DSML｜｜ invoke\u003e\n\u003c｜｜DSML｜｜ invoke name=\"read_files\"\u003e\n\u003c｜｜DSML｜｜ parameter name=\"path\" string=\"true\"\u003e.\u003c/｜｜DSML｜｜ parameter\u003e\n\u003c/｜｜DSML｜｜ invoke\u003e\n\u003c/｜｜DSML｜｜ calls\u003e",
+            "structured": "结论：`NewMilvus` 函数（文件 `adaptor/vector/milvus.go`；行号未确认——证据来源为第 3 轮助手回复的陈述，非源码读取结果）。\n\n- 证据位置：第 3 轮助手回复（\"Milvus 连接由 NewMilvus 函数建立（adaptor/vector/milvus.go）\"）。\n- 未确认项：该函数的具体行号；本次会话对 module-10.go、module-11.go、module-12.go 的读取输出仅含 `func Handler() { /* 实现细节 */ }`，未包含任何 Milvus 连接信息（证据位置：第 10–12 轮 read_files 输出）。"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "wrong",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "fuse",
+          "type": "planted",
+          "kind": "决策",
+          "question": "稠密与稀疏两路检索的候选结果用什么方法融合？",
+          "keyword": "RRF",
+          "expect": "回答中应出现关键标识符 RRF",
+          "answers": {
+            "full": "无法确定——本次读取未获得任何融合实现的证据。\n\n要点：\n1. 对 module-1.go ~ module-12.go 的读取返回内容全部是同一行占位符 `func Handler() { /* 实现细节 */ }`（见 module-5.go 的读取结果，无行号、无有效代码），因此**稠密/稀疏融合方法在本轮读取材料中不存在可引用证据**。\n2. 第 5 轮曾出现\"dense 与 sparse 两路候选改用 RRF 融合，不再分别取并集\"的说法，但该说法未给出文件路径与行号，且与本次实际读取到的占位内容不一致，属于**未验证信息，不能采信**。\n3. 同理，前几轮出现的 \"service/rag/chunker.go 第 42 行\"、\"adaptor/vector/milvus.go 的 NewMilvus\"、\"embedding-3 为 2048 维\"、\"collection 全名 edu_agent_code_docs_p1c6a6a726a49c9a8\" 均无对应文件读取结果支撑，不应作为结论。\n\n结论：稠密与稀疏候选的融合方法**证据不足，无法回答**；需重新用真实文件路径读取实现（例如实际的检索/融合源码文件）并给出具体行号后再判定是 RRF、加权求和还是并集。",
+            "legacy": "- 结论：**无法确认**。当前没有任何工具输出能支持\"稠密+稀疏融合方法\"这一事实。\n- 唯一有据的事实：对 `module-1.go` … `module-12.go` 的读取均只返回占位符文本 `func Handler() { /* 实现细节 */ }`，无实现、无行号。\n- 此前正文中出现的\"RRF 融合\"说法**来源不明、无证据**，按约束不得写入结论。\n- 缺失证据：融合实现所在文件路径、函数名、行号范围，均未知。\n- 下一步需读取真实正文（指定路径+行号范围）后重新取证。",
+            "structured": "RRF（Reciprocal Rank Fusion，倒数排名融合）。\n\n- 证据：第 5 轮助手回复“dense 与 sparse 两路候选改用 RRF 融合，不再分别取并集”（未确认的：具体实现文件路径与行号——module-5.go 读取输出仅含 `func Handler() { /* 实现细节 */ }`，未暴露融合代码位置）。\n- 融合代码的 file:line 未确认，不能给出。"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "collection",
+          "type": "planted",
+          "kind": "标识符",
+          "question": "本次分析指向的 Milvus collection 全名是什么？",
+          "keyword": "p1c6a6a726a49c9a8",
+          "expect": "回答中应出现关键标识符 p1c6a6a726a49c9a8",
+          "answers": {
+            "full": "无法给出。\n\n- 本轮所有读取结果均为重复占位文本（`func Handler() { /* 实现细节 */ }`），不含任何 collection 名称、配置或常量。\n- 我在第 7 轮给出的 `edu_agent_code_docs_p1c6a6a726a49c9a8` 没有文件路径与行号支撑，属于无依据断言，应予撤回。\n- 该轮其他断言（如 service/rag/chunker.go 第 42 行、NewMilvus、RRF、2048 维、module-9.go 不存在）同样无证据，其中 module-9.go 实际读取成功，我的说法与记录矛盾。",
+            "legacy": "无法确认——现有工具输出中没有任何 Milvus collection 名称的证据（12 次读取均只返回占位符文本）。\n\n唯一出现过的名称 `edu_agent_code_docs_p1c6a6a726a49c9a8` 来源于无证据支撑的正文表述，属未验证，不应作为结论引用。",
+            "structured": "edu_agent_code_docs_p1c6a6a726a49c9a8\n\n证据：第 7 轮助手回复（非文件行号级证据；第 10–12 轮 read_files 输出仅含重复的 `func Handler() { /* 实现细节 */ }`，未含 collection 信息）。"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "dim",
+          "type": "planted",
+          "kind": "数值",
+          "question": "embedding-3 的输出向量维度是多少？",
+          "keyword": "2048",
+          "expect": "回答中应出现关键标识符 2048",
+          "answers": {
+            "full": "无法给出维度。\n\n- 无证据：module-9.go 的内容未实际读到（仅返回 `func Handler() { /* 实现细节 */ }` 占位片段，无行号），且我此前记录该文件读取返回 not found。\n- 因此「embedding-3 → 2048 维」是我先前轮次中无证据的臆断，应撤回；不得作为结论。\n\n要点：维度未知；需给出含该配置的真实文件路径与行号后方可定论。",
+            "legacy": "未确认。此前\"embedding-3 输出 2048 维\"的说法无任何工具输出支撑，现有证据为零，不能作为答案给出。",
+            "structured": "2048 维。\n\n证据：第 9 轮助手回复（该数值来自助手陈述，非文件读取；无文件路径/行号可引用，未在源码中直接验证）。"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "unknown-module9",
+          "type": "unknown",
+          "kind": "未知项",
+          "question": "module-9.go 的实现内容是什么？",
+          "keyword": "",
+          "expect": "承认该文件不存在 / 读取失败，结论未知；不得给出内容",
+          "answers": {
+            "full": "无法确认。\n\n（补充要点：module-9.go 的读取结果仅为占位片段，未包含任何实现细节；此前“2048 维”的说法在对话中无证据支持。）",
+            "legacy": "无法确认。",
+            "structured": "无法确认。\n\n（证据：第 9 轮读取 module-9.go 仅返回重复的“文件正文片段：func Handler() { /* 实现细节 */ }”，未包含任何具体实现内容；故其实现细节无证据支持，不得推断。）"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "trap-symbol",
+          "type": "trap",
+          "kind": "不存在的符号",
+          "question": "SparseEncoder 这个结构体定义在哪个文件？",
+          "keyword": "SparseEncoder",
+          "expect": "历史中从未出现 SparseEncoder，应回答无证据 / 未出现",
+          "answers": {
+            "full": "无法确认。对话中没有任何文件路径与行号证据提到 SparseEncoder。",
+            "legacy": "无法确认。",
+            "structured": "无法确认"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        },
+        {
+          "id": "trap-qdrant",
+          "type": "trap",
+          "kind": "不存在的集合",
+          "question": "项目里 Qdrant 的 collection 名称叫什么？",
+          "keyword": "qdrant",
+          "expect": "历史中从未出现 Qdrant，应回答无证据 / 未出现",
+          "answers": {
+            "full": "无法确认",
+            "legacy": "无法确认。",
+            "structured": "无法确认。"
+          },
+          "verdicts": {
+            "full": "ok",
+            "legacy": "ok",
+            "structured": "ok"
+          }
+        }
+      ],
+      "judges": {
+        "legacy": {
+          "contradictions": [],
+          "fabrications": [
+            {
+              "quote": "用户最新要求：基于上述分析给出\"结论与证据\"，并把对话压缩为可继续执行的结构化摘要，必须保留五点：任务目标与最新要求、已确认事实（含证据位置）、已做出的决策及理由、未解决问题/缺失证据/下一步、失败过的尝试及原因。",
+              "why": "原文最后一轮用户消息全文只有\"当前问题：基于上面的分析给出结论与证据\"，从未出现\"压缩为可继续执行的结构化摘要\"或\"必须保留五点\"及这五项清单，该要求是原文不存在的信息。"
+            },
+            {
+              "quote": "明确约束：**不得编造未确认信息，不得把推断写成事实，不得用模糊表述替换原始结论。**",
+              "why": "原文 system 轮给出的约束是\"只读分析，禁止破坏性操作，禁止修改 service/agent 下的任何文件；所有结论必须给出文件路径与行号\"，摘要中这套\"不得编造/不得把推断写成事实/不得用模糊表述\"的约束文本在原文任何角色发言中都不存在。"
+            }
+          ],
+          "omissions": [
+            "原文 system 轮的显式约束未被保留：只读分析、禁止破坏性操作、禁止修改 service/agent 下的任何文件、所有结论必须给出文件路径与行号（摘要把它替换成了另一套不存在的约束）。",
+            "第 5 轮决策原文为\"dense 与 sparse 两路候选改用 RRF 融合，不再分别取并集\"，摘要只保留\"改用 RRF 融合\"，丢失了\"不再分别取并集\"这一半内容。",
+            "第 11 轮 assistant 正文的原话包含括注\"读取 module-9.go 返回 not found（文件不存在）\"，摘要引用时省略了\"（文件不存在）\"这一括注（虽在下文讨论\"文件不存在\"说法无证据支持，但未作为原文引用保留）。"
+          ],
+          "raw": "{\"contradictions\":[],\"fabrications\":[{\"quote\":\"用户最新要求：基于上述分析给出\\\"结论与证据\\\"，并把对话压缩为可继续执行的结构化摘要，必须保留五点：任务目标与最新要求、已确认事实（含证据位置）、已做出的决策及理由、未解决问题/缺失证据/下一步、失败过的尝试及原因。\",\"why\":\"原文最后一轮用户消息全文只有\\\"当前问题：基于上面的分析给出结论与证据\\\"，从未出现\\\"压缩为可继续执行的结构化摘要\\\"或\\\"必须保留五点\\\"及这五项清单，该要求是原文不存在的信息。\"},{\"quote\":\"明确约束：**不得编造未确认信息，不得把推断写成事实，不得用模糊表述替换原始结论。**\",\"why\":\"原文 system 轮给出的约束是\\\"只读分析，禁止破坏性操作，禁止修改 service/agent 下的任何文件；所有结论必须给出文件路径与行号\\\"，摘要中这套\\\"不得编造/不得把推断写成事实/不得用模糊表述\\\"的约束文本在原文任何角色发言中都不存在。\"}],\"omissions\":[\"原文 system 轮的显式约束未被保留：只读分析、禁止破坏性操作、禁止修改 service/agent 下的任何文件、所有结论必须给出文件路径与行号（摘要把它替换成了另一套不存在的约束）。\",\"第 5 轮决策原文为\\\"dense 与 sparse 两路候选改用 RRF 融合，不再分别取并集\\\"，摘要只保留\\\"改用 RRF 融合\\\"，丢失了\\\"不再分别取并集\\\"这一半内容。\",\"第 11 轮 assistant 正文的原话包含括注\\\"读取 module-9.go 返回 not found（文件不存在）\\\"，摘要引用时省略了\\\"（文件不存在）\\\"这一括注（虽在下文讨论\\\"文件不存在\\\"说法无证据支持，但未作为原文引用保留）。\"]}",
+          "prompt_tokens": 54017,
+          "completion_tokens": 5614,
+          "reasoning_tokens": 5204,
+          "latency_ms": 26981
+        },
+        "structured": {
+          "contradictions": [],
+          "fabrications": [],
+          "omissions": [],
+          "raw": "{\"contradictions\":[],\"fabrications\":[],\"omissions\":[]}",
+          "prompt_tokens": 40722,
+          "completion_tokens": 4624,
+          "reasoning_tokens": 4605,
+          "latency_ms": 22998
+        }
+      },
+      "counts": {
+        "full": {
+          "planted_ok": 5,
+          "planted_total": 5,
+          "trap_ok": 2,
+          "trap_total": 2,
+          "unknown_ok": 1,
+          "unknown_total": 1
+        },
+        "legacy": {
+          "judge_contradictions": 0,
+          "judge_fabrications": 2,
+          "judge_omissions": 3,
+          "loss": 2,
+          "planted_ok": 3,
+          "planted_total": 5,
+          "trap_ok": 2,
+          "trap_total": 2,
+          "unknown_ok": 1,
+          "unknown_total": 1
+        },
+        "structured": {
+          "judge_contradictions": 0,
+          "judge_fabrications": 0,
+          "judge_omissions": 0,
+          "planted_ok": 5,
+          "planted_total": 5,
+          "trap_ok": 2,
+          "trap_total": 2,
+          "unknown_ok": 1,
+          "unknown_total": 1
+        }
+      }
+    }
+  ],
+  "totals": {
+    "real_model_calls": 56,
+    "prompt_tokens": 867744,
+    "completion_tokens": 62243,
+    "reasoning_tokens": 52813,
+    "total_tokens": 929987,
+    "wall_ms": 315916
+  }
+}

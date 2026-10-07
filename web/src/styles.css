@@ -1448,6 +1448,22 @@ button {
   resize: vertical;
 }
 
+/* 描述字数提示：跟在 textarea 后面的小字，右对齐，不抢标题的字重。 */
+.profile-field .profile-field-counter {
+  justify-self: end;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  font-weight: 500;
+  opacity: 0.72;
+}
+
+/* 强引导模式下没填完时的提示：说明为什么保存按钮点不动。 */
+.profile-gate-hint {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+}
+
 .profile-modal-footer {
   display: flex;
   justify-content: flex-end;

@@ -5,16 +5,18 @@ import (
 )
 
 // Profile 是用户画像表的 GORM 模型。
+// Description 是自由文本的自我介绍（原先的 purchased_courses 数组列保留在库里，
+// 仅作历史数据回退用，不再读写）。
 type Profile struct {
-	UserID           string   `gorm:"primaryKey;size:128"`
-	AuthSubject      string   `gorm:"size:128;index"`
-	UserType         string   `gorm:"size:64"`
-	SkillLevel       string   `gorm:"size:64"`
-	GoalType         string   `gorm:"size:64"`
-	PurchasedCourses []string `gorm:"serializer:json"`
-	CurrentTopic     string   `gorm:"size:255"`
-	CurrentStage     string   `gorm:"size:128"`
-	UpdatedAt        time.Time
+	UserID       string `gorm:"primaryKey;size:128"`
+	AuthSubject  string `gorm:"size:128;index"`
+	UserType     string `gorm:"size:64"`
+	SkillLevel   string `gorm:"size:64"`
+	GoalType     string `gorm:"size:64"`
+	Description  string `gorm:"type:text"`
+	CurrentTopic string `gorm:"size:255"`
+	CurrentStage string `gorm:"size:128"`
+	UpdatedAt    time.Time
 }
 
 // TableName 返回用户画像表名。

@@ -5,6 +5,7 @@ import (
 	"edu.agent.code/adaptor/repo/model"
 	"edu.agent.code/config"
 	applog "edu.agent.code/utils/logger"
+	"encoding/json"
 	"fmt"
 	"github.com/milvus-io/milvus/client/v2/milvusclient"
 	"github.com/redis/go-redis/v9"
@@ -16,6 +17,7 @@ import (
 	"gorm.io/plugin/opentelemetry/tracing"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -109,8 +111,62 @@ func (a *Adaptor) openDB(path string) error {
 	if err != nil {
 		return fmt.Errorf("auto migrate: %v", err)
 	}
+	// 画像字段由 purchased_courses（JSON 数组）换成 description（自由文本）：AutoMigrate
+	// 只会新增列，历史数据要靠这里回填一次。迁移失败不拦启动——新列已经建好，只是旧画像
+	// 还没搬过来；下次启动会再试一次。
+	if err := migrateProfileDescription(db); err != nil {
+		applog.Warn("回填用户画像描述失败（不影响启动）：%v", err)
+	}
 	a.db = db
 	return nil
+}
+
+// migrateProfileDescription 把旧的 profiles.purchased_courses（JSON 数组）回填到 description。
+//
+// 幂等：只处理「description 为空且旧列有值」的行；旧列不存在（全新库）或已回填过就直接返回。
+// 只回填、不删旧列：旧数据留在原列里，需要回退时把模型改回去就能读回来。
+func migrateProfileDescription(db *gorm.DB) error {
+	if !db.Migrator().HasColumn("profiles", "purchased_courses") {
+		return nil
+	}
+	type legacyProfile struct {
+		UserID           string
+		PurchasedCourses string
+	}
+	var rows []legacyProfile
+	err := db.Raw(`SELECT user_id, purchased_courses FROM profiles
+		WHERE purchased_courses IS NOT NULL AND purchased_courses <> '' AND purchased_courses <> '[]'
+		  AND (description IS NULL OR description = '')`).Scan(&rows).Error
+	if err != nil {
+		return fmt.Errorf("查询历史画像: %w", err)
+	}
+	for _, row := range rows {
+		description := joinLegacyCourses(row.PurchasedCourses)
+		if description == "" {
+			continue
+		}
+		if err := db.Exec(`UPDATE profiles SET description = ? WHERE user_id = ?`, description, row.UserID).Error; err != nil {
+			return fmt.Errorf("回填 user_id=%s: %w", row.UserID, err)
+		}
+		applog.Info("已把历史已购课程回填为描述 user_id=%s", row.UserID)
+	}
+	return nil
+}
+
+// joinLegacyCourses 把旧列里的 JSON 数组文本拼成一段描述；不是合法 JSON 时按原文本返回，
+// 避免一条脏数据让整次迁移失败。
+func joinLegacyCourses(raw string) string {
+	var courses []string
+	if err := json.Unmarshal([]byte(raw), &courses); err != nil {
+		return strings.TrimSpace(raw)
+	}
+	kept := make([]string, 0, len(courses))
+	for _, course := range courses {
+		if trimmed := strings.TrimSpace(course); trimmed != "" {
+			kept = append(kept, trimmed)
+		}
+	}
+	return strings.Join(kept, "、")
 }
 
 func (adaptor *Adaptor) GetConfig() *config.Config {

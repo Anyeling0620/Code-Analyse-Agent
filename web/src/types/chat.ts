@@ -10,9 +10,21 @@ export type ProfileForm = {
   user_type: string;
   skill_level: string;
   goal_type: string;
-  purchased_courses: string[];
+  description: string;
   current_topic: string;
   current_stage: string;
+};
+
+// ServerProfile 是后端返回的画像（service/dto.Profile）。
+// 比 ProfileForm 多 user_id/updated_at 等服务端字段，回填时只取前端认识的几个。
+export type ServerProfile = {
+  user_id?: string;
+  user_type?: string;
+  skill_level?: string;
+  goal_type?: string;
+  description?: string;
+  current_topic?: string;
+  current_stage?: string;
 };
 
 export type ToolTrace = {
@@ -46,6 +58,8 @@ export type ChatResult = {
   answer: string;
   session_id: string;
   used_tools: string[];
+  // 后端在 done 事件里回带服务端最终画像，前端据此回写本地状态（含描述）。
+  profile?: ServerProfile;
 };
 
 export type StreamPayload = {

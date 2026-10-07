@@ -17,11 +17,11 @@
     },
     {
       "id": "f002",
-      "question_zh": "用户画像表里都存了哪些信息？已购课程和当前学习阶段是怎么记录的？",
+      "question_zh": "用户画像表里都存了哪些信息？描述和当前学习阶段是怎么记录的？",
       "target_source_path": "adaptor/repo/model/models.go",
       "target_symbol": "Profile",
       "target_kind": "struct",
-      "target_line_start": 7,
+      "target_line_start": 10,
       "difficulty": "descriptive"
     },
     {

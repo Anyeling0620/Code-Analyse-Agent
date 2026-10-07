@@ -44,15 +44,15 @@ func (p *Profile) Upsert(ctx context.Context, req *do.Profile) error {
 		return nil
 	}
 	profile := &model.Profile{
-		UserID:           req.UserID,
-		AuthSubject:      req.AuthSubject,
-		UserType:         req.UserType,
-		SkillLevel:       req.SkillLevel,
-		GoalType:         req.GoalType,
-		PurchasedCourses: req.PurchasedCourses,
-		CurrentTopic:     req.CurrentTopic,
-		CurrentStage:     req.CurrentStage,
-		UpdatedAt:        time.Now(),
+		UserID:       req.UserID,
+		AuthSubject:  req.AuthSubject,
+		UserType:     req.UserType,
+		SkillLevel:   req.SkillLevel,
+		GoalType:     req.GoalType,
+		Description:  req.Description,
+		CurrentTopic: req.CurrentTopic,
+		CurrentStage: req.CurrentStage,
+		UpdatedAt:    time.Now(),
 	}
 	err := p.db.WithContext(ctx).Save(profile).Error
 	return err
@@ -63,14 +63,14 @@ func toDomain(p *model.Profile) *do.Profile {
 		return nil
 	}
 	return &do.Profile{
-		UserID:           p.UserID,
-		AuthSubject:      p.AuthSubject,
-		UserType:         p.UserType,
-		SkillLevel:       p.SkillLevel,
-		GoalType:         p.GoalType,
-		PurchasedCourses: append([]string(nil), p.PurchasedCourses...),
-		CurrentTopic:     p.CurrentTopic,
-		CurrentStage:     p.CurrentStage,
-		UpdatedAt:        p.UpdatedAt,
+		UserID:       p.UserID,
+		AuthSubject:  p.AuthSubject,
+		UserType:     p.UserType,
+		SkillLevel:   p.SkillLevel,
+		GoalType:     p.GoalType,
+		Description:  p.Description,
+		CurrentTopic: p.CurrentTopic,
+		CurrentStage: p.CurrentStage,
+		UpdatedAt:    p.UpdatedAt,
 	}
 }

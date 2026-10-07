@@ -104,14 +104,18 @@ func buildProfileMessage(profile *dto.Profile) *schema.Message {
 	if profile == nil {
 		return nil
 	}
+	const header = "以下是用户资料，仅用于调整解释深度与学习建议，不代表用户当前的新输入。"
 	var b strings.Builder
-	b.WriteString("以下是用户资料，仅用于调整解释深度、学习建议和课程推荐，不代表用户当前的新输入。")
+	b.WriteString(header)
 	appendProfileLine(&b, "用户类型", profile.UserType)
 	appendProfileLine(&b, "技能水平", profile.SkillLevel)
 	appendProfileLine(&b, "目标类型", profile.GoalType)
 	appendProfileLine(&b, "当前主题", profile.CurrentTopic)
 	appendProfileLine(&b, "当前阶段", profile.CurrentStage)
-	if b.Len() == len("以下是用户资料，仅用于调整解释深度、学习建议和课程推荐，不代表用户当前的新输入。") {
+	// 描述是用户自己写的整段背景（经历、在做什么、想要什么），放最后一行：
+	// 前面的字段是结构化标签，描述是背景补充，模型读起来更顺。
+	appendProfileLine(&b, "描述", profile.Description)
+	if b.Len() == len(header) {
 		return nil
 	}
 	return schema.SystemMessage(b.String())

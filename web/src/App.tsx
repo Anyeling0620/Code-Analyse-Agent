@@ -21,7 +21,7 @@ import {
   resolveStreamEventType,
 } from './chat/messageSegments';
 import { Composer } from './composer/Composer';
-import { initialProfile } from './constants/profile';
+import { loadProfile, profileFromServer, saveProfile } from './profile/storage';
 import { ExportPrintRoot } from './export/ExportPrintRoot';
 import {
   buildEntryAt,
@@ -147,7 +147,9 @@ function resolveHasMore(detail: SessionDetail, loadedCount: number): boolean {
 
 // ChatWorkspace 承载单个登录用户的全部界面状态。换账号由上层通过 key 重新挂载来清空。
 function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
-  const [profile, setProfile] = useState<ProfileForm>(initialProfile);
+  // 画像优先取本机缓存（按 user_id 分键）：刷新页面不会退回默认值，也不会把默认值
+  // 当成用户画像再提交一次。缓存为空时用 initialProfile 兜底。
+  const [profile, setProfile] = useState<ProfileForm>(() => loadProfile(authSession.user_id));
   const [sessionId, setSessionId] = useState('');
   const [interruptEvent, setInterruptEvent] = useState<PendingInterruptEvent | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -167,7 +169,10 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const [isLoadingSessionDetail, setIsLoadingSessionDetail] = useState(false);
   const [isComposerExpanded, setIsComposerExpanded] = useState(true);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  // 登录后先弹画像：挂载即打开，并且是「强引导」——不填完保存进不去工作区。
+  // 手动打开（会话面板的「基础画像」按钮）走可关闭的编辑模式。
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(true);
+  const [isProfileGate, setIsProfileGate] = useState(true);
   const [shareNotice, setShareNotice] = useState('');
   const [printEntries, setPrintEntries] = useState<ExportEntry[] | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
@@ -981,6 +986,13 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
         if (payload.result?.session_id) {
           setSessionId(payload.result.session_id);
         }
+        // 服务端是画像的权威来源（按 user_id 存库）：把最终值回写本地状态与缓存，
+        // 保证界面显示和后续请求提交的是同一份画像。
+        if (payload.result?.profile) {
+          const nextProfile = profileFromServer(profile, payload.result.profile);
+          setProfile(nextProfile);
+          saveProfile(authSession.user_id, nextProfile);
+        }
         patchAssistant(assistantId, (item) => ({
           ...item,
           content: normalizeMarkdown(item.content),
@@ -1162,7 +1174,11 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
               onLoadMoreSessions={loadMoreSessions}
               onDeleteSession={deleteSession}
               onShareSession={shareSession}
-              onOpenProfile={() => setIsProfileModalOpen(true)}
+              onOpenProfile={() => {
+                // 手动打开是编辑，不是登录后的强引导：允许取消关闭。
+                setIsProfileGate(false);
+                setIsProfileModalOpen(true);
+              }}
               shareNotice={shareNotice}
           />
         </aside>
@@ -1218,9 +1234,13 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
         {isProfileModalOpen && (
             <ProfileModal
                 profile={profile}
+                gate={isProfileGate}
                 onSave={(nextProfile) => {
                   setProfile(nextProfile);
+                  saveProfile(authSession.user_id, nextProfile);
                   setIsProfileModalOpen(false);
+                  // 保存过一次之后就是普通编辑：再打开时可以取消关闭。
+                  setIsProfileGate(false);
                 }}
                 onClose={() => setIsProfileModalOpen(false)}
             />

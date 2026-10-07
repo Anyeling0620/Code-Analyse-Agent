@@ -13,15 +13,15 @@ type ChatRequest struct {
 }
 
 type Profile struct {
-	UserID           string    `json:"user_id"`
-	AuthSubject      string    `json:"auth_subject"`
-	UserType         string    `json:"user_type"`
-	SkillLevel       string    `json:"skill_level"`
-	GoalType         string    `json:"goal_type"`
-	PurchasedCourses []string  `json:"purchased_courses"`
-	CurrentTopic     string    `json:"current_topic"`
-	CurrentStage     string    `json:"current_stage"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	UserID       string    `json:"user_id"`
+	AuthSubject  string    `json:"auth_subject"`
+	UserType     string    `json:"user_type"`
+	SkillLevel   string    `json:"skill_level"`
+	GoalType     string    `json:"goal_type"`
+	Description  string    `json:"description"`
+	CurrentTopic string    `json:"current_topic"`
+	CurrentStage string    `json:"current_stage"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type SessionContext struct {
@@ -46,7 +46,7 @@ type ChatResult struct {
 }
 
 type ChatStreamEvent struct {
-	Type          string      `json:"type"` // ready / session /observe/ progress / tool_call /tool_result /delta / interrupt / done / error
+	Type string `json:"type"` // ready / session /observe/ progress / tool_call /tool_result /delta / interrupt / done / error
 	// RunID / Seq 是断连续传的锚点：Seq 对应 chat_run_events.id，
 	// 客户端按 Last-Event-ID 重连时只补 seq 之后的事件。
 	RunID         string      `json:"run_id"`
@@ -107,9 +107,9 @@ type ChatRunState struct {
 	Interrupted       bool                     `json:"interrupted"`
 	// Degraded 标记本轮是"降级完成"：例如达到最大工具轮次后只输出部分报告，
 	// 或出错但仍保留了半成品内容。落库后可直接用来区分完整结论与部分结论。
-	Degraded          bool                     `json:"degraded"`
+	Degraded bool `json:"degraded"`
 	// LastSeq 是本轮已落库的最后一个事件 seq，审批恢复时用它作为续传起点。
-	LastSeq           int64                    `json:"last_seq"`
+	LastSeq int64 `json:"last_seq"`
 }
 
 // ChatRunInfo 是对外的 run 摘要（不含 question/answer 大字段以外的内部数据）。

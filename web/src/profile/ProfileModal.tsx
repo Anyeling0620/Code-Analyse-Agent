@@ -5,43 +5,60 @@ const skillLevels: SkillLevel[] = ['零基础', '入门', '熟悉'];
 const goalTypes: GoalType[] = ['补基础', '做项目', '学Agent'];
 const currentStages: CurrentStage[] = ['学习中', '开发中', '联调收尾', '复盘中'];
 
+// 描述是要喂给模型的整段背景，太长既占上下文又没人读完，所以前端截断、后端也限制长度。
+const descriptionMaxLength = 1000;
+
 type ProfileModalProps = {
   profile: ProfileForm;
+  // gate=true 是「登录后的强引导」：不能关闭，六项都填了才能保存进主界面。
+  gate?: boolean;
   onSave: (profile: ProfileForm) => void;
   onClose: () => void;
 };
 
-export function ProfileModal({ profile, onSave, onClose }: ProfileModalProps) {
+export function ProfileModal({ profile, gate = false, onSave, onClose }: ProfileModalProps) {
   const [draft, setDraft] = useState<ProfileForm>(profile);
-  const [coursesText, setCoursesText] = useState(() => profile.purchased_courses.join('\n'));
 
   const nextProfile = useMemo<ProfileForm>(() => ({
     user_type: draft.user_type.trim(),
     skill_level: draft.skill_level.trim(),
     goal_type: draft.goal_type.trim(),
-    purchased_courses: parseCourses(coursesText),
+    description: draft.description.trim(),
     current_topic: draft.current_topic.trim(),
     current_stage: draft.current_stage.trim(),
-  }), [coursesText, draft]);
+  }), [draft]);
+
+  const complete = isComplete(nextProfile);
+
+  // 强引导下点遮罩、点取消都不生效：要退出只有保存这一条路。
+  function requestClose() {
+    if (!gate) {
+      onClose();
+    }
+  }
 
   return (
-    <div className="trace-modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="trace-modal-backdrop" role="presentation" onClick={requestClose}>
       <section className="trace-modal profile-modal" role="dialog" aria-modal="true" aria-label="基础画像" onClick={(event) => event.stopPropagation()}>
         <div className="trace-modal-header">
           <div>
-            <h3>基础画像</h3>
+            <h3>{gate ? '先完善基础画像' : '基础画像'}</h3>
             <p>保存后会随下一轮对话提交，帮助 Agent 调整解释深度和学习建议。</p>
           </div>
-          <button className="ghost-button" type="button" onClick={onClose} aria-label="关闭资料弹窗">
-            ×
-          </button>
+          {!gate && (
+            <button className="ghost-button" type="button" onClick={onClose} aria-label="关闭资料弹窗">
+              ×
+            </button>
+          )}
         </div>
 
         <form
           className="profile-form"
           onSubmit={(event) => {
             event.preventDefault();
-            onSave(nextProfile);
+            if (complete) {
+              onSave(nextProfile);
+            }
           }}
         >
           <div className="profile-form-grid">
@@ -109,35 +126,33 @@ export function ProfileModal({ profile, onSave, onClose }: ProfileModalProps) {
             </label>
 
             <label className="profile-field profile-field-full">
-              <span>已购课程</span>
+              <span>描述</span>
               <textarea
-                value={coursesText}
-                onChange={(event) => setCoursesText(event.target.value)}
-                placeholder="每行一个课程，或用逗号、分号分隔"
+                value={draft.description}
+                onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+                placeholder="用几句话介绍自己：背景、在做什么、想得到什么帮助。例如：本科在读，学过 Python/Java，正在用 Go + Eino 做 Agent 项目，希望补齐工程化经验。"
+                maxLength={descriptionMaxLength}
+                rows={4}
               />
+              <span className="profile-field-counter">{draft.description.length}/{descriptionMaxLength}</span>
             </label>
           </div>
 
           <div className="profile-modal-footer">
-            <button className="ghost-button" type="button" onClick={onClose}>取消</button>
-            <button className="primary-button" type="submit">保存资料</button>
+            {!gate && (
+              <button className="ghost-button" type="button" onClick={onClose}>取消</button>
+            )}
+            <button className="primary-button" type="submit" disabled={!complete}>保存资料</button>
           </div>
+          {gate && !complete && (
+            <p className="profile-gate-hint">六项都填上才能进入（描述写两句也行）。</p>
+          )}
         </form>
       </section>
     </div>
   );
 }
 
-function parseCourses(value: string): string[] {
-  const seen = new Set<string>();
-  const courses: string[] = [];
-  for (const item of value.split(/[\n,，;；]+/)) {
-    const course = item.trim();
-    if (!course || seen.has(course)) {
-      continue;
-    }
-    seen.add(course);
-    courses.push(course);
-  }
-  return courses;
+function isComplete(profile: ProfileForm): boolean {
+  return Object.values(profile).every((value) => value.trim() !== '');
 }

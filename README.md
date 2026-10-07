@@ -136,6 +136,8 @@ rag:
 
 把 `rag.enabled` 设为 `false` 可关闭 Milvus 与语义索引，此时不会创建 Milvus 客户端。`auth` 与 `redis` 两段是必需的，缺失会以 `redis addr can't be empty` 启动失败。
 
+Milvus 不是启动的硬依赖：`rag.enabled: true` 但 Milvus 连不上时，服务会以**降级模式**启动（HTTP 照常监听、其余功能不受影响），后台按退避重连，连上后 RAG 自动恢复，不需要重启进程。`GET /healthz` 的 `dependencies.milvus` 字段会显示 `ok` / `down`，`down` 时附带最近一次连接失败原因。
+
 ### 2. 启动后端
 
 ```bash

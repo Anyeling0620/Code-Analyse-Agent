@@ -11,6 +11,7 @@ import (
 	"edu.agent.code/utils/logger"
 	"edu.agent.code/utils/sensitive"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	fileloader "github.com/cloudwego/eino-ext/components/document/loader/file"
 	docxparser "github.com/cloudwego/eino-ext/components/document/parser/docx"
@@ -44,10 +45,20 @@ const (
 )
 
 type Service struct {
-	conf  config.RAG
-	root  string
-	store vector.IStore
+	conf config.RAG
+	root string
+
+	// base 用于向量库缺位时懒加载 store（Milvus 后起来也能自愈，不必重启进程）。
+	base adaptor.IAdaptor
+	// storeMu 保护 store 的懒加载写入。
+	storeMu sync.Mutex
+	store   vector.IStore
 }
+
+var (
+	errRAGDisabled            = errors.New("rag 未启用")
+	errVectorStoreUnavailable = errors.New("向量库不可用（Milvus 未连接）")
+)
 
 var (
 	docsParser   einoparser.Parser
@@ -159,33 +170,75 @@ func NewService(ctx context.Context, adaptor adaptor.IAdaptor) (*Service, error)
 	if err != nil {
 		return nil, err
 	}
+	svc := &Service{
+		conf: conf,
+		root: root,
+		base: adaptor,
+	}
+	// 向量库初始化失败不再让整个服务启动失败：Milvus 常常比本服务晚就绪，先降级，
+	// 等它恢复（或首次真正用到 RAG）时由 getStore 懒加载追上。否则 Milvus 一缺位，
+	// HTTP 服务就彻底起不来。
 	store, err := vector.NewMilvus(ctx, adaptor, vector.WithInitCollection(true), vector.WithReranker(vector.NewReranker(conf.Rerank)))
 	if err != nil {
-		return nil, err
-	}
-	svc := &Service{
-		conf:  conf,
-		root:  root,
-		store: store,
+		logger.Warn("rag store 初始化失败，RAG 降级运行（其余功能不受影响）：%v", err)
+	} else {
+		svc.store = store
 	}
 	if conf.AutoIndexOnStartup {
-		if err := svc.IndexDocs(ctx); err != nil {
-			_ = store.Close()
-			return nil, err
+		switch {
+		case svc.store == nil:
+			logger.Warn("auto_index_on_startup 已开启，但向量库不可用，跳过启动索引")
+		default:
+			if err := svc.IndexDocs(ctx); err != nil {
+				logger.Warn("auto_index_on_startup 索引失败，服务继续以降级模式运行：%v", err)
+			} else {
+				logger.Info("Auto indexing on startup completed")
+			}
 		}
-		logger.Info("Auto indexing on startup completed")
 	}
 	return svc, nil
 }
 
+// getStore 返回向量库读写实例；若启动时没建起来，这里会懒加载一次。
+// 这样 Milvus 晚于本服务启动（或中途重启）时，RAG 能力会自动恢复，不必重启进程。
+func (s *Service) getStore(ctx context.Context) (vector.IStore, error) {
+	if s == nil || !s.conf.Enabled {
+		return nil, errRAGDisabled
+	}
+	s.storeMu.Lock()
+	defer s.storeMu.Unlock()
+	if s.store != nil {
+		return s.store, nil
+	}
+	if s.base == nil {
+		return nil, errVectorStoreUnavailable
+	}
+	store, err := vector.NewMilvus(ctx, s.base, vector.WithInitCollection(true), vector.WithReranker(vector.NewReranker(s.conf.Rerank)))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errVectorStoreUnavailable, err)
+	}
+	s.store = store
+	logger.Info("rag store 懒加载成功，向量库已恢复")
+	return s.store, nil
+}
+
 func (s *Service) Close() error {
-	if s == nil || s.store == nil {
+	if s == nil {
+		return nil
+	}
+	s.storeMu.Lock()
+	defer s.storeMu.Unlock()
+	if s.store == nil {
 		return nil
 	}
 	return s.store.Close()
 }
 
 func (s *Service) IndexDocs(ctx context.Context) error {
+	store, err := s.getStore(ctx)
+	if err != nil {
+		return err
+	}
 	docs, err := loadDocs(ctx, s.root, s.conf)
 	if err != nil {
 		return err
@@ -197,7 +250,7 @@ func (s *Service) IndexDocs(ctx context.Context) error {
 	chunks := lo.Chunk(docs, maxEmbeddingBatchSize)
 	ids := make([]string, 0, len(docs))
 	for _, chunk := range chunks {
-		tids, err := s.store.Store(ctx, chunk)
+		tids, err := store.Store(ctx, chunk)
 		if err != nil {
 			return fmt.Errorf("failed to store chunk: %w", err)
 		}
@@ -539,10 +592,13 @@ func isSkippedArtifact(path string) bool {
 }
 
 func (s *Service) Retriever(ctx context.Context, req *dto.RetrieverReq) ([]*dto.RetrieverChunkDto, common.Errno) {
-	if s.store == nil {
+	store, err := s.getStore(ctx)
+	if err != nil {
+		// 向量库不可用时按「无召回」返回，不把 RAG 故障扩散成整轮对话失败。
+		logger.Warn("rag retriever 不可用：%v", err)
 		return nil, common.OK
 	}
-	chunks, err := s.store.Retrieve(ctx, req.Query, retriever.WithTopK(req.TopK))
+	chunks, err := store.Retrieve(ctx, req.Query, retriever.WithTopK(req.TopK))
 	if err != nil {
 		logger.Error("failed to retrieve chunks: %v", err)
 		return nil, common.ServerError.WithError(err)

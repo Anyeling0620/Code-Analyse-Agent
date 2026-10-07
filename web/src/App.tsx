@@ -21,7 +21,8 @@ import {
   resolveStreamEventType,
 } from './chat/messageSegments';
 import { Composer } from './composer/Composer';
-import { loadProfile, profileFromServer, saveProfile } from './profile/storage';
+import { loadProfile, profileFromServer, saveProfile as cacheProfile } from './profile/storage';
+import { fetchProfile, saveProfileToServer } from './profile/api';
 import { ExportPrintRoot } from './export/ExportPrintRoot';
 import {
   buildEntryAt,
@@ -173,6 +174,9 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   // 手动打开（会话面板的「基础画像」按钮）走可关闭的编辑模式。
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(true);
   const [isProfileGate, setIsProfileGate] = useState(true);
+  // 画像从服务端回读完成后才渲染强引导弹窗：否则弹窗会拿着本地缓存/默认值先渲染，
+  // 服务端值回来时表单已经开了、草稿状态不会跟着变（用户会看到旧值并可能原样提交）。
+  const [isProfileSynced, setIsProfileSynced] = useState(false);
   const [shareNotice, setShareNotice] = useState('');
   const [printEntries, setPrintEntries] = useState<ExportEntry[] | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
@@ -205,6 +209,34 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     void refreshMetrics();
     void refreshSessions();
   }, []);
+
+  // 登录（或换账号）后从服务端读一次画像：服务端是按 user_id 存的权威来源，
+  // 本地 localStorage 只是"秒开"用的缓存。读失败就用缓存兜底，不阻塞强引导。
+  useEffect(() => {
+    let cancelled = false;
+    fetchProfile()
+      .then((server) => {
+        if (cancelled) {
+          return;
+        }
+        setProfile((current) => {
+          const merged = profileFromServer(current, server);
+          cacheProfile(authSession.user_id, merged);
+          return merged;
+        });
+      })
+      .catch(() => {
+        // 读不到不影响使用：缓存里有上次填的，没有就是默认值，用户照样能填能存。
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsProfileSynced(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession.user_id]);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -991,7 +1023,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
         if (payload.result?.profile) {
           const nextProfile = profileFromServer(profile, payload.result.profile);
           setProfile(nextProfile);
-          saveProfile(authSession.user_id, nextProfile);
+          cacheProfile(authSession.user_id, nextProfile);
         }
         patchAssistant(assistantId, (item) => ({
           ...item,
@@ -1231,13 +1263,16 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
               onScrollBottom={scrollToBottom}
           />
         </main>
-        {isProfileModalOpen && (
+        {isProfileModalOpen && isProfileSynced && (
             <ProfileModal
                 profile={profile}
                 gate={isProfileGate}
-                onSave={(nextProfile) => {
-                  setProfile(nextProfile);
-                  saveProfile(authSession.user_id, nextProfile);
+                onSave={async (nextProfile) => {
+                  // 先落库再放行：强引导的语义是「保存成功才算填完」，服务端失败就留在弹窗里重试。
+                  const saved = await saveProfileToServer(nextProfile);
+                  const merged = profileFromServer(nextProfile, saved);
+                  setProfile(merged);
+                  cacheProfile(authSession.user_id, merged);
                   setIsProfileModalOpen(false);
                   // 保存过一次之后就是普通编辑：再打开时可以取消关闭。
                   setIsProfileGate(false);

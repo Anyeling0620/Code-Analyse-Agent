@@ -18,7 +18,7 @@
 | 审批中断恢复 | 高危终端命令需人工审批，审批后从 checkpoint 复用同一条 run 继续执行。 |
 | 崩溃续跑 | 进程重启时把遗留 `running` run 标记为 `interrupted`，前端可回放已落库内容。 |
 | 账号与配额 | 账号密码登录（Redis 不透明令牌）+ 游客免密登录，按用户区分配额与成本。 |
-| 用户画像 | 登录后强引导填写（用户类型/技能水平/目标类型/当前主题/当前阶段/描述）。按 `user_id` 存库、随每轮对话注入模型，并在前端按账号缓存，刷新不丢。 |
+| 用户画像 | 登录后强引导填写（用户类型/技能水平/目标类型/当前主题/当前阶段/描述），`PUT /api/profile` 保存即入库、`GET /api/profile` 登录后回读，随每轮对话注入模型。 |
 | 会话管理 | 会话列表/详情/删除、只读分享链接、调用链路查看。 |
 | 可观测 | OpenTelemetry tracing（OTLP / stdout 回退），结构化日志。 |
 
@@ -189,6 +189,8 @@ npm run build # 产物输出到 web/dist
 | POST | `/api/auth/guest` | 游客免密登录（按 IP + 浏览器指纹派生身份） |
 | POST | `/api/auth/logout` | 吊销当前令牌 |
 | GET | `/api/quota/today` | 当天调用量 |
+| GET | `/api/profile` | 读取当前登录用户的画像（登录后回填表单，没有记录时返回空画像） |
+| PUT | `/api/profile` | 保存当前登录用户的画像（全量替换，保存即入库） |
 | GET | `/api/cost/daily` | 当天成本（按登录用户） |
 | GET | `/api/cost/by_user` | 按用户统计成本 |
 | GET | `/api/cost/by_tool` | 按工具统计成本 |
@@ -270,4 +272,3 @@ CI（`.github/workflows/deploy.yml`）只在 push 到 `main` 时构建并发布 
 - MCP Server（`mcp_server_self.http_addr`）目前无鉴权。
 - `/api/cost/by_user`、`/api/cost/by_tool` 对任意登录用户开放，会暴露全站成本明细。
 - 流式分片逐条落库存在写放大，大仓库单轮可达上万行事件。
-- 画像没有独立的回读接口：前端按 `user_id` 缓存在 localStorage，只在新浏览器/新设备上需要等首轮对话返回 `ChatResult.profile` 才能拿到服务端画像。

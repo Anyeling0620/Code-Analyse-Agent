@@ -1464,6 +1464,13 @@ button {
   font-size: 0.8rem;
 }
 
+/* 保存失败时的错误提示：留在弹窗里，用户可改可重试。 */
+.profile-gate-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.8rem;
+}
+
 .profile-modal-footer {
   display: flex;
   justify-content: flex-end;

@@ -24,6 +24,15 @@ type Profile struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+type ProfileUpdateReq struct {
+	UserType     string `json:"user_type"`
+	SkillLevel   string `json:"skill_level"`
+	GoalType     string `json:"goal_type"`
+	Description  string `json:"description"`
+	CurrentTopic string `json:"current_topic"`
+	CurrentStage string `json:"current_stage"`
+}
+
 type SessionContext struct {
 	SessionID          string    `json:"session_id"`
 	UserID             string    `json:"user_id"`

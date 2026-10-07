@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"edu.agent.code/adaptor"
+	"edu.agent.code/adaptor/repo/profile"
 	"edu.agent.code/common"
 	"edu.agent.code/service/auth"
 	"edu.agent.code/service/conversation"
@@ -23,6 +24,8 @@ type Handler struct {
 	rag            *rag.Service
 	projectIndexer *rag.ProjectIndexer
 	auth           *auth.Service
+	// profiles 供 GET/PUT /api/profile 直接读写画像（保存即入库，不必等下一轮对话）。
+	profiles profile.IProfile
 }
 
 func NewHandler(ctx context.Context, adaptor adaptor.IAdaptor) (*Handler, error) {
@@ -45,6 +48,7 @@ func NewHandler(ctx context.Context, adaptor adaptor.IAdaptor) (*Handler, error)
 		rag:            ragSvc,
 		projectIndexer: projectIndexer,
 		auth:           auth.NewService(adaptor),
+		profiles:       profile.NewProfile(adaptor),
 	}, nil
 }
 

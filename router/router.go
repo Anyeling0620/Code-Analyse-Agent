@@ -20,7 +20,9 @@ func routeRegister(app *gin.Engine, h *api.Handler) {
 	app.POST("/api/auth/login", h.Login)                     // 账号密码登录，换取令牌
 	app.POST("/api/auth/guest", h.GuestLogin)                // 游客登录：IP + 浏览器指纹派生身份，默认 plus
 	app.POST("/api/auth/logout", h.Logout)                   // 吊销当前令牌
-	app.GET("api/quota/today", h.QuotaToday)                 // 用户当天调用量
+	app.GET("/api/quota/today", h.QuotaToday)                // 用户当天调用量
+	app.GET("/api/profile", h.GetProfile)                    // 当前登录用户的画像（登录后回填表单）
+	app.PUT("/api/profile", h.SaveProfile)                   // 保存当前登录用户的画像（全量替换，保存即入库）
 	app.GET("/api/cost/daily", h.CostDaily)                  // 用户当天的成本
 	app.GET("/api/cost/by_user", h.CostByUser)               // 按用户统计成本
 	app.GET("/api/cost/by_tool", h.CostByTool)               // 按工具统计成本

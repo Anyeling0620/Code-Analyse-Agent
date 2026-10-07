@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import type { CurrentStage, GoalType, ProfileForm, SkillLevel } from '../types/chat';
 
 const skillLevels: SkillLevel[] = ['零基础', '入门', '熟悉'];
@@ -12,12 +13,15 @@ type ProfileModalProps = {
   profile: ProfileForm;
   // gate=true 是「登录后的强引导」：不能关闭，六项都填了才能保存进主界面。
   gate?: boolean;
-  onSave: (profile: ProfileForm) => void;
+  // onSave 允许是异步的：实现里会 await 它，失败就把错误显示在弹窗里（父组件负责成功时关闭）。
+  onSave: (profile: ProfileForm) => void | Promise<void>;
   onClose: () => void;
 };
 
 export function ProfileModal({ profile, gate = false, onSave, onClose }: ProfileModalProps) {
   const [draft, setDraft] = useState<ProfileForm>(profile);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const nextProfile = useMemo<ProfileForm>(() => ({
     user_type: draft.user_type.trim(),
@@ -32,8 +36,25 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
 
   // 强引导下点遮罩、点取消都不生效：要退出只有保存这一条路。
   function requestClose() {
-    if (!gate) {
+    if (!gate && !saving) {
       onClose();
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!complete || saving) {
+      return;
+    }
+    setSaving(true);
+    setSaveError('');
+    try {
+      await onSave(nextProfile);
+    } catch (error) {
+      // 保存失败就留在弹窗里：强引导下不能带着"以为存上了"的状态进入工作区。
+      setSaveError(error instanceof Error && error.message ? error.message : '保存失败，请重试');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -46,21 +67,13 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
             <p>保存后会随下一轮对话提交，帮助 Agent 调整解释深度和学习建议。</p>
           </div>
           {!gate && (
-            <button className="ghost-button" type="button" onClick={onClose} aria-label="关闭资料弹窗">
+            <button className="ghost-button" type="button" onClick={onClose} aria-label="关闭资料弹窗" disabled={saving}>
               ×
             </button>
           )}
         </div>
 
-        <form
-          className="profile-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (complete) {
-              onSave(nextProfile);
-            }
-          }}
-        >
+        <form className="profile-form" onSubmit={handleSubmit}>
           <div className="profile-form-grid">
             <label className="profile-field">
               <span>用户类型</span>
@@ -140,12 +153,17 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
 
           <div className="profile-modal-footer">
             {!gate && (
-              <button className="ghost-button" type="button" onClick={onClose}>取消</button>
+              <button className="ghost-button" type="button" onClick={onClose} disabled={saving}>取消</button>
             )}
-            <button className="primary-button" type="submit" disabled={!complete}>保存资料</button>
+            <button className="primary-button" type="submit" disabled={!complete || saving}>
+              {saving ? '保存中…' : '保存资料'}
+            </button>
           </div>
           {gate && !complete && (
             <p className="profile-gate-hint">六项都填上才能进入（描述写两句也行）。</p>
+          )}
+          {saveError && (
+            <p className="profile-gate-error">保存失败：{saveError}</p>
           )}
         </form>
       </section>

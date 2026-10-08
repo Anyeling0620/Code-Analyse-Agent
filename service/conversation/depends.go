@@ -33,10 +33,11 @@ import (
 )
 
 type conversationTools struct {
-	analysis []tool.BaseTool
-	direct   []tool.BaseTool
-	qa       []tool.BaseTool
-	report   []tool.BaseTool
+	analysis   []tool.BaseTool
+	direct     []tool.BaseTool
+	qa         []tool.BaseTool
+	report     []tool.BaseTool
+	selfReport []tool.BaseTool
 }
 
 type serviceRepos struct {
@@ -77,10 +78,11 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor, projectIndexer *r
 		}
 	}()
 	tools := conversationTools{
-		analysis: toolGroups.Analysis,
-		direct:   toolGroups.Direct,
-		qa:       toolGroups.QA,
-		report:   toolGroups.Report,
+		analysis:   toolGroups.Analysis,
+		direct:     toolGroups.Direct,
+		qa:         toolGroups.QA,
+		report:     toolGroups.Report,
+		selfReport: toolGroups.SelfReport,
 	}
 	// repo_fetch：把 git URL / 本地路径统一解析成工作区内稳定的项目根目录。
 	// 它同时承担"仓库就绪后触发异步建索引 + 回写会话项目上下文"的职责。
@@ -197,17 +199,23 @@ func buildComposeRunner(chatModel model.ToolCallingChatModel,
 	agentHandler []adk.ChatModelAgentMiddleware,
 	ragTool tool.BaseTool,
 ) (*adk.Runner, error) {
+	limits := buildIterationLimits(conf.Agents.MaxIterations)
+	// 自省报表的轮次上限跟它的数据源配在同一个段（self_report.max_iterations），
+	// 不从 agents.max_iterations 取；<=0 时由 runner 落到默认值。
+	limits.SelfReport = conf.SelfReport.MaxIterations
+
 	composeRunner, err := runner.NewComposeRunner().
 		WithChatModel(chatModel).
 		WithAnalysisTool(tools.analysis).
 		WithQaTool(tools.qa).
 		WithDirectTool(tools.direct).
 		WithReportTool(tools.report).
+		WithSelfReportTool(tools.selfReport).
 		WithToolMiddleware([]compose.ToolMiddleware{
 			terminal.NewApprovalMiddleware(repo.approvals),
 		}).
 		WithCheckPoint(repo.checkPointStore).
-		WithMaxIterations(buildIterationLimits(conf.Agents.MaxIterations)).
+		WithMaxIterations(limits).
 		WithAgentHandler(agentHandler).
 		WithRagTool(ragTool).Build()
 

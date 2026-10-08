@@ -25,13 +25,16 @@ func NewService(adaptor adaptor.IAdaptor) *Service {
 	}
 }
 
-// Track 记录一次模型调用的用量与成本。
+// Track 记录一次模型调用的用量与成本，返回这次调用的成本（元）。
+//
+// 返回值给调用方累加成 run 级成本；命中不到单价时返回 0 与 error，
+// 调用方应把该次调用按 0 成本累计而不是丢弃。
 // prompt 为总输入 token，cached 为其中命中 prompt cache 的部分（未命中部分 = prompt - cached），
 // cached 超出 [0, prompt] 时会被收敛到合法区间。
 // TODO: 价格计算按高峰期计算，没有分时期
-func (s *Service) Track(ctx context.Context, userID, sessionID, modelName, toolName string, prompt, cached, completion int64) error {
+func (s *Service) Track(ctx context.Context, userID, sessionID, modelName, toolName string, prompt, cached, completion int64) (float64, error) {
 	if prompt < 0 || cached < 0 || completion < 0 { // Check 原为 && 导致只屏蔽"双负数"，任一为负都应视为无效用量
-		return nil
+		return 0, nil
 	}
 	if cached > prompt {
 		cached = prompt
@@ -39,10 +42,11 @@ func (s *Service) Track(ctx context.Context, userID, sessionID, modelName, toolN
 	rate, err := s.lookupRate(modelName)
 	if err != nil {
 		logger.Warn("cost:%v, fallback=%s", err, s.price.FallbackModel)
-		return err
+		return 0, err
 	}
 
 	breakdown := pricing.Calculate(rate, prompt, cached, completion)
+	cny := breakdown.TotalCNY()
 	err = s.cost.Insert(ctx, &do.CostRecord{
 		UserID:           userID,
 		SessionID:        sessionID,
@@ -52,16 +56,16 @@ func (s *Service) Track(ctx context.Context, userID, sessionID, modelName, toolN
 		CachedTokens:     cached,
 		CacheMissTokens:  prompt - cached,
 		CompletionTokens: completion,
-		EstimatedCNY:     breakdown.TotalCNY(),
+		EstimatedCNY:     cny,
 		CacheHitCNY:      breakdown.CacheHitCNY,
 		CacheMissCNY:     breakdown.CacheMissCNY,
 		OccurredAt:       time.Now(),
 	})
 	if err != nil {
 		logger.Warn("cost:%v, insert cost record failed, user=%s, session=%s, model=%s", err, userID, sessionID, modelName)
-		return err
+		return cny, err
 	}
-	return nil
+	return cny, nil
 }
 
 // lookupRate 查询模型单价：模型未配置，或缓存命中价未正确配置时返回错误。

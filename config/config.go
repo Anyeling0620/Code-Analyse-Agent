@@ -34,6 +34,8 @@ type Config struct {
 	OTel           OTel           `yaml:"otel"`
 	MCP            MCP            `yaml:"mcpserver"`
 	DatabaseReport DatabaseReport `yaml:"database_report"`
+	Telemetry      Telemetry      `yaml:"telemetry"`
+	SelfReport     SelfReport     `yaml:"self_report"`
 	Agents         Agents         `yaml:"agents"`
 	ModelPrice     ModelPrice     `yaml:"model_price"`
 	WorkSpace      WorkSpace      `yaml:"workspace"`
@@ -142,6 +144,57 @@ type DatabaseReport struct {
 	MaxRows         int    `yaml:"max_rows"`
 	MaxCellRunes    int    `yaml:"max_cell_runes"`
 	QueryTimeoutSec int    `yaml:"query_timeout_sec"`
+}
+
+// Telemetry 是运行指标埋点（每轮 run 的聚合指标）的写入配置。
+//
+// 它写的是 agent 自己的运行数据（迭代轮次、工具失败、token、成本），
+// 与 DatabaseReport 指向的业务库是两个库、两个账号：
+// DatabaseReport 是只读业务库，Telemetry 是 agent_telemetry 库的写账号。
+type Telemetry struct {
+	Enable bool   `yaml:"enable"`
+	DSN    string `yaml:"dsn"`
+	// QueueSize 是异步写入队列长度。队列满时直接丢弃指标并计数，
+	// 不阻塞对话主流程（埋点丢一条可以接受，对话卡住不可以）。
+	QueueSize int `yaml:"queue_size"`
+	// WriteTimeoutSec 是单次写入超时（秒），<=0 时按 3 秒处理。
+	WriteTimeoutSec int `yaml:"write_timeout_sec"`
+}
+
+// SelfReport 是自省报表子 agent 的只读数据源配置，指向 agent_telemetry 库。
+//
+// 与 DatabaseReport 分开配置的原因：DatabaseReport 用的是共享只读账号，
+// 而自省数据（含 user_id / session_id 维度）只允许白名单用户查询，
+// 所以必须用一个独立的只读账号 + 独立的工具集，靠权限而不是靠提示词约束。
+type SelfReport struct {
+	Enable          bool   `yaml:"enable"`
+	Driver          string `yaml:"driver"`
+	DSN             string `yaml:"dsn"`
+	Database        string `yaml:"database"`
+	MaxRows         int    `yaml:"max_rows"`
+	MaxCellRunes    int    `yaml:"max_cell_runes"`
+	QueryTimeoutSec int    `yaml:"query_timeout_sec"`
+	// AllowedUsers 是允许查询自省数据的用户白名单。
+	// 为空表示谁都不放行（默认关闭，避免漏配就全员可见）。
+	AllowedUsers []string `yaml:"allowed_users"`
+	// MaxIterations 是自省报表 agent 的最大迭代轮次，<=0 时沿用 DatabaseReport 的档位。
+	MaxIterations int `yaml:"max_iterations"`
+}
+
+// AsDatabaseReport 把自省数据源投影成 DBReport 的连接参数。
+//
+// 这样自省报表能复用 db_report 的只读实现（禁词校验、行数/单元格/超时限制），
+// 不用为它单独写一套查询层——差别只在连接串指向哪个库、用哪个账号。
+func (s SelfReport) AsDatabaseReport() DatabaseReport {
+	return DatabaseReport{
+		Enable:          s.Enable,
+		Driver:          s.Driver,
+		DSN:             s.DSN,
+		Database:        s.Database,
+		MaxRows:         s.MaxRows,
+		MaxCellRunes:    s.MaxCellRunes,
+		QueryTimeoutSec: s.QueryTimeoutSec,
+	}
 }
 
 type MCP struct {

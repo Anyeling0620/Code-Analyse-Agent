@@ -118,6 +118,10 @@ func (s *Service) handleMaxIterationsExceeded(
 	// 超限收尾产出的是"部分报告"，不是完整结论：标记降级，
 	// 落库后 run.degraded 可以为前端/后续分析区分这份结果的可信范围。
 	runState.Degraded = true
+	// 同时写明降级原因。只置布尔位的话，"迭代耗尽"与 executeRun 里
+	// "报错但留了半成品"的降级会混成同一个值，报表就无法归因到
+	// 该调 max_iterations 还是该修报错。
+	runState.DegradedReason = dto.DegradedReasonMaxIterations
 	agentName := ""
 	if event != nil {
 		agentName = event.AgentName
@@ -186,7 +190,6 @@ func (s *Service) handleMessage(
 	if msg == nil {
 		return nil
 	}
-	// TODO 记录 token 消耗
 	err := s.trackUsage(ctx, runState, msg, event.AgentName)
 	if err != nil {
 		logger.Error("handleMessage trackUsage error", runStateBrief(runState), zap.Any("err", err))
@@ -229,6 +232,11 @@ func (s *Service) handleToolCallResult(msg *schema.Message, runState *dto.ChatRu
 		toolName = runState.ToolCallMap[msg.ToolCallID].Name
 	}
 	runState.UsedTools = appendIfMissing(runState.UsedTools, toolName)
+	// 工具失败率：本项目的工具把错误当正常结果返回（见 looksLikeToolError 注释），
+	// eino 层看不到 Go error，只能在这里按措辞判定。
+	if looksLikeToolError(msg.Content) {
+		runState.ToolErrors++
+	}
 	// 工具执行结果必须用 tool_result 事件下发：前端按事件名分发，
 	// 事件名若仍是 tool_call，卡片会一直停在“调用中”，tool_result 字段也不会被渲染。
 	// 该事件同时会写入 runState.RenderEvents 供历史回放，实时流与回放必须同名。
@@ -272,6 +280,8 @@ func (s *Service) handleToolCall(emit ChatEmit, runState *dto.ChatRunState, even
 	// 调用工具
 	for _, call := range msg.ToolCalls {
 		toolName := call.Function.Name
+		// 工具调用次数：一次 run 里模型实际发起的工具调用总数。
+		runState.ToolCalls++
 		runState.UsedTools = appendIfMissing(runState.UsedTools, toolName)
 		if call.ID != "" {
 			runState.ToolCallMap[call.ID] = dto.ToolCallState{

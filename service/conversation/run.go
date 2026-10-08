@@ -31,6 +31,8 @@ type chatRunPrep struct {
 	session      *dto.SessionContext
 	profile      *dto.Profile
 	messages     []*schema.Message
+	// startedAt 与落库的 chat_runs.started_at 取同一个时刻，用于算埋点里的耗时。
+	startedAt time.Time
 }
 
 // resumePrep 是审批恢复需要的参数快照。
@@ -44,6 +46,10 @@ type resumePrep struct {
 	sessionID    string
 	traceID      string
 	toolName     string
+	// startedAt 取被恢复的那条 run 的原始创建时间，而不是本次恢复的时刻：
+	// 同一个 run_id 只该有一个开始时间，否则 upsert 到 run_metrics 的
+	// started_at 会在 resume 时被改写成恢复时间，耗时就失真了。
+	startedAt time.Time
 }
 
 // StartChatRun 非阻塞地起一轮对话：
@@ -369,6 +375,7 @@ func (s *Service) prepareChatRun(ctx context.Context, req dto.ChatRequest) (cont
 		session:      session,
 		profile:      profile,
 		messages:     messages,
+		startedAt:    now,
 	}
 	if s.runs != nil {
 		item := &do.ChatRun{
@@ -470,8 +477,10 @@ func (s *Service) prepareResumeRun(ctx context.Context, req *dto.ChatResumeReque
 			}
 		}
 		prep.runID = existing.RunID
+		prep.startedAt = existing.StartedAt
 	} else {
 		prep.runID = common.GetUUIDHex()
+		prep.startedAt = time.Now()
 	}
 
 	return prep, afterSeq, ctx, nil
@@ -487,7 +496,12 @@ func (s *Service) executeRun(ctx context.Context, prep *chatRunPrep) (*dto.ChatR
 		Question:    prep.question,
 		SessionID:   prep.session.SessionID,
 		ToolCallMap: map[string]dto.ToolCallState{},
+		StartedAt:   prep.startedAt,
 	}
+	// 计数器挂在 ctx 上给压缩中间件（service/agent/compress）自增；
+	// 它拿不到 runState，只能通过 ctx 回传。
+	counters := &dto.RunCounters{}
+	ctx = dto.WithRunCounters(ctx, counters)
 	emitRun := func(event dto.ChatStreamEvent) error {
 		return s.publishRunEvent(ctx, runState, event)
 	}
@@ -510,6 +524,9 @@ func (s *Service) executeRun(ctx context.Context, prep *chatRunPrep) (*dto.ChatR
 		// 有半成品内容时标记为降级完成，前端据此显示"部分报告"而不是纯错误。
 		if runState.Answer != "" || len(runState.RenderEvents) > 0 {
 			runState.Degraded = true
+			// 和"命中迭代上限"区分开：这里的降级是执行报错保留下来的半成品，
+			// 该修的是报错本身，而不是调大 max_iterations。
+			runState.DegradedReason = dto.DegradedReasonErrorPartial
 		}
 		_ = emitRun(dto.ChatStreamEvent{
 			Type:        consts.SseEventTypeError,
@@ -565,7 +582,10 @@ func (s *Service) executeResumeRun(ctx context.Context, prep *resumePrep) error 
 		SessionID:   prep.sessionID,
 		UsedTools:   []string{prep.toolName},
 		ToolCallMap: map[string]dto.ToolCallState{},
+		StartedAt:   prep.startedAt,
 	}
+	counters := &dto.RunCounters{}
+	ctx = dto.WithRunCounters(ctx, counters)
 	emitRun := func(event dto.ChatStreamEvent) error {
 		return s.publishRunEvent(ctx, runState, event)
 	}
@@ -691,6 +711,8 @@ func (s *Service) finishRun(ctx context.Context, runState *dto.ChatRunState, ses
 	if s.broker != nil {
 		s.broker.Close(runState.RunID)
 	}
+	// 指标投递放在最后：它不参与状态机，失败也不影响 run 是否收敛。
+	s.shipRunMetrics(ctx, runState, session, status)
 }
 
 // recoverRun 兜住后台 goroutine 里的 panic：否则一条 run 会永远停在 running，

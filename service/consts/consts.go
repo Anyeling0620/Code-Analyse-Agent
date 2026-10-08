@@ -9,6 +9,8 @@ const (
 	// 子任务
 	RepoAnalysisSubAgentMaxIterations = 8
 	DBReportMaxIterations             = 12
+	// SelfReportMaxIterations 自省报表通常只是几段聚合查询，需要的轮次比业务报表少。
+	SelfReportMaxIterations = 8
 )
 
 const (

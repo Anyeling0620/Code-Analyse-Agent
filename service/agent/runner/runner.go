@@ -6,6 +6,7 @@ import (
 	"edu.agent.code/service/agent/db_report"
 	"edu.agent.code/service/agent/project_qa"
 	"edu.agent.code/service/agent/repo_analyzer"
+	"edu.agent.code/service/agent/self_report"
 	"edu.agent.code/service/consts"
 	"fmt"
 	"github.com/cloudwego/eino/adk"
@@ -25,6 +26,7 @@ type IterationLimits struct {
 	RepoAnalyzer         int
 	RepoAnalyzerSubAgent int
 	DBReport             int
+	SelfReport           int
 }
 
 type ComposeRunner struct {
@@ -34,6 +36,7 @@ type ComposeRunner struct {
 	analysisTool    []tool.BaseTool
 	qaTool          []tool.BaseTool
 	reportTool      []tool.BaseTool
+	selfReportTool  []tool.BaseTool
 	ragRegister     tool.BaseTool
 	checkPointStore adk.CheckPointStore
 	toolMiddleWare  []compose.ToolMiddleware
@@ -72,6 +75,11 @@ func (c *ComposeRunner) WithReportTool(tools []tool.BaseTool) *ComposeRunner {
 	return c
 }
 
+func (c *ComposeRunner) WithSelfReportTool(tools []tool.BaseTool) *ComposeRunner {
+	c.selfReportTool = tools
+	return c
+}
+
 func (c *ComposeRunner) WithRagTool(tool tool.BaseTool) *ComposeRunner {
 	c.ragRegister = tool
 	return c
@@ -107,6 +115,9 @@ func (c *ComposeRunner) defaultMaxIterations() {
 	}
 	if c.maxIterations.DBReport <= 0 {
 		c.maxIterations.DBReport = consts.DBReportMaxIterations
+	}
+	if c.maxIterations.SelfReport <= 0 {
+		c.maxIterations.SelfReport = consts.SelfReportMaxIterations
 	}
 	if c.maxIterations.RepoAnalyzer <= 0 {
 		c.maxIterations.RepoAnalyzer = consts.RepoAnalysisMaxIterations
@@ -160,6 +171,16 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 		repo_analyzer.Name: true,
 		project_qa.Name:    true,
 		db_report.Name:     true,
+	}
+	// 自省报表工具只在 self_report.enable 时才存在。没启用就不挂这个子 agent，
+	// 保证模型看不到、也不会去调它，行为与改造前完全一致。
+	if len(c.selfReportTool) > 0 {
+		selfReportAgentTool, err := c.buildSelfReportAgent()
+		if err != nil {
+			return nil, err
+		}
+		agentTools = append(agentTools, selfReportAgentTool)
+		returnDirectly[self_report.Name] = true
 	}
 	agentTools = append(agentTools, c.directTool...)
 
@@ -243,4 +264,20 @@ func (c *ComposeRunner) buildDBReportAgent() (tool.BaseTool, error) {
 		return nil, err
 	}
 	return adk.NewAgentTool(c.ctx, dbReport, adk.WithFullChatHistoryAsInput()), nil
+}
+
+func (c *ComposeRunner) buildSelfReportAgent() (tool.BaseTool, error) {
+	selfReportAgent, err := self_report.NewSelfReportAgentWithOptions(
+		c.ctx,
+		c.chatModel,
+		c.selfReportTool,
+		c.toolMiddleWare,
+		self_report.Options{
+			MaxIterations: c.maxIterations.SelfReport,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return adk.NewAgentTool(c.ctx, selfReportAgent, adk.WithFullChatHistoryAsInput()), nil
 }

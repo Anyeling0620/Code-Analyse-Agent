@@ -13,10 +13,11 @@ import (
 )
 
 type Groups struct {
-	Direct   []tool.BaseTool
-	Analysis []tool.BaseTool
-	QA       []tool.BaseTool
-	Report   []tool.BaseTool
+	Direct     []tool.BaseTool
+	Analysis   []tool.BaseTool
+	QA         []tool.BaseTool
+	Report     []tool.BaseTool
+	SelfReport []tool.BaseTool
 }
 
 type IProvider interface {
@@ -57,6 +58,7 @@ func (p *Provider) Load(ctx context.Context) (Groups, error) {
 		groups.Analysis = append(groups.Analysis, loaded.Analysis...)
 		groups.Report = append(groups.Report, loaded.Report...)
 		groups.QA = append(groups.QA, loaded.QA...)
+		groups.SelfReport = append(groups.SelfReport, loaded.SelfReport...)
 	}
 	return groups, nil
 }

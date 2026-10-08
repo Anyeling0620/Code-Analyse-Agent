@@ -6,6 +6,7 @@ import (
 	"edu.agent.code/service/dto"
 	"fmt"
 	"github.com/cloudwego/eino/schema"
+	"regexp"
 	"strings"
 	"time"
 
@@ -104,6 +105,36 @@ func toolResultFormat(toolName, content string) string {
 		content += "\n\n ***内容过长已截断，完整内容已经提交模型继续写处理*"
 	}
 	return content
+}
+
+// toolErrorHeadRunes 是判定"工具返回的是错误"时只看首行开头多少个字符。
+const toolErrorHeadRunes = 160
+
+// toolErrorMarkerRE 匹配工具把错误当正常结果返回时的稳定措辞。
+//
+// 背景：本项目的工具普遍用 (string, error) 里的 string 承载错误文本
+// （db_read_query 的 "...denied"、http_request 的 "http request error: ..."、
+// terminal 的 "执行命令失败, ..."），eino 层看不到 Go error，
+// 所以只能按措辞识别，做不到 100% 准确。
+//
+// 判定同时要求"出现在首行"且"整条结果足够短"：正常结果（代码检索、报表）
+// 通常更长，且 error/invalid 这类词本身可能出现在被分析的内容里，
+// 只按词匹配会把正常结果大量误判成错误。
+var toolErrorMarkerRE = regexp.MustCompile(`(?i)(error|invalid|invailid|denied|forbidden|unsupported|unknown|failed|failure|not allowed|cannot|can not|does not exist|not exist|not found|no such|permission|timeout|refused|超时|失败|错误|拒绝|无权限|不存在|非法|安全限制)`)
+
+// looksLikeToolError 判断一次工具返回是否应计入 tool_errors。
+func looksLikeToolError(content string) bool {
+	head := strings.TrimSpace(content)
+	if head == "" {
+		return false
+	}
+	if i := strings.IndexAny(head, "\n\r"); i >= 0 {
+		head = head[:i]
+	}
+	if len([]rune(head)) > toolErrorHeadRunes {
+		return false
+	}
+	return toolErrorMarkerRE.MatchString(head)
 }
 
 func summarySession(question, answer string) string {

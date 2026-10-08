@@ -101,6 +101,15 @@ type ToolCallState struct {
 	Arguments string `json:"arguments"`
 }
 
+// ChatRunState.DegradedReason 的取值。这两个值会落到 agent_telemetry.run_metrics，
+// 改动等于改报表口径，必须同步更新那边的注释。
+const (
+	// DegradedReasonMaxIterations 表示命中迭代上限后强制收尾。
+	DegradedReasonMaxIterations = "max_iterations"
+	// DegradedReasonErrorPartial 表示执行报错但保留了已产出的半成品。
+	DegradedReasonErrorPartial = "error_partial"
+)
+
 type ChatRunState struct {
 	UserID            string                   `json:"user_id"`
 	RunID             string                   `json:"run_id"`
@@ -117,8 +126,27 @@ type ChatRunState struct {
 	// Degraded 标记本轮是"降级完成"：例如达到最大工具轮次后只输出部分报告，
 	// 或出错但仍保留了半成品内容。落库后可直接用来区分完整结论与部分结论。
 	Degraded bool `json:"degraded"`
+	// DegradedReason 区分 Degraded 的原因，避免"迭代耗尽"和"报错但有半成品"
+	// 共用一个布尔位而无法归因：
+	//   DegradedReasonMaxIterations —— 命中迭代上限后强制收尾；
+	//   DegradedReasonErrorPartial  —— 执行报错但保留了已产出的半成品。
+	DegradedReason string `json:"degraded_reason"`
 	// LastSeq 是本轮已落库的最后一个事件 seq，审批恢复时用它作为续传起点。
 	LastSeq int64 `json:"last_seq"`
+
+	// 以下字段是埋点统计，只累计数字，不承载对话原文。
+	// StartedAt 取 run 创建时间；被审批中断后 resume 的 run 仍是原始创建时间，
+	// 所以 Duration 里包含审批等待时间。
+	StartedAt time.Time `json:"started_at"`
+	// LLMCalls 是模型调用次数，等价于迭代轮次（流式只有末帧带 Usage）。
+	LLMCalls         int   `json:"llm_calls"`
+	ToolCalls        int   `json:"tool_calls"`
+	ToolErrors       int   `json:"tool_errors"`
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CachedTokens     int64 `json:"cached_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+	// CostCNY 是本轮累计的人民币成本（由 cost.Track 逐次累加）。
+	CostCNY float64 `json:"cost_cny"`
 }
 
 // ChatRunInfo 是对外的 run 摘要（不含 question/answer 大字段以外的内部数据）。

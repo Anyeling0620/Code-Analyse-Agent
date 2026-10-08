@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"edu.agent.code/config"
+	"edu.agent.code/service/dto"
 	"edu.agent.code/utils/logger"
 
 	"github.com/cloudwego/eino/adk"
@@ -332,6 +333,11 @@ func New(ctx context.Context, conf config.ContextCompact, chatModel model.BaseMo
 			// 压缩会影响后续所有轮次看到的历史，必须留下可观测痕迹：
 			// before/after 的消息条数差异就是"这次折叠掉了多少历史"。
 			// 三段条数只在结构化策略下有意义（旧策略不做保留），所以分开记，避免误导。
+			//
+			// 同时给 run 级埋点计数：压缩次数是判断 context_compact.trigger_ratio
+			// 是否合理的唯一数据来源。Callback 只在压缩**真正应用**后才触发，
+			// 摘要失败走 safeMiddleware 的降级路径不会到这里，所以计数不会虚高。
+			dto.RunCountersFromContext(ctx).AddCompaction()
 			detail := "strategy=" + StrategyLegacy
 			if strategy == StrategyStructured {
 				segmented := Segment(before.Messages, keepRecent)

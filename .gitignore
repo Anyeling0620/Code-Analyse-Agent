@@ -1,5 +1,7 @@
 # 本地配置与密钥（含真实 API key，禁止入库）
 agent_code_local.yml
+# 改配置前的手工备份同样含密钥；只忽略精确文件名会让 .bak-* 被 IDE 自动暂存进仓库
+agent_code_local.yml.*
 
 # 构建产物
 main

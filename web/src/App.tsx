@@ -39,6 +39,7 @@ import { ProfileModal } from './profile/ProfileModal';
 import { SessionPanel } from './sessions/SessionPanel';
 import { createShareLink } from './share/api';
 import { SharedSessionView } from './share/SharedSessionView';
+import { AppearanceSwitcher } from './theme/AppearanceSwitcher';
 import { MenuIcon } from './ui/icons';
 import { sectionHueAt, sectionLabel, shortId } from './ui/palette';
 import type { ChatMessage, ChatRunActiveResp, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent, VersionInfo } from './types/chat';
@@ -58,9 +59,16 @@ const SHARE_NOTICE_TTL_MS = 4000;
 // GUEST_ID_PREFIX 与后端 common.GuestUserPrefix 对齐，用于把游客身份和真实账号区分开显示。
 const GUEST_ID_PREFIX = 'guest_';
 
+// 设计验收用的开发模式入口：`?preview=1` 仅在 dev server 下自动以游客身份进入工作区，
+// 方便逐个设计截图；生产构建里 import.meta.env.DEV 为 false，不会生效。
+const isPreviewMode = import.meta.env.DEV
+    && typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).has('preview');
+
 export default function App() {
   const [authSession, setAuthSession] = useState(() => getSession());
   const [guestEnabled, setGuestEnabled] = useState(false);
+  const previewLoginStartedRef = useRef(false);
   // 只有「本标签页刚刚完成登录」才弹画像强引导；从 localStorage 恢复登录态
   // （刷新页面、新标签页直接打开）不弹，避免把已登录用户当成新用户反复拦一次。
   const [promptProfileOnLogin, setPromptProfileOnLogin] = useState(false);
@@ -105,15 +113,26 @@ export default function App() {
   }
 
   // 游客登录不带任何凭据：后端按 IP + 浏览器标识派生身份，额度记在该身份上。
-  async function handleGuestLogin() {
+  // preview 自动登录跳过画像强引导，直接露出工作区。
+  async function handleGuestLogin(auto = false) {
     const result = await fetchJSON<LoginResult>(
         '/api/auth/guest',
         { method: 'POST' },
         { handleUnauthorized: false },
     );
-    setPromptProfileOnLogin(true);
+    setPromptProfileOnLogin(!auto);
     saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
   }
+
+  // 仅在 dev server + ?preview=1 时触发一次游客登录，供外观设计验收使用。
+  useEffect(() => {
+    if (!isPreviewMode || !guestEnabled || authSession || previewLoginStartedRef.current) {
+      return;
+    }
+    previewLoginStartedRef.current = true;
+    void handleGuestLogin(true);
+  }, [guestEnabled, authSession]);
+
 
   // 登出（或令牌失效）后清掉标记：之后即使别的标签页登录同步过来，
   // 本标签页也只是恢复登录态，不会误弹画像强引导。
@@ -1331,6 +1350,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
                 {isStreaming ? 'RUNNING' : 'READY'}
               </span>
             </div>
+            <AppearanceSwitcher />
           </header>
 
           <div

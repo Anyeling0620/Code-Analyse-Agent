@@ -1,0 +1,18 @@
+/* ==========================================================================
+   Design: Nocturne Console  (html[data-ui='nocturne'])
+   --------------------------------------------------------------------------
+   OWNERSHIP: the Nocturne agent owns this file. Do not edit other files.
+   CONTRACT:
+   - Every selector must be scoped under html[data-ui='nocturne'] (directly or
+     via a descendant), so the design cannot leak into other worlds.
+   - Style BOTH html[data-ui='nocturne'][data-theme='light'] and
+     html[data-ui='nocturne'][data-theme='dark'].
+   - The shell DOM is fixed. Re-flow it with grid/flex/order/position; you may
+     use pseudo-elements for decoration.
+   - Keep .appearance-control (the switcher) usable and visible in both modes.
+   ========================================================================== */
+
+html[data-ui='nocturne'] {
+  --paper: #0a1016;
+  --ink: #d9efe8;
+}

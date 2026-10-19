@@ -23,16 +23,18 @@ html[data-ui='nocturne'] {
 
   --case: #060b0e;
   --case-raised: #0d151b;
-  --case-line: rgba(126, 240, 200, 0.12);
+  /* 0.12 的边框在 case 上仅 1.4:1；提高到约 3:1 才能看清会话按钮/面板边界。 */
+  --case-line: rgba(126, 240, 200, 0.4);
   --case-ink: #d9e8e2;
   --case-soft: #89a39b;
   --case-faint: #7a918a;
 
   --ink: #d9e8e2;
   --ink-soft: #89a39b;
-  --ink-faint: #7a918a;
-  --rule: rgba(126, 240, 200, 0.14);
-  --rule-strong: rgba(126, 240, 200, 0.3);
+  /* 5.8:1 → 6.8:1（paper-soft），给极小的 9px 遥测字号留余量。 */
+  --ink-faint: #8aa39b;
+  --rule: rgba(126, 240, 200, 0.2);
+  --rule-strong: rgba(126, 240, 200, 0.42);
 
   --accent: #7ef0c8;
   --on-accent: #04120d;
@@ -70,7 +72,7 @@ html[data-ui='nocturne'] {
   --code-bg: #050b0f;
   --code-bar: #0a1319;
   --code-ink: #cfe4dc;
-  --code-line: rgba(126, 240, 200, 0.18);
+  --code-line: rgba(126, 240, 200, 0.4);
 
   --font-ui: 'Archivo', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   --font-mono: 'Azeret Mono', 'JetBrains Mono', 'PingFang SC', 'Microsoft YaHei', monospace;
@@ -3094,4 +3096,10 @@ html[data-ui='nocturne'] .composer textarea::placeholder {
   html[data-ui='nocturne'] .drawer-scrim {
     transition: none;
   }
+}
+
+/* ---- Dark legibility: component boundaries ------------------------------- */
+/* 图标按钮描边原用 --rule（约 1.6:1）；深色下提升到可辨认的 3:1 级别。 */
+html[data-ui='nocturne'][data-theme='dark'] .icon-button {
+  border-color: var(--rule-strong);
 }

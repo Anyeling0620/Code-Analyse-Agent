@@ -72,9 +72,10 @@ html[data-ui='editorial'][data-theme='dark'] {
 
   --ink: #f1e8d7;
   --ink-soft: #b1a58f;
-  --ink-faint: #8b8172;
-  --rule: rgba(241, 232, 215, 0.16);
-  --rule-strong: rgba(241, 232, 215, 0.4);
+  /* 原 #8b8172 在 paper-deep 上只有 4.27:1；提到 5.2:1。 */
+  --ink-faint: #9a9080;
+  --rule: rgba(241, 232, 215, 0.2);
+  --rule-strong: rgba(241, 232, 215, 0.46);
 
   --accent: #e26448;
   --on-accent: #15120e;
@@ -2254,4 +2255,22 @@ html[data-ui='editorial'] .chat-skeleton-line-title {
   html[data-ui='editorial'] .tool-card-content {
     animation: none;
   }
+}
+
+/* ---- Dark legibility: component boundaries ------------------------------- */
+/* 代码块/工具输出/工具卡在深色下与纸面几乎同色，描边需 ≥ 3:1 才能辨认。 */
+html[data-ui='editorial'][data-theme='dark'] .code-block-shell {
+  border-color: rgba(241, 232, 215, 0.42);
+}
+
+html[data-ui='editorial'][data-theme='dark'] .code-block-copy-button {
+  border-color: rgba(241, 232, 215, 0.42);
+}
+
+html[data-ui='editorial'][data-theme='dark'] .tool-payload {
+  border-color: rgba(241, 232, 215, 0.4);
+}
+
+html[data-ui='editorial'][data-theme='dark'] .tool-card {
+  border-top-color: var(--rule-strong);
 }

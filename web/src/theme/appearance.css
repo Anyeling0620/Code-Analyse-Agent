@@ -486,3 +486,95 @@ html[data-ui='classic'][data-theme='dark'] .message-export-button:hover {
   border-color: #c99f16;
   background: #c99f16;
 }
+
+/* ==========================================================================
+   Classic — light edition.
+   The manual's index board was a deep-ink block in every theme, so light mode
+   looked identical to dark mode in the sidebar. On paper the board becomes a
+   warm paper surface (the reading field keeps its cream sheet), while dark
+   mode is untouched. Only tokens scoped to .index-board are remapped: --case
+   also paints code blocks, the login cover and share headers, which stay dark
+   in both themes.
+   ========================================================================== */
+
+html[data-ui='classic'][data-theme='light'] .index-board {
+  --case: #ece7da;
+  --case-raised: #f7f3e8;
+  --case-line: rgba(27, 32, 36, 0.16);
+  --case-ink: #1b2024;
+  --case-soft: #4f5449;
+  --case-faint: #5d6157;
+}
+
+/* Scrollbars were tuned for the ink board; on paper they need ink thumbs. */
+html[data-ui='classic'][data-theme='light'] .index-board ::-webkit-scrollbar-thumb {
+  background: rgba(27, 32, 36, 0.24);
+}
+
+html[data-ui='classic'][data-theme='light'] .index-board .session-list {
+  scrollbar-color: rgba(27, 32, 36, 0.24) transparent;
+}
+
+/* The gold focus ring only reaches 1.7:1 on paper; the darker oxide keeps the
+   2px ring above 3:1 against the board. */
+html[data-ui='classic'][data-theme='light'] .index-board :focus-visible {
+  outline-color: #8f3a18;
+}
+
+/* Hover is a darker paper chip. In the base sheet the hover background was
+   the dark --case-raised; on a light active item the title kept --ink, which
+   made the hovered title nearly invisible (#1b2024 on #242b30 = 1.14:1). */
+html[data-ui='classic'][data-theme='light'] .index-board .session-item-main:hover:not(:disabled) {
+  background: #e3ddcc;
+  border-color: rgba(27, 32, 36, 0.24);
+}
+
+html[data-ui='classic'][data-theme='light'] .index-board .session-item-active .session-item-main {
+  background: var(--paper-soft);
+  border-color: var(--rule-strong);
+  box-shadow: inset 3px 0 0 var(--section-oxide), 0 1px 0 rgba(27, 32, 36, 0.12);
+}
+
+html[data-ui='classic'][data-theme='light'] .index-board .session-item-active .session-item-main:hover:not(:disabled) {
+  background: #f1ecdf;
+  border-color: var(--rule-strong);
+}
+
+/* The white-alpha icon hover disappears on paper; swap it for ink alpha and
+   keep the destructive hover red readable. */
+html[data-ui='classic'][data-theme='light'] .index-board .session-icon-button:hover:not(:disabled) {
+  background: rgba(27, 32, 36, 0.10);
+  color: var(--case-ink);
+}
+
+html[data-ui='classic'][data-theme='light'] .index-board .session-delete-button:hover:not(:disabled) {
+  background: rgba(201, 58, 43, 0.10);
+  color: #a52f22;
+}
+
+html[data-ui='classic'][data-theme='light'] .index-board .session-item-active .session-delete-button:hover:not(:disabled) {
+  background: rgba(201, 58, 43, 0.12);
+  color: #8f2417;
+}
+
+/* Status text on the board: the dark-theme pale red / chrome gold fall below
+   4.5:1 once the surface is paper. */
+html[data-ui='classic'][data-theme='light'] .index-board .panel-error {
+  color: #8f2417;
+  background: rgba(201, 58, 43, 0.10);
+  border-color: rgba(201, 58, 43, 0.42);
+}
+
+html[data-ui='classic'][data-theme='light'] .index-board .share-notice {
+  color: #5c4500;
+  background: rgba(224, 177, 31, 0.10);
+  border-color: rgba(122, 90, 0, 0.45);
+}
+
+html[data-ui='classic'][data-theme='light'] .index-board .account-kind {
+  color: #6d5200;
+}
+
+html[data-ui='classic'][data-theme='light'] .index-board .health-checking {
+  background: #7a5a00;
+}

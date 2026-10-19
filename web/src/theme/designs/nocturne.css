@@ -23,18 +23,16 @@ html[data-ui='nocturne'] {
 
   --case: #060b0e;
   --case-raised: #0d151b;
-  /* 0.12 的边框在 case 上仅 1.4:1；提高到约 3:1 才能看清会话按钮/面板边界。 */
-  --case-line: rgba(126, 240, 200, 0.4);
+  --case-line: rgba(126, 240, 200, 0.12);
   --case-ink: #d9e8e2;
   --case-soft: #89a39b;
   --case-faint: #7a918a;
 
   --ink: #d9e8e2;
   --ink-soft: #89a39b;
-  /* 5.8:1 → 6.8:1（paper-soft），给极小的 9px 遥测字号留余量。 */
-  --ink-faint: #8aa39b;
-  --rule: rgba(126, 240, 200, 0.2);
-  --rule-strong: rgba(126, 240, 200, 0.42);
+  --ink-faint: #7a918a;
+  --rule: rgba(126, 240, 200, 0.14);
+  --rule-strong: rgba(126, 240, 200, 0.3);
 
   --accent: #7ef0c8;
   --on-accent: #04120d;
@@ -72,7 +70,7 @@ html[data-ui='nocturne'] {
   --code-bg: #050b0f;
   --code-bar: #0a1319;
   --code-ink: #cfe4dc;
-  --code-line: rgba(126, 240, 200, 0.4);
+  --code-line: rgba(126, 240, 200, 0.18);
 
   --font-ui: 'Archivo', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   --font-mono: 'Azeret Mono', 'JetBrains Mono', 'PingFang SC', 'Microsoft YaHei', monospace;
@@ -129,6 +127,18 @@ html[data-ui='nocturne'][data-theme='light'] {
   --code-line: rgba(126, 240, 200, 0.22);
 
   --shadow-lift: 0 20px 46px -22px rgba(13, 34, 32, 0.3);
+}
+
+/* 深色专用对比度令牌。基础块同时是暗色默认值，但把增强值放在
+   [data-theme='dark'] 里可以保证以后新增 token 时不会漏到浅色。 */
+html[data-ui='nocturne'][data-theme='dark'] {
+  /* 0.12 在 case 上仅 1.4:1；0.4 约 3.05:1，用于会话操作组/账号卡等边界。 */
+  --case-line: rgba(126, 240, 200, 0.4);
+  /* 5.8:1 → 6.8:1（paper-soft），给极小的 9px 遥测字号留余量。 */
+  --ink-faint: #8aa39b;
+  --rule: rgba(126, 240, 200, 0.2);
+  --rule-strong: rgba(126, 240, 200, 0.42);
+  --code-line: rgba(126, 240, 200, 0.4);
 }
 
 /* ---- Document ------------------------------------------------------------ */

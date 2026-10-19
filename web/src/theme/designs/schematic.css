@@ -72,7 +72,8 @@ html[data-ui='schematic'][data-theme='dark'] {
   --acetate: rgba(15, 30, 41, 0.97);
   --case: #0c1a24;
   --case-raised: #12232e;
-  --case-line: rgba(216, 232, 240, 0.22);
+  /* 0.22 在深色 case 上不到 2:1；提高到与 rule-strong 一致的 0.46。 */
+  --case-line: rgba(216, 232, 240, 0.46);
   --case-ink: #d8e8f0;
   --case-soft: #8fa8b5;
   --case-faint: #8ba2b1;
@@ -2305,5 +2306,10 @@ html[data-ui='schematic'][data-theme='dark'] .composer textarea::placeholder {
 
 /* 图标按钮的描边用 --rule 时几乎不可见；深色下提升为组件边界级别。 */
 html[data-ui='schematic'][data-theme='dark'] .icon-button {
+  border-color: var(--rule-strong);
+}
+
+/* 账号卡是承载身份信息的交互容器，边界同样需要 ≥ 3:1。 */
+html[data-ui='schematic'][data-theme='dark'] .account-card {
   border-color: var(--rule-strong);
 }

@@ -1,0 +1,488 @@
+/* ==========================================================================
+   Appearance switcher — shared chrome for every design.
+   The switcher deliberately reads the active design's semantic tokens
+   (--paper, --ink, --rule, --accent) so it inherits each world instead of
+   looking like a fourth design bolted onto the header.
+   ========================================================================== */
+
+.appearance-control {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.appearance-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.appearance-trigger:hover,
+.appearance-trigger.is-open {
+  border-color: var(--ink-soft);
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+.appearance-trigger:focus-visible {
+  outline: 2px solid var(--section-teal);
+  outline-offset: 2px;
+}
+
+.appearance-trigger-label {
+  line-height: 1;
+}
+
+/* A tiny two-tone disc that reports the resolved theme at a glance. */
+.appearance-trigger-chip {
+  width: 13px;
+  height: 13px;
+  border: 1px solid var(--ink-soft);
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--ink) 0 50%, transparent 50% 100%);
+  opacity: 0.75;
+}
+
+.appearance-trigger-chip-dark {
+  background: linear-gradient(90deg, var(--ink) 0 50%, transparent 50% 100%);
+}
+
+.appearance-trigger-chip-light {
+  background: linear-gradient(90deg, transparent 0 50%, var(--ink) 50% 100%);
+}
+
+.appearance-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 60;
+  display: grid;
+  gap: 16px;
+  width: min(432px, calc(100vw - 24px));
+  max-height: min(72vh, 640px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+  color: var(--ink);
+  box-shadow: var(--shadow-lift, 0 24px 48px -24px rgba(0, 0, 0, 0.45));
+  scrollbar-width: thin;
+}
+
+.appearance-popover-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.appearance-popover-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.appearance-kicker {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
+
+.appearance-title {
+  font-family: var(--font-ui);
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.appearance-close {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.appearance-close:hover {
+  border-color: var(--rule-strong);
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+.appearance-section {
+  display: grid;
+  gap: 8px;
+}
+
+.appearance-section-label {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+}
+
+.appearance-design-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.appearance-design {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.appearance-design:hover {
+  border-color: var(--rule-strong);
+  background: var(--paper-deep);
+}
+
+.appearance-design.is-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.appearance-selected-mark {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.appearance-design-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.appearance-design-name {
+  display: grid;
+  gap: 1px;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.appearance-design-en {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.appearance-design-desc {
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+/* ---- Miniature layout previews ------------------------------------------ */
+
+.appearance-preview {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32% minmax(0, 1fr);
+  height: 58px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  border-radius: calc(var(--radius) + 1px);
+  background: var(--preview-paper);
+}
+
+.appearance-preview-rail {
+  background: var(--preview-board);
+}
+
+.appearance-preview-field {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  padding: 8px 9px 18px;
+}
+
+.appearance-preview-bar {
+  width: 46%;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--preview-accent);
+}
+
+.appearance-preview-line {
+  width: 88%;
+  height: 3px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--preview-board) 38%, transparent);
+}
+
+.appearance-preview-line-lg {
+  width: 70%;
+}
+
+.appearance-preview-line-sm {
+  width: 52%;
+}
+
+.appearance-preview-composer {
+  position: absolute;
+  right: 9px;
+  bottom: 6px;
+  left: calc(32% + 9px);
+  height: 8px;
+  border: 1px solid color-mix(in srgb, var(--preview-board) 30%, transparent);
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--preview-paper) 74%, white);
+}
+
+/* Per-world structural hints, not just a palette swap. */
+.appearance-preview-nocturne {
+  grid-template-columns: minmax(0, 1fr) 26%;
+}
+
+.appearance-preview-nocturne .appearance-preview-rail {
+  order: 2;
+}
+
+.appearance-preview-nocturne .appearance-preview-composer {
+  left: 9px;
+  right: calc(26% + 9px);
+  border-color: color-mix(in srgb, var(--preview-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--preview-accent) 12%, transparent);
+}
+
+.appearance-preview-editorial .appearance-preview-field {
+  padding-left: 12px;
+}
+
+.appearance-preview-editorial .appearance-preview-bar {
+  width: 62%;
+  height: 5px;
+}
+
+.appearance-preview-editorial .appearance-preview-line {
+  width: 94%;
+  height: 2px;
+}
+
+.appearance-preview-editorial .appearance-preview-composer {
+  border-radius: 0;
+  background: transparent;
+  border-width: 0 0 2px;
+}
+
+.appearance-preview-schematic {
+  grid-template-columns: minmax(0, 1fr) 24%;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--preview-board) 11%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--preview-board) 11%, transparent) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+.appearance-preview-schematic .appearance-preview-rail {
+  order: 2;
+}
+
+.appearance-preview-schematic .appearance-preview-composer {
+  left: 9px;
+  right: calc(24% + 9px);
+  height: 7px;
+  border-color: var(--preview-accent);
+  background: transparent;
+}
+
+/* ---- Theme segmented control -------------------------------------------- */
+
+.appearance-theme-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.appearance-theme {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1px 7px;
+  padding: 8px 9px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+  text-align: left;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.appearance-theme svg {
+  grid-row: 1 / span 2;
+}
+
+.appearance-theme:hover {
+  border-color: var(--rule-strong);
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+.appearance-theme.is-selected {
+  border-color: var(--ink-soft);
+  background: var(--paper-deep);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink-soft);
+}
+
+.appearance-theme-label {
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.appearance-theme-hint {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.appearance-note {
+  margin: 0;
+  color: var(--ink-faint);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .appearance-popover {
+    width: min(400px, calc(100vw - 20px));
+  }
+}
+
+@media (max-width: 560px) {
+  .appearance-trigger {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .appearance-trigger-label,
+  .appearance-trigger-chip {
+    display: none;
+  }
+
+  .appearance-popover {
+    position: fixed;
+    top: 66px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+    max-height: calc(100vh - 78px);
+  }
+
+  /* The two-column cards get too narrow for the bilingual name; drop the
+     English kicker so the Chinese design name stays on one line. */
+  .appearance-design-en {
+    display: none;
+  }
+
+  .appearance-design-name {
+    font-size: 12px;
+  }
+
+  .appearance-design-desc {
+    font-size: 10px;
+  }
+}
+
+/* ==========================================================================
+   Classic — dark edition.
+   The original manual is a light paper world. Rather than leave the theme
+   switch inert on the classic layout, remap its paper/ink tokens and patch the
+   few hardcoded paper values in the original sheet.
+   ========================================================================== */
+
+html[data-ui='classic'][data-theme='dark'] {
+  --paper: #171c20;
+  --paper-deep: #1e2429;
+  --paper-soft: #222930;
+  --acetate: rgba(24, 29, 33, 0.93);
+
+  --ink: #f2efe3;
+  --ink-soft: #b9b5a7;
+  --ink-faint: #918f85;
+  --rule: rgba(242, 239, 227, 0.15);
+  --rule-strong: rgba(242, 239, 227, 0.32);
+
+  --section-oxide: #cf6a3f;
+  --section-chrome: #e0b11f;
+  --section-grass: #7fa650;
+  --section-teal: #63b7ae;
+  --section-ultramarine: #4d6db3;
+  --section-violet: #8a76bd;
+  --section-sienna: #b87a58;
+  --vermilion: #e05a48;
+  --accent: #d06234;
+  --on-accent: #171c20;
+}
+
+html[data-ui='classic'][data-theme='dark'] body {
+  background: #101417;
+}
+
+html[data-ui='classic'][data-theme='dark'] .composer {
+  background: linear-gradient(to top, var(--paper) 62%, rgba(23, 28, 32, 0));
+}
+
+html[data-ui='classic'][data-theme='dark'] .composer-shell::before,
+html[data-ui='classic'][data-theme='dark'] .composer-shell::after {
+  background: var(--paper);
+}
+
+html[data-ui='classic'][data-theme='dark'] .message-user {
+  border-color: rgba(242, 239, 227, 0.22);
+}
+
+html[data-ui='classic'][data-theme='dark'] .message-export-button:hover {
+  border-color: #c99f16;
+  background: #c99f16;
+}

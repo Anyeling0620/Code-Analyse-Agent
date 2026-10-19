@@ -199,3 +199,41 @@ export function TerminalIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function PaletteIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3a9 9 0 1 0 0 18h1.2a2.3 2.3 0 0 0 1.6-3.9 2.3 2.3 0 0 1 1.6-3.9H18a3 3 0 0 0 3-3A5.7 5.7 0 0 0 16.2 3Z" />
+      <circle cx="7.5" cy="10" r="1" fill="currentColor" stroke="none" />
+      <circle cx="10" cy="6.7" r="1" fill="currentColor" stroke="none" />
+      <circle cx="14" cy="6.7" r="1" fill="currentColor" stroke="none" />
+      <circle cx="17" cy="9.5" r="1" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}
+
+export function SunIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </Icon>
+  );
+}
+
+export function MoonIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z" />
+    </Icon>
+  );
+}
+
+export function MonitorIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="12" rx="1" />
+      <path d="M8 20h8M12 16v4" />
+    </Icon>
+  );
+}

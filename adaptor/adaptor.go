@@ -4,6 +4,7 @@ import (
 	"context"
 	"edu.agent.code/adaptor/repo/model"
 	"edu.agent.code/config"
+	"edu.agent.code/service/do"
 	applog "edu.agent.code/utils/logger"
 	"encoding/json"
 	"fmt"
@@ -98,6 +99,7 @@ func (a *Adaptor) openDB(path string) error {
 	}
 	err = db.AutoMigrate(
 		&model.Profile{},
+		&model.ProfileRevision{},
 		&model.Session{},
 		&model.ChatMessage{},
 		&model.CostRecord{},
@@ -116,6 +118,12 @@ func (a *Adaptor) openDB(path string) error {
 	// 还没搬过来；下次启动会再试一次。
 	if err := migrateProfileDescription(db); err != nil {
 		applog.Warn("回填用户画像描述失败（不影响启动）：%v", err)
+	}
+	// 画像快照表是后加的：老用户已有当前画像但没有历史。首次升级时为每个用户
+	// 补一条 legacy 快照，保证历史接口从第一天就有内容；之后由仓储层在每次实际
+	// 变更时追加。NOT EXISTS 保证重复启动不会重复插入。
+	if err := backfillProfileRevisions(db); err != nil {
+		applog.Warn("回填用户画像历史快照失败（不影响启动）：%v", err)
 	}
 	a.db = db
 	return nil
@@ -149,6 +157,35 @@ func migrateProfileDescription(db *gorm.DB) error {
 			return fmt.Errorf("回填 user_id=%s: %w", row.UserID, err)
 		}
 		applog.Info("已把历史已购课程回填为描述 user_id=%s", row.UserID)
+	}
+	return nil
+}
+
+// backfillProfileRevisions 为还没有任何快照的老用户补一条 legacy 快照。
+//
+// 只补「该用户一条快照都没有」的情况：已有快照说明新版本已经工作过，
+// 再插会把当前值伪装成一次新变更。NOT EXISTS 使整个过程幂等。
+func backfillProfileRevisions(db *gorm.DB) error {
+	if !db.Migrator().HasTable("profile_revisions") {
+		return nil
+	}
+	err := db.Exec(`INSERT INTO profile_revisions
+		(user_id, user_type, skill_level, goal_type, description, current_topic, current_stage, source, updated_at)
+		SELECT p.user_id,
+		       COALESCE(p.user_type, ''),
+		       COALESCE(p.skill_level, ''),
+		       COALESCE(p.goal_type, ''),
+		       COALESCE(p.description, ''),
+		       COALESCE(p.current_topic, ''),
+		       COALESCE(p.current_stage, ''),
+		       ?,
+		       COALESCE(p.updated_at, CURRENT_TIMESTAMP)
+		FROM profiles p
+		WHERE NOT EXISTS (
+			SELECT 1 FROM profile_revisions r WHERE r.user_id = p.user_id
+		)`, do.ProfileSourceLegacy).Error
+	if err != nil {
+		return fmt.Errorf("回填画像快照: %w", err)
 	}
 	return nil
 }

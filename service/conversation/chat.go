@@ -3,6 +3,7 @@ package conversation
 import (
 	"context"
 	"edu.agent.code/common"
+	"edu.agent.code/service/agent/userprofile"
 	"edu.agent.code/service/do"
 	"edu.agent.code/service/dto"
 	"edu.agent.code/utils/logger"
@@ -10,7 +11,6 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"github.com/jinzhu/copier"
 	"go.uber.org/zap"
-	"strings"
 	"time"
 )
 
@@ -100,36 +100,10 @@ func (s *Service) buildMessageWithHistory(ctx context.Context, userID string,
 
 }
 
+// buildProfileMessage 保留在 conversation 包内，实际渲染统一交给 userprofile，
+// 避免主链路与中间件出现两套措辞、两套识别标记。
 func buildProfileMessage(profile *dto.Profile) *schema.Message {
-	if profile == nil {
-		return nil
-	}
-	const header = "以下是用户资料，仅用于调整解释深度与学习建议，不代表用户当前的新输入。"
-	var b strings.Builder
-	b.WriteString(header)
-	appendProfileLine(&b, "用户类型", profile.UserType)
-	appendProfileLine(&b, "技能水平", profile.SkillLevel)
-	appendProfileLine(&b, "目标类型", profile.GoalType)
-	appendProfileLine(&b, "当前主题", profile.CurrentTopic)
-	appendProfileLine(&b, "当前阶段", profile.CurrentStage)
-	// 描述是用户自己写的整段背景（经历、在做什么、想要什么），放最后一行：
-	// 前面的字段是结构化标签，描述是背景补充，模型读起来更顺。
-	appendProfileLine(&b, "描述", profile.Description)
-	if b.Len() == len(header) {
-		return nil
-	}
-	return schema.SystemMessage(b.String())
-}
-
-func appendProfileLine(b *strings.Builder, label, value string) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return
-	}
-	b.WriteString("\n")
-	b.WriteString(label)
-	b.WriteString("：")
-	b.WriteString(value)
+	return userprofile.Message(profile)
 }
 
 func buildHistoryMessages(records []do.ChatMessageRecord) ([]*schema.Message, error) {
@@ -192,12 +166,20 @@ func (s *Service) prepareProfile(ctx context.Context,
 	// 只有客户端提交了画像才写库；无论写没写，都返回库中该用户最终的画像，
 	// 保证画像始终以当前登录用户为归属键，不会把账号 A 的画像带给账号 B。
 	if inputProfile != nil {
+		// auth_subject 是登录身份映射，客户端看不到；updated_at 是服务端状态，
+		// 两者都不能被请求体里的零值覆盖，否则一次对话就会抹掉映射或把时间清空。
+		authSubject := doProfile.AuthSubject
+		updatedAt := doProfile.UpdatedAt
 		if err := copier.Copy(doProfile, inputProfile); err != nil {
 			logger.Error("copy input profile failed", zap.Error(err))
 			return nil, err
 		}
 		doProfile.UserID = userID
-		if err := s.profiles.Upsert(ctx, doProfile); err != nil {
+		if doProfile.AuthSubject == "" {
+			doProfile.AuthSubject = authSubject
+		}
+		doProfile.UpdatedAt = updatedAt
+		if err := s.profiles.Upsert(ctx, doProfile, do.ProfileSourceChat); err != nil {
 			logger.Error("upsert profile failed", zap.Error(err))
 			return nil, err
 		}

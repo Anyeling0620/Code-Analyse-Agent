@@ -2,8 +2,10 @@ package api
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 
+	"edu.agent.code/adaptor/repo/profile"
 	"edu.agent.code/common"
 	"edu.agent.code/service/do"
 	"edu.agent.code/service/dto"
@@ -51,7 +53,7 @@ func (h *Handler) SaveProfile(ctx *gin.Context) {
 		h.writeResp(ctx, nil, common.ParamError.WithError(err))
 		return
 	}
-	if err := h.profiles.Upsert(ctx.Request.Context(), &profile); err != nil {
+	if err := h.profiles.Upsert(ctx.Request.Context(), &profile, do.ProfileSourceAPI); err != nil {
 		h.writeResp(ctx, nil, common.ServerError.WithError(err))
 		return
 	}
@@ -62,6 +64,58 @@ func (h *Handler) SaveProfile(ctx *gin.Context) {
 		return
 	}
 	h.writeResp(ctx, profileToDTO(user.UserID, saved), common.OK)
+}
+
+// GetProfileHistory 返回当前登录用户最近的画像快照。
+//
+// limit 默认 20、上限 100；offset 用于分页。响应只包含当前登录用户的数据，
+// 与 GET /api/profile 一样，归属完全取自令牌。
+func (h *Handler) GetProfileHistory(ctx *gin.Context) {
+	user := h.authUser(ctx)
+	limit := profile.DefaultRevisionLimit
+	offset := 0
+	if raw := ctx.Query("limit"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > profile.MaxRevisionLimit {
+		limit = profile.MaxRevisionLimit
+	}
+	if raw := ctx.Query("offset"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+	revisions, err := h.profiles.ListRevisions(ctx.Request.Context(), user.UserID, limit, offset)
+	if err != nil {
+		h.writeResp(ctx, nil, common.ServerError.WithError(err))
+		return
+	}
+	items := make([]*dto.ProfileRevision, 0, len(revisions))
+	for _, revision := range revisions {
+		items = append(items, revisionToDTO(revision))
+	}
+	h.writeResp(ctx, &dto.ProfileHistory{
+		Items:  items,
+		Limit:  limit,
+		Offset: offset,
+	}, common.OK)
+}
+
+func revisionToDTO(revision do.ProfileRevision) *dto.ProfileRevision {
+	return &dto.ProfileRevision{
+		ID:           revision.ID,
+		UserID:       revision.UserID,
+		UserType:     revision.UserType,
+		SkillLevel:   revision.SkillLevel,
+		GoalType:     revision.GoalType,
+		Description:  revision.Description,
+		CurrentTopic: revision.CurrentTopic,
+		CurrentStage: revision.CurrentStage,
+		Source:       revision.Source,
+		UpdatedAt:    revision.UpdatedAt,
+	}
 }
 
 // buildProfileUpdate 把请求体归一化为可落库的画像：去空白、截断描述、保留旧行的

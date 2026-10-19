@@ -30,10 +30,14 @@ func (f *fakeProfiles) GetByUserID(_ context.Context, userID string) (*do.Profil
 	return f.rows[userID], nil
 }
 
-func (f *fakeProfiles) Upsert(_ context.Context, p *do.Profile) error {
+func (f *fakeProfiles) Upsert(_ context.Context, p *do.Profile, _ string) error {
 	saved := *p
 	f.rows[p.UserID] = &saved
 	return nil
+}
+
+func (f *fakeProfiles) ListRevisions(_ context.Context, _ string, _, _ int) ([]do.ProfileRevision, error) {
+	return nil, nil
 }
 
 func newTestService(sessions *fakeSessions, profiles *fakeProfiles) *Service {

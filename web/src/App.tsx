@@ -202,6 +202,8 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   // 画像优先取本机缓存（按 user_id 分键）：刷新页面不会退回默认值，也不会把默认值
   // 当成用户画像再提交一次。缓存为空时用 initialProfile 兜底。
   const [profile, setProfile] = useState<ProfileForm>(() => loadProfile(authSession.user_id));
+  // 服务端最后一次实际修改画像的时间。只用于弹窗的“已保存”反馈，不参与表单编辑。
+  const [profileUpdatedAt, setProfileUpdatedAt] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [interruptEvent, setInterruptEvent] = useState<PendingInterruptEvent | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -279,6 +281,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
           cacheProfile(authSession.user_id, merged);
           return merged;
         });
+        setProfileUpdatedAt(server.updated_at ?? '');
       })
       .catch(() => {
         // 读不到不影响使用：缓存里有上次填的，没有就是默认值，用户照样能填能存。
@@ -847,7 +850,9 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       const outcome = await streamChatRun({
         sessionId: sessionIdRef.current,
         message,
-        profile,
+        // 服务端画像回读完成前不要提交本地缓存/默认值：后端会把请求里的 profile
+        // 全量写库，拿默认值先发一轮会把用户真正保存的画像覆盖掉。
+        profile: isProfileSynced ? profile : null,
         signal: controller.signal,
         onPhase: (phase) => notifyRunPhase(assistantId, phase),
         onEvent: (eventName, payload) => {
@@ -890,7 +895,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       void refreshMetrics();
       void refreshSessions();
     }
-  }, [profile]);
+  }, [profile, isProfileSynced]);
 
   // notifyRunPhase 把"连接中断，正在重连"这类传输层状态显示出来。
   // 关键点：重连中不能把消息标成 error——执行其实还在服务端继续跑。
@@ -1097,6 +1102,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
           const nextProfile = profileFromServer(profile, payload.result.profile);
           setProfile(nextProfile);
           cacheProfile(authSession.user_id, nextProfile);
+          setProfileUpdatedAt(payload.result.profile.updated_at ?? '');
         }
         patchAssistant(assistantId, (item) => ({
           ...item,
@@ -1400,6 +1406,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
         {isProfileModalOpen && isProfileSynced && (
             <ProfileModal
                 profile={profile}
+                updatedAt={profileUpdatedAt}
                 gate={isProfileGate}
                 onSave={async (nextProfile) => {
                   // 先落库再放行：强引导的语义是「保存成功才算填完」，服务端失败就留在弹窗里重试。
@@ -1407,6 +1414,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
                   const merged = profileFromServer(nextProfile, saved);
                   setProfile(merged);
                   cacheProfile(authSession.user_id, merged);
+                  setProfileUpdatedAt(saved.updated_at ?? '');
                   setIsProfileModalOpen(false);
                   // 保存过一次之后就是普通编辑：再打开时可以取消关闭。
                   setIsProfileGate(false);

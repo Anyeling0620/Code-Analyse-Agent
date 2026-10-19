@@ -25,6 +25,21 @@ export type ServerProfile = {
   description?: string;
   current_topic?: string;
   current_stage?: string;
+  updated_at?: string;
+};
+
+// ProfileRevision 是 /api/profile/history 返回的一条画像快照。
+export type ProfileRevision = ProfileForm & {
+  id: number;
+  user_id: string;
+  source: 'api' | 'chat' | 'legacy' | string;
+  updated_at: string;
+};
+
+export type ProfileHistory = {
+  items: ProfileRevision[];
+  limit: number;
+  offset: number;
 };
 
 export type ToolTrace = {

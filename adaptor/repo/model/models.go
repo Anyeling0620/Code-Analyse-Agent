@@ -24,6 +24,26 @@ func (Profile) TableName() string {
 	return "profiles"
 }
 
+// ProfileRevision 是用户画像的历史快照表。
+// 每次 profiles 实际变更时，在同一事务里追加一行；profiles 仍只保存当前值。
+type ProfileRevision struct {
+	ID           uint64    `gorm:"primaryKey;autoIncrement"`
+	UserID       string    `gorm:"size:128;index:idx_profile_revisions_user_time,priority:1"`
+	UserType     string    `gorm:"size:64"`
+	SkillLevel   string    `gorm:"size:64"`
+	GoalType     string    `gorm:"size:64"`
+	Description  string    `gorm:"type:text"`
+	CurrentTopic string    `gorm:"size:255"`
+	CurrentStage string    `gorm:"size:128"`
+	Source       string    `gorm:"size:32"`
+	UpdatedAt    time.Time `gorm:"index:idx_profile_revisions_user_time,priority:2"`
+}
+
+// TableName 返回画像快照表名。
+func (ProfileRevision) TableName() string {
+	return "profile_revisions"
+}
+
 // Session 是会话摘要表的 GORM 模型。
 type Session struct {
 	SessionID          string `gorm:"primaryKey;size:128"`

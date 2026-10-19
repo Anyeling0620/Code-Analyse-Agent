@@ -4,6 +4,7 @@ import (
 	"context"
 	"edu.agent.code/service/agent"
 	"edu.agent.code/service/agent/force_answer"
+	"edu.agent.code/service/agent/userprofile"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
@@ -40,6 +41,8 @@ func NewQaAgentWithOptions(
 		MaxIterations: opts.MaxIterations,
 		// 因为要强制出报告 需要做一个中间件强制出
 		Handlers: []adk.ChatModelAgentMiddleware{
+			// AgentTool 转发完整历史时会过滤 system 消息，画像必须由中间件重新注入。
+			userprofile.NewMiddleware(),
 			force_answer.NewForceAnswerHandler(force_answer.Config{
 				MaxIterations: opts.MaxIterations,
 				ActiveKey:     projectQAForceAnswerActiveKey,

@@ -46,6 +46,9 @@ type resumePrep struct {
 	sessionID    string
 	traceID      string
 	toolName     string
+	// profile 是恢复时从库里重新读取的当前画像。审批等待期间用户可能改过资料，
+	// 不能沿用 checkpoint 里的旧 system 消息。
+	profile *dto.Profile
 	// startedAt 取被恢复的那条 run 的原始创建时间，而不是本次恢复的时刻：
 	// 同一个 run_id 只该有一个开始时间，否则 upsert 到 run_metrics 的
 	// started_at 会在 resume 时被改写成恢复时间，耗时就失真了。
@@ -354,6 +357,9 @@ func (s *Service) prepareChatRun(ctx context.Context, req dto.ChatRequest) (cont
 	ctx = common.WithUserAndSession(ctx, userID, session.SessionID)
 	updateProjectContextFromMessage(session, req.Message)
 	ctx = withTurnSession(ctx, session)
+	// 画像放进 context：主 Agent 首轮消息里仍会拼一份（兼容旧行为），
+	// 子 Agent 与后续每一轮模型调用则由 userprofile 中间件从 context 重新注入。
+	ctx = dto.WithProfile(ctx, profile)
 
 	messages, err := s.buildMessageWithHistory(ctx, userID, session, profile, req.Message)
 	if err != nil {
@@ -430,6 +436,15 @@ func (s *Service) prepareResumeRun(ctx context.Context, req *dto.ChatResumeReque
 	ctx = common.WithUserAndSession(ctx, pending.UserID, pending.SessionID)
 	ctx = common.WithCheckPointID(ctx, pending.CheckPointID)
 
+	// 恢复前重新读一次画像：中断可能等待很久，期间用户可能已经改了资料。
+	// 这里必须从库里取当前值，不能依赖启动那轮时写进 checkpoint 的旧消息。
+	profile, err := s.prepareProfile(ctx, pending.UserID, nil)
+	if err != nil {
+		logger.Error("StartResumeRun: prepareProfile failed", zap.Any("req", req), zap.Error(err))
+		return nil, 0, nil, err
+	}
+	ctx = dto.WithProfile(ctx, profile)
+
 	prep := &resumePrep{
 		checkpointID: pending.CheckPointID,
 		interruptID:  pending.InterruptID,
@@ -439,6 +454,7 @@ func (s *Service) prepareResumeRun(ctx context.Context, req *dto.ChatResumeReque
 		sessionID:    req.SessionID,
 		traceID:      req.TraceID,
 		toolName:     pending.Tool,
+		profile:      profile,
 	}
 
 	var afterSeq int64

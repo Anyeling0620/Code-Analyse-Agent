@@ -33,6 +33,27 @@ type ProfileUpdateReq struct {
 	CurrentStage string `json:"current_stage"`
 }
 
+// ProfileRevision 是历史接口返回的一条画像快照。
+type ProfileRevision struct {
+	ID           uint64    `json:"id"`
+	UserID       string    `json:"user_id"`
+	UserType     string    `json:"user_type"`
+	SkillLevel   string    `json:"skill_level"`
+	GoalType     string    `json:"goal_type"`
+	Description  string    `json:"description"`
+	CurrentTopic string    `json:"current_topic"`
+	CurrentStage string    `json:"current_stage"`
+	Source       string    `json:"source"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// ProfileHistory 是 GET /api/profile/history 的响应。
+type ProfileHistory struct {
+	Items  []*ProfileRevision `json:"items"`
+	Limit  int                `json:"limit"`
+	Offset int                `json:"offset"`
+}
+
 type SessionContext struct {
 	SessionID          string    `json:"session_id"`
 	UserID             string    `json:"user_id"`

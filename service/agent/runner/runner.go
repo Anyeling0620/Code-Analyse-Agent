@@ -7,6 +7,7 @@ import (
 	"edu.agent.code/service/agent/project_qa"
 	"edu.agent.code/service/agent/repo_analyzer"
 	"edu.agent.code/service/agent/self_report"
+	"edu.agent.code/service/agent/userprofile"
 	"edu.agent.code/service/consts"
 	"fmt"
 	"github.com/cloudwego/eino/adk"
@@ -189,6 +190,12 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 	// 超过最大迭代次数的收尾统一由 conversation.consumeAgentEvents 的错误分支兜底
 	// （见 handleMaxIterationsExceeded：把已产出内容当部分报告下发，而不是报错）。
 
+	// 画像中间件必须挂在主 Agent 上：审批恢复时不会重新跑初始 GenModelInput，
+	// 只有每次模型调用前的 BeforeModelRewriteState 能保证用上当前画像。
+	mainHandlers := make([]adk.ChatModelAgentMiddleware, 0, len(c.agentHandler)+1)
+	mainHandlers = append(mainHandlers, c.agentHandler...)
+	mainHandlers = append(mainHandlers, userprofile.NewMiddleware())
+
 	mainAgent, err := adk.NewChatModelAgent(
 		c.ctx,
 		&adk.ChatModelAgentConfig{
@@ -206,7 +213,7 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 			},
 			GenModelInput: agent.GetGenModelInputFunc(mainChatTemplate),
 			MaxIterations: c.maxIterations.Compose,
-			Handlers:      c.agentHandler,
+			Handlers:      mainHandlers,
 		},
 	)
 	return adk.NewRunner(c.ctx, adk.RunnerConfig{

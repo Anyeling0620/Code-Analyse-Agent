@@ -5,6 +5,7 @@ import remarkBreaks from 'remark-breaks';
 import { CodeBlock } from './CodeBlock';
 import { MermaidDiagram } from './MermaidDiagram';
 import { normalizeReadableMarkdown } from './readableMarkdown';
+import { CheckIcon, DownloadIcon } from '../ui/icons';
 
 function escapeCsvCell(value: string): string {
   const safeValue = value.replace(/"/g, '""');
@@ -65,7 +66,7 @@ function TableWithDownload({ children }: { children: React.ReactNode }) {
             aria-label="下载 CSV"
             title={downloading ? '已下载' : '下载 CSV'}
         >
-          {downloading ? '✓' : '↓'}
+          {downloading ? <CheckIcon size={14} /> : <DownloadIcon size={14} />}
         </button>
         <table ref={tableRef} className="markdown-table">
           {children}

@@ -22,8 +22,8 @@ export const MessageList = memo(function MessageList({
         {(hasMoreMessages || isLoadingOlderMessages) && (
             <div className="message-history-loader">{isLoadingOlderMessages ? '正在加载更早消息…' : '上滑加载更早消息'}</div>
         )}
-        {messages.map((message) => (
-            <MessageItem key={message.id} message={message} onExportMessage={onExportMessage} />
+        {messages.map((message, index) => (
+            <MessageItem key={message.id} message={message} index={index} onExportMessage={onExportMessage} />
         ))}
         <div ref={bottomRef} />
       </section>

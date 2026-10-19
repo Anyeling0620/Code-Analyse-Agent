@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { CurrentStage, GoalType, ProfileForm, SkillLevel } from '../types/chat';
+import { CloseIcon } from '../ui/icons';
 
 const skillLevels: SkillLevel[] = ['零基础', '入门', '熟悉'];
 const goalTypes: GoalType[] = ['补基础', '做项目', '学Agent'];
@@ -33,6 +34,7 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
   }), [draft]);
 
   const complete = isComplete(nextProfile);
+  const filled = Object.values(nextProfile).filter((value) => value.trim() !== '').length;
 
   // 强引导下点遮罩、点取消都不生效：要退出只有保存这一条路。
   function requestClose() {
@@ -59,24 +61,28 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
   }
 
   return (
-    <div className="trace-modal-backdrop" role="presentation" onClick={requestClose}>
-      <section className="trace-modal profile-modal" role="dialog" aria-modal="true" aria-label="基础画像" onClick={(event) => event.stopPropagation()}>
-        <div className="trace-modal-header">
+    <div className="modal-backdrop" role="presentation" onClick={requestClose}>
+      <section className="modal-card profile-modal" role="dialog" aria-modal="true" aria-label="基础画像" onClick={(event) => event.stopPropagation()}>
+        <span className="modal-tab" style={{ background: 'var(--section-violet)', color: 'var(--on-violet)' }} aria-hidden="true">
+          {gate ? 'ONBOARDING' : 'PROFILE'}
+        </span>
+
+        <header className="modal-header">
           <div>
-            <h3>{gate ? '先完善基础画像' : '基础画像'}</h3>
+            <h2>{gate ? '先完善基础画像' : '基础画像'}</h2>
             <p>保存后会随下一轮对话提交，帮助 Agent 调整解释深度和学习建议。</p>
           </div>
           {!gate && (
-            <button className="ghost-button" type="button" onClick={onClose} aria-label="关闭资料弹窗" disabled={saving}>
-              ×
+            <button className="icon-button" type="button" onClick={onClose} aria-label="关闭资料弹窗" disabled={saving}>
+              <CloseIcon size={17} />
             </button>
           )}
-        </div>
+        </header>
 
         <form className="profile-form" onSubmit={handleSubmit}>
-          <div className="profile-form-grid">
-            <label className="profile-field">
-              <span>用户类型</span>
+          <div className="profile-grid">
+            <label className="field">
+              <span className="field-label">用户类型</span>
               <input
                 value={draft.user_type}
                 onChange={(event) => setDraft((current) => ({ ...current, user_type: event.target.value }))}
@@ -84,8 +90,8 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
               />
             </label>
 
-            <label className="profile-field">
-              <span>技能水平</span>
+            <label className="field">
+              <span className="field-label">技能水平</span>
               <input
                 value={draft.skill_level}
                 onChange={(event) => setDraft((current) => ({ ...current, skill_level: event.target.value }))}
@@ -99,8 +105,8 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
               </datalist>
             </label>
 
-            <label className="profile-field">
-              <span>目标类型</span>
+            <label className="field">
+              <span className="field-label">目标类型</span>
               <input
                 value={draft.goal_type}
                 onChange={(event) => setDraft((current) => ({ ...current, goal_type: event.target.value }))}
@@ -114,8 +120,8 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
               </datalist>
             </label>
 
-            <label className="profile-field">
-              <span>当前阶段</span>
+            <label className="field">
+              <span className="field-label">当前阶段</span>
               <input
                 value={draft.current_stage}
                 onChange={(event) => setDraft((current) => ({ ...current, current_stage: event.target.value }))}
@@ -129,8 +135,8 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
               </datalist>
             </label>
 
-            <label className="profile-field profile-field-full">
-              <span>当前主题</span>
+            <label className="field field-full">
+              <span className="field-label">当前主题</span>
               <input
                 value={draft.current_topic}
                 onChange={(event) => setDraft((current) => ({ ...current, current_topic: event.target.value }))}
@@ -138,8 +144,8 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
               />
             </label>
 
-            <label className="profile-field profile-field-full">
-              <span>描述</span>
+            <label className="field field-full">
+              <span className="field-label">描述</span>
               <textarea
                 value={draft.description}
                 onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
@@ -147,23 +153,32 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
                 maxLength={descriptionMaxLength}
                 rows={4}
               />
-              <span className="profile-field-counter">{draft.description.length}/{descriptionMaxLength}</span>
+              <span className="field-counter">{draft.description.length}/{descriptionMaxLength}</span>
             </label>
           </div>
 
-          <div className="profile-modal-footer">
+          <div className="profile-progress">
+            <span className="profile-progress-label">已填写</span>
+            <span className="profile-progress-value">{filled} / 6</span>
+            <span className="profile-progress-track" aria-hidden="true">
+              <span style={{ width: `${(filled / 6) * 100}%` }} />
+            </span>
+          </div>
+
+          <footer className="modal-footer">
             {!gate && (
               <button className="ghost-button" type="button" onClick={onClose} disabled={saving}>取消</button>
             )}
             <button className="primary-button" type="submit" disabled={!complete || saving}>
               {saving ? '保存中…' : '保存资料'}
             </button>
-          </div>
+          </footer>
+
           {gate && !complete && (
-            <p className="profile-gate-hint">六项都填上才能进入（描述写两句也行）。</p>
+            <p className="form-hint">六项都填上才能进入（描述写两句也行）。</p>
           )}
           {saveError && (
-            <p className="profile-gate-error">保存失败：{saveError}</p>
+            <p className="form-error" role="alert">保存失败：{saveError}</p>
           )}
         </form>
       </section>

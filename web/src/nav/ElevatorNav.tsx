@@ -1,6 +1,7 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { isExportableMessage } from '../export/exportDocument';
 import type { ChatMessage } from '../types/chat';
+import { sectionHueAt } from '../ui/palette';
 
 /** 少于两条消息时没有导航价值，与 App 里预留右侧空间的条件保持一致。 */
 export function shouldShowElevatorNav(messages: ChatMessage[]) {
@@ -21,23 +22,19 @@ function previewOf(message: ChatMessage) {
 }
 
 /**
- * 右侧电梯导航：一列胶囊按钮，一颗胶囊对应一条消息。
+ * 右侧页缘标签轨：一条消息对应一枚页签。
  *
- * 形态参考对话站点的"电梯"：静息状态是一列细横条，不加边框、不加数字，
- * 悬停时横条变长，当前那条是拉长的蓝色胶囊。
- *
- * 颜色语义：
- *   - 灰色：普通历史消息；
- *   - 金色：可导出（项目分析回答），额外标记出来；
- *   - 蓝色：当前正在阅读的消息（滚动位置落在哪条上）。
- * 当前消息同时可导出时横条显示蓝色，金色信息由该条消息卡自身的导出按钮承担。
+ * 形态来自手册装订边的阶梯索引：页签高度按消息篇幅变化，当前阅读位置把
+ * 页签向外抽出；可导出的项目分析回答额外带一枚铬黄缺口标记。
  */
 export const ElevatorNav = memo(function ElevatorNav({
   messages,
   containerRef,
+  onActiveChange,
 }: {
   messages: ChatMessage[];
   containerRef: RefObject<HTMLDivElement | null>;
+  onActiveChange?: (messageId: string) => void;
 }) {
   const [activeId, setActiveId] = useState('');
   // 平滑滚动期间不要用"基准线"重算高亮，否则刚点的那一条会被上一条抢走。
@@ -47,6 +44,10 @@ export const ElevatorNav = memo(function ElevatorNav({
       () => new Set(messages.filter(isExportableMessage).map((message) => message.id)),
       [messages],
   );
+
+  useEffect(() => {
+    onActiveChange?.(activeId);
+  }, [activeId, onActiveChange]);
 
   // 滚动联动：以可视区上方 1/3 处为基准线，取最后一条越过基准线的消息作为"当前消息"。
   useEffect(() => {
@@ -109,11 +110,16 @@ export const ElevatorNav = memo(function ElevatorNav({
   }
 
   return (
-      <nav className="elevator-nav" aria-label="对话导航">
+      <nav className="elevator-nav" aria-label="对话页缘索引">
+        <div className="elevator-rule" aria-hidden="true" />
         <div className="elevator-list">
           {messages.map((message, index) => {
             const exportable = exportableIds.has(message.id);
             const active = message.id === activeId;
+            const hue = sectionHueAt(index);
+            const extent = message.content.length
+                + message.toolEvents.reduce((total, tool) => total + (tool.result?.length ?? 0), 0);
+            const height = Math.min(22, Math.max(8, 8 + Math.round(extent / 240)));
             const classes = [
               'elevator-item',
               active ? 'elevator-item-active' : '',
@@ -124,17 +130,20 @@ export const ElevatorNav = memo(function ElevatorNav({
                   <button
                       type="button"
                       className={classes}
+                      style={{ '--tab-height': `${height}px`, '--section-hue': hue.value } as CSSProperties}
                       onClick={() => jumpTo(message.id)}
                       aria-current={active ? 'true' : undefined}
                       title={`#${index + 1} · ${message.role === 'user' ? '我' : 'AI'}：${previewOf(message)}${exportable ? '\n可导出' : ''}`}
                       aria-label={`跳到第 ${index + 1} 条消息：${previewOf(message)}`}
                   >
-                    <span className="elevator-bar" />
+                    <span className="elevator-tab" aria-hidden="true" />
+                    {exportable && <span className="elevator-export-mark" aria-hidden="true" />}
                   </button>
                 </div>
             );
           })}
         </div>
+        <div className="elevator-rule" aria-hidden="true" />
       </nav>
   );
 });

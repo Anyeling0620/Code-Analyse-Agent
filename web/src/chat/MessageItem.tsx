@@ -1,24 +1,28 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { AssistantTimeline } from './AssistantTimeline';
 import { TraceDialog } from './TraceDialog';
 import { getMessageCopyText } from './messageSegments';
 import { ExportMenu } from '../export/ExportMenu';
 import { isExportableMessage, type ExportFormat } from '../export/exportDocument';
 import type { ChatMessage } from '../types/chat';
+import { CheckIcon, ChevronDownIcon, CopyIcon } from '../ui/icons';
+import { sectionHueAt, sectionLabel } from '../ui/palette';
 
 export const MessageItem = memo(function MessageItem({
   message,
+  index = 0,
   onExportMessage,
 }: {
   message: ChatMessage;
+  index?: number;
   // 可选：未传时视为该场景不提供导出（如只读分享页）。
   onExportMessage?: (messageId: string, format: ExportFormat) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; left: number } | null>(null);
   const copyText = getMessageCopyText(message);
-  // 没有导出回调时不给 meta 留出按钮位（.message-exportable 会加 104px 右内边距）。
   const exportable = !!onExportMessage && isExportableMessage(message);
+  const hue = sectionHueAt(index);
 
   // 菜单跟随场景关闭：点击别处、按 Esc、或页面开始滚动。
   // 刚打开的一小段时间内忽略滚动，避免点击本身带出的滚动把菜单立刻关掉。
@@ -72,36 +76,33 @@ export const MessageItem = memo(function MessageItem({
       <article
           className={`message message-${message.role}${exportable ? ' message-exportable' : ''}`}
           data-message-id={message.id}
+          style={{ '--section-hue': hue.value } as CSSProperties}
       >
-        {exportable && (
-            <button
-                type="button"
-                className="message-export-button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  toggleExportMenu(event.currentTarget);
-                }}
-                title="导出这条项目分析"
-                aria-label="导出这条项目分析"
-                aria-haspopup="menu"
-            >
-              导出
-              <span className="message-export-caret" aria-hidden="true">▾</span>
-            </button>
+        {message.role === 'assistant' && (
+            <>
+              <span
+                  className="message-section-tab"
+                  style={{ background: hue.value, color: hue.on }}
+                  aria-hidden="true"
+              >
+                {sectionLabel(index)}
+              </span>
+              <span className="punch-hole punch-hole-top" aria-hidden="true" />
+              <span className="punch-hole punch-hole-bottom" aria-hidden="true" />
+            </>
         )}
-        <button
-            type="button"
-            className="message-copy-button"
-            onClick={() => void copyMessage()}
-            disabled={!copyText}
-            aria-label="复制消息"
-            title={copied ? '已复制' : '复制消息'}
-        >
-          {copied ? '✓' : '⧉'}
-        </button>
+
         <div className="message-meta">
-          {message.status === 'streaming' && <span className="stream-dot">流式返回中</span>}
-          {message.status === 'error' && <span className="stream-error">本轮异常</span>}
+          <span className={`message-role-stamp message-role-${message.role}`}>
+            {message.role === 'assistant' ? 'ANALYSIS' : 'INSTRUCTION'}
+          </span>
+          {message.status === 'streaming' && (
+              <span className="stream-stamp stream-stamp-live">
+                <span className="live-square" aria-hidden="true" />
+                流式返回中
+              </span>
+          )}
+          {message.status === 'error' && <span className="stream-stamp stream-stamp-error">本轮异常</span>}
           {message.tools.map((tool) => (
               <span key={`${message.id}-${tool}`} className="tool-chip">
                 {tool}
@@ -110,11 +111,42 @@ export const MessageItem = memo(function MessageItem({
           {message.role === 'assistant' && message.traceEvents.length > 0 && <TraceDialog events={message.traceEvents} />}
         </div>
 
-        {message.role === 'assistant' ? (
-            <AssistantTimeline message={message} />
-        ) : (
-            <p className="plain-text">{message.content}</p>
-        )}
+        <div className="message-content">
+          {message.role === 'assistant' ? (
+              <AssistantTimeline message={message} />
+          ) : (
+              <p className="plain-text">{message.content}</p>
+          )}
+        </div>
+
+        <div className="message-actions">
+          {exportable && (
+              <button
+                  type="button"
+                  className="message-export-button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    toggleExportMenu(event.currentTarget);
+                  }}
+                  title="导出这条项目分析"
+                  aria-label="导出这条项目分析"
+                  aria-haspopup="menu"
+              >
+                  导出
+                  <ChevronDownIcon size={12} />
+              </button>
+          )}
+          <button
+              type="button"
+              className="message-copy-button"
+              onClick={() => void copyMessage()}
+              disabled={!copyText}
+              aria-label="复制消息"
+              title={copied ? '已复制' : '复制消息'}
+          >
+            {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+          </button>
+        </div>
 
         {menuAnchor && (
             <ExportMenu

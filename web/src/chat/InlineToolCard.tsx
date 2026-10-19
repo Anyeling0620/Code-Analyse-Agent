@@ -6,6 +6,7 @@ import { prettyPayload } from './messageSegments';
 import { markdownComponents } from '../markdown/MarkdownBlock';
 import { normalizeMarkdown } from '../markdown/normalizeMarkdown';
 import type { ToolTrace } from '../types/chat';
+import { ChevronRightIcon } from '../ui/icons';
 
 const MAX_RESULT_RUNES = 8000;
 
@@ -42,26 +43,32 @@ export const InlineToolCard = memo(function InlineToolCard({ tool }: { tool: Too
 
   return (
       <details
-          className="tool-trace-card timeline-tool"
+          className={`tool-card timeline-tool${expanded ? ' tool-card-open' : ''}`}
           open={expanded || undefined}
           onToggle={handleToggle}
       >
-        <summary className="tool-trace-header">
-          <div className="tool-trace-title">
-            <strong>{tool.name || 'unknown_tool'}</strong>
-            <span className={`tool-status tool-status-${tool.status}`}>{tool.status === 'calling' ? '调用中...' : '已完成'}</span>
-          </div>
+        <summary className="tool-card-header">
+          <span className="tool-card-chevron" aria-hidden="true"><ChevronRightIcon size={14} /></span>
+          <strong className="tool-card-name">{tool.name || 'unknown_tool'}</strong>
+          <span className={`tool-status tool-status-${tool.status}`}>
+            {tool.status === 'calling' ? (
+                <>
+                  <span className="live-square" aria-hidden="true" />
+                  调用中
+                </>
+            ) : '已完成'}
+          </span>
         </summary>
         {expanded && (
-            <div className="tool-trace-content">
+            <div className="tool-card-content">
               {tool.arguments && (
-                  <div className="tool-trace-block">
-                    <span className="tool-trace-label">参数</span>
+                  <div className="tool-card-block">
+                    <span className="tool-card-label">参数</span>
                     <pre className="tool-payload">{prettyPayload(tool.arguments)}</pre>
                   </div>
               )}
-              <div className="tool-trace-block">
-                <span className="tool-trace-label">结果</span>
+              <div className="tool-card-block">
+                <span className="tool-card-label">结果</span>
                 {tool.result ? (
                     <div className="tool-trace-result markdown-body">
                       <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
@@ -69,7 +76,10 @@ export const InlineToolCard = memo(function InlineToolCard({ tool }: { tool: Too
                       </ReactMarkdown>
                     </div>
                 ) : (
-                    <p className="tool-pending">等待工具返回结果...</p>
+                    <p className="tool-pending">
+                      <span className="live-square" aria-hidden="true" />
+                      等待工具返回结果…
+                    </p>
                 )}
               </div>
             </div>

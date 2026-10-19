@@ -23,13 +23,24 @@ export const AssistantTimeline = memo(function AssistantTimeline({ message }: { 
             return <InlineToolCard key={seg.id} tool={seg.tool} />;
           })}
           {message.status === 'streaming' && !message.segments.some((s) => s.type === 'text' && !isBlankText(s.content)) && (
-              <div className="markdown-body timeline-text"><p>正在思考中...</p></div>
+              <div className="timeline-thinking">
+                <span className="live-square" aria-hidden="true" />
+                正在思考中…
+              </div>
           )}
         </div>
     );
   }
 
-  return <AssistantText content={message.content || (message.status === 'streaming' ? '正在思考中...' : '...')} />;
+  if (!message.content && message.status === 'streaming') {
+    return (
+        <div className="timeline-thinking">
+          <span className="live-square" aria-hidden="true" />
+          正在思考中…
+        </div>
+    );
+  }
+  return <AssistantText content={message.content || '…'} />;
 });
 
 const AssistantText = memo(function AssistantText({ content, className }: { content: string; className?: string }) {

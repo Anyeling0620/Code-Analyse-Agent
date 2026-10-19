@@ -81,3 +81,15 @@ func TestBackfillProfileRevisionsSkipsUsersWithHistory(t *testing.T) {
 		t.Fatalf("已有快照的用户不该被回填，实际 %d 条", count)
 	}
 }
+
+// 走真实启动路径 openDB：AutoMigrate 必须把 profile_revisions 建出来。
+func TestOpenDBMigratesProfileRevisions(t *testing.T) {
+	a := &Adaptor{}
+	if err := a.openDB(filepath.Join(t.TempDir(), "startup.db")); err != nil {
+		t.Fatalf("openDB 失败：%v", err)
+	}
+	closeDBOnCleanup(t, a.db)
+	if !a.db.Migrator().HasTable(&model.ProfileRevision{}) {
+		t.Fatal("启动迁移未创建 profile_revisions 表")
+	}
+}

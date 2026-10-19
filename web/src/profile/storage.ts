@@ -15,11 +15,13 @@ function readString(value: unknown, fallback: string): string {
 }
 
 export function normalizeProfile(profile: ProfileForm): ProfileForm {
+  const description = profile.description.trim();
   return {
     user_type: profile.user_type.trim(),
     skill_level: profile.skill_level.trim(),
     goal_type: profile.goal_type.trim(),
-    description: profile.description.trim(),
+    // 描述是强引导的必填项；空字符串统一回落到「无」，历史缓存也能直接通过。
+    description: description || '无',
     current_topic: profile.current_topic.trim(),
     current_stage: profile.current_stage.trim(),
   };

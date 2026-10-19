@@ -61,6 +61,9 @@ const GUEST_ID_PREFIX = 'guest_';
 export default function App() {
   const [authSession, setAuthSession] = useState(() => getSession());
   const [guestEnabled, setGuestEnabled] = useState(false);
+  // 只有「本标签页刚刚完成登录」才弹画像强引导；从 localStorage 恢复登录态
+  // （刷新页面、新标签页直接打开）不弹，避免把已登录用户当成新用户反复拦一次。
+  const [promptProfileOnLogin, setPromptProfileOnLogin] = useState(false);
 
   useEffect(() => subscribeSession(setAuthSession), []);
 
@@ -95,6 +98,9 @@ export default function App() {
         },
         { handleUnauthorized: false },
     );
+    // 先记下「本次是主动登录」，再写入会话触发工作区挂载：
+    // 这样即使两次状态更新没有批处理，ChatWorkspace 首次渲染也能拿到 true。
+    setPromptProfileOnLogin(true);
     saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
   }
 
@@ -105,8 +111,17 @@ export default function App() {
         { method: 'POST' },
         { handleUnauthorized: false },
     );
+    setPromptProfileOnLogin(true);
     saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
   }
+
+  // 登出（或令牌失效）后清掉标记：之后即使别的标签页登录同步过来，
+  // 本标签页也只是恢复登录态，不会误弹画像强引导。
+  useEffect(() => {
+    if (!authSession) {
+      setPromptProfileOnLogin(false);
+    }
+  }, [authSession]);
 
   // 分享链接是公开只读页：命中 ?share=<token> 时直接渲染快照，
   // 既不弹登录框，也不进入需要登录的工作区。
@@ -120,7 +135,7 @@ export default function App() {
   }
   // 用 user_id 作 key：换账号时整棵工作区重新挂载，
   // 画像、会话、消息等本地状态不会残留到下一个账号。
-  return <ChatWorkspace key={authSession.user_id} authSession={authSession} />;
+  return <ChatWorkspace key={authSession.user_id} authSession={authSession} promptProfileOnLogin={promptProfileOnLogin} />;
 }
 
 // readShareToken 从地址栏读取分享令牌；没有就返回空串，走正常的登录流程。
@@ -150,7 +165,14 @@ function resolveHasMore(detail: SessionDetail, loadedCount: number): boolean {
 }
 
 // ChatWorkspace 承载单个登录用户的全部界面状态。换账号由上层通过 key 重新挂载来清空。
-function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
+type ChatWorkspaceProps = {
+  authSession: AuthSession;
+  // 本标签页刚刚登录成功时为 true：此时弹画像强引导。
+  // 恢复已有登录态（刷新/新标签页）为 false：直接进入工作区，不再弹。
+  promptProfileOnLogin: boolean;
+};
+
+function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps) {
   // 画像优先取本机缓存（按 user_id 分键）：刷新页面不会退回默认值，也不会把默认值
   // 当成用户画像再提交一次。缓存为空时用 initialProfile 兜底。
   const [profile, setProfile] = useState<ProfileForm>(() => loadProfile(authSession.user_id));
@@ -176,10 +198,11 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   // 右侧页缘标签轨当前指向的消息；用来给顶部图幅标签染上同一块分区色。
   const [activeMessageId, setActiveMessageId] = useState('');
-  // 登录后先弹画像：挂载即打开，并且是「强引导」——不填完保存进不去工作区。
-  // 手动打开（会话面板的「基础画像」按钮）走可关闭的编辑模式。
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(true);
-  const [isProfileGate, setIsProfileGate] = useState(true);
+  // 刚登录时先弹画像：挂载即打开，并且是「强引导」——不填完保存进不去工作区。
+  // 恢复登录态（刷新、新标签页）时保持关闭；手动打开（会话面板的「基础画像」按钮）
+  // 走可关闭的编辑模式。
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(promptProfileOnLogin);
+  const [isProfileGate, setIsProfileGate] = useState(promptProfileOnLogin);
   // 画像从服务端回读完成后才渲染强引导弹窗：否则弹窗会拿着本地缓存/默认值先渲染，
   // 服务端值回来时表单已经开了、草稿状态不会跟着变（用户会看到旧值并可能原样提交）。
   const [isProfileSynced, setIsProfileSynced] = useState(false);

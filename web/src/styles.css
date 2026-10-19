@@ -2458,6 +2458,18 @@ textarea {
   resize: vertical;
 }
 
+/* 下拉框与文本框同宽：宽度继承上面的 100%，这里只去掉原生外观并补一个手册风格的箭头。
+   原生 select 的展开层会跟随控件宽度，不再像 datalist 那样另起一个窄浮层。 */
+.field select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%231b2024' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer;
+}
+
 .field-counter {
   justify-self: end;
   color: var(--ink-faint);

@@ -3,9 +3,20 @@ import type { FormEvent } from 'react';
 import type { CurrentStage, GoalType, ProfileForm, SkillLevel } from '../types/chat';
 import { CloseIcon } from '../ui/icons';
 
-const skillLevels: SkillLevel[] = ['零基础', '入门', '熟悉'];
-const goalTypes: GoalType[] = ['补基础', '做项目', '学Agent'];
-const currentStages: CurrentStage[] = ['学习中', '开发中', '联调收尾', '复盘中'];
+const userTypes = ['学生', '开发者', '教师', '研究员', '产品/运营', '其他'];
+const skillLevels: SkillLevel[] = ['零基础', '入门', '熟悉', '熟练', '专家'];
+const goalTypes: GoalType[] = ['补基础', '做项目', '学Agent', '求职面试', '技术调研', '其他'];
+const currentStages: CurrentStage[] = ['学习中', '开发中', '联调收尾', '复盘中', '已上线维护', '规划中'];
+
+// selectOptions 保留旧数据里的自定义值：历史画像可能存着列表外的字符串，
+// 直接塞进 <select> 会显示为空白，这里把它补成一个可选项。
+function selectOptions(options: readonly string[], current: string): string[] {
+  const value = current.trim();
+  if (!value || options.includes(value)) {
+    return [...options];
+  }
+  return [...options, value];
+}
 
 // 描述是要喂给模型的整段背景，太长既占上下文又没人读完，所以前端截断、后端也限制长度。
 const descriptionMaxLength = 1000;
@@ -83,56 +94,54 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
           <div className="profile-grid">
             <label className="field">
               <span className="field-label">用户类型</span>
-              <input
-                value={draft.user_type}
+              <select
+                value={draft.user_type.trim()}
                 onChange={(event) => setDraft((current) => ({ ...current, user_type: event.target.value }))}
-                placeholder="例如 student / developer"
-              />
+              >
+                {draft.user_type.trim() === '' && <option value="">请选择</option>}
+                {selectOptions(userTypes, draft.user_type).map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
             </label>
 
             <label className="field">
               <span className="field-label">技能水平</span>
-              <input
-                value={draft.skill_level}
+              <select
+                value={draft.skill_level.trim()}
                 onChange={(event) => setDraft((current) => ({ ...current, skill_level: event.target.value }))}
-                list="profile-skill-levels"
-                placeholder="例如 零基础 / 入门 / 熟悉，也可自定义"
-              />
-              <datalist id="profile-skill-levels">
-                {skillLevels.map((level) => (
-                  <option key={level} value={level} />
+              >
+                {draft.skill_level.trim() === '' && <option value="">请选择</option>}
+                {selectOptions(skillLevels, draft.skill_level).map((level) => (
+                  <option key={level} value={level}>{level}</option>
                 ))}
-              </datalist>
+              </select>
             </label>
 
             <label className="field">
               <span className="field-label">目标类型</span>
-              <input
-                value={draft.goal_type}
+              <select
+                value={draft.goal_type.trim()}
                 onChange={(event) => setDraft((current) => ({ ...current, goal_type: event.target.value }))}
-                list="profile-goal-types"
-                placeholder="例如 补基础 / 做项目 / 学Agent，也可自定义"
-              />
-              <datalist id="profile-goal-types">
-                {goalTypes.map((goal) => (
-                  <option key={goal} value={goal} />
+              >
+                {draft.goal_type.trim() === '' && <option value="">请选择</option>}
+                {selectOptions(goalTypes, draft.goal_type).map((goal) => (
+                  <option key={goal} value={goal}>{goal}</option>
                 ))}
-              </datalist>
+              </select>
             </label>
 
             <label className="field">
               <span className="field-label">当前阶段</span>
-              <input
-                value={draft.current_stage}
+              <select
+                value={draft.current_stage.trim()}
                 onChange={(event) => setDraft((current) => ({ ...current, current_stage: event.target.value }))}
-                list="profile-current-stages"
-                placeholder="例如 学习中 / 开发中 / 复盘中，也可自定义"
-              />
-              <datalist id="profile-current-stages">
-                {currentStages.map((stage) => (
-                  <option key={stage} value={stage} />
+              >
+                {draft.current_stage.trim() === '' && <option value="">请选择</option>}
+                {selectOptions(currentStages, draft.current_stage).map((stage) => (
+                  <option key={stage} value={stage}>{stage}</option>
                 ))}
-              </datalist>
+              </select>
             </label>
 
             <label className="field field-full">

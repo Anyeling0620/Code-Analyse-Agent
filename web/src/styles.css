@@ -1174,6 +1174,16 @@ textarea {
   color: var(--ink);
 }
 
+.detail-load-button:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.detail-load-button:disabled:hover {
+  background: transparent;
+  color: var(--ink-soft);
+}
+
 .message-actions {
   position: absolute;
   top: 10px;

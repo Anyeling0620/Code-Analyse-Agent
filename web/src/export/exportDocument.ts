@@ -18,7 +18,10 @@ export type ExportFormat = 'md' | 'pdf';
 
 /** 只有项目分析回答（其它对话、工具卡片、项目问答都不算）才允许导出。 */
 export function isProjectAnalysisAnswer(message: ChatMessage) {
-  return message.role === 'assistant' && message.tools.includes(PROJECT_ANALYSIS_AGENT);
+  // 轻量历史消息没有回放事件，tools 还是空的；后端用 instr 轻量探测出的
+  // hasProjectAnalysis 让导出按钮在未加载详情时也能显示。
+  return message.role === 'assistant'
+      && (message.tools.includes(PROJECT_ANALYSIS_AGENT) || message.hasProjectAnalysis === true);
 }
 
 /**

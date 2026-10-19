@@ -5,18 +5,21 @@ import { getMessageCopyText } from './messageSegments';
 import { ExportMenu } from '../export/ExportMenu';
 import { isExportableMessage, type ExportFormat } from '../export/exportDocument';
 import type { ChatMessage } from '../types/chat';
-import { CheckIcon, ChevronDownIcon, CopyIcon } from '../ui/icons';
+import { ActivityIcon, CheckIcon, ChevronDownIcon, CopyIcon } from '../ui/icons';
 import { sectionHueAt, sectionLabel } from '../ui/palette';
 
 export const MessageItem = memo(function MessageItem({
   message,
   index = 0,
   onExportMessage,
+  onLoadDetails,
 }: {
   message: ChatMessage;
   index?: number;
   // 可选：未传时视为该场景不提供导出（如只读分享页）。
   onExportMessage?: (messageId: string, format: ExportFormat) => void;
+  // 可选：历史消息的调用事件懒加载入口；分享页也复用同一套 UI。
+  onLoadDetails?: (messageId: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; left: number } | null>(null);
@@ -108,6 +111,18 @@ export const MessageItem = memo(function MessageItem({
                 {tool}
               </span>
           ))}
+          {message.role === 'assistant' && message.hasRenderEvents && !message.eventsLoaded && onLoadDetails && (
+              <button
+                  type="button"
+                  className="tool-chip trace-entry-button detail-load-button"
+                  disabled={message.eventsLoading}
+                  onClick={() => onLoadDetails(message.id)}
+                  title="按需加载这条回答的工具调用详情"
+              >
+                <ActivityIcon size={13} />
+                {message.eventsLoading ? '调用详情加载中…' : '加载调用详情'}
+              </button>
+          )}
           {message.role === 'assistant' && message.traceEvents.length > 0 && <TraceDialog events={message.traceEvents} />}
         </div>
 

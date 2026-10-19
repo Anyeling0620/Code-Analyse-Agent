@@ -484,6 +484,12 @@ html[data-ui='classic'][data-theme='dark'] body {
   background: #101417;
 }
 
+/* .icon-button 的默认描边是 --rule（0.22 alpha，约 1.95:1）；
+   深色下交互控件边界统一提升到 --rule-strong（约 3.5:1）。 */
+html[data-ui='classic'][data-theme='dark'] .icon-button {
+  border-color: var(--rule-strong);
+}
+
 html[data-ui='classic'][data-theme='dark'] .composer {
   background: linear-gradient(to top, var(--paper) 62%, rgba(23, 28, 32, 0));
 }

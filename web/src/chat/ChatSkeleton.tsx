@@ -18,11 +18,11 @@ export const ChatSkeleton = memo(function ChatSkeleton({
           {label}
         </span>
         {[0, 1, 2].map((index) => (
-            <div key={index} className="chat-skeleton-card">
+            <div key={index} className="chat-skeleton-leaf">
+              <span className="chat-skeleton-tab" aria-hidden="true" />
               <span className="chat-skeleton-line chat-skeleton-line-title" />
               <span className="chat-skeleton-line" />
               <span className="chat-skeleton-line chat-skeleton-line-short" />
-              <span className="chat-skeleton-line" />
               <span className="chat-skeleton-line chat-skeleton-line-mid" />
             </div>
         ))}

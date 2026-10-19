@@ -61,21 +61,27 @@ export function SharedSessionView({ token }: { token: string }) {
 
   return (
       <div className="share-page">
-        <header className="share-page-header">
-          <div className="share-page-banner" role="note">
-            <span className="share-page-banner-badge">只读分享</span>
-            <span className="share-page-banner-text">这是会话的历史快照，不可回复、不可修改。</span>
+        <header className="share-header">
+          <div className="share-brand">
+            <span className="brand-mark brand-mark-large" aria-hidden="true">
+              <span className="brand-mark-line" />
+              <span className="brand-mark-line" />
+              <span className="brand-mark-line" />
+            </span>
+            <span className="share-brand-name">Repo Agent</span>
           </div>
-          {state === 'ready' && (
-              <div className="share-page-meta">
-                <h1 className="share-page-title" title={summary}>{summary}</h1>
-                <div className="share-page-chips">
-                  {projectName && <span className="share-page-chip">项目：{projectName}</span>}
-                  {sharedAt && <span className="share-page-chip">分享于 {sharedAt}</span>}
-                  <span className="share-page-chip">共 {detail?.total ?? messages.length} 条消息</span>
-                </div>
-              </div>
-          )}
+
+          <div className="share-heading">
+            <span className="share-badge">只读分享</span>
+            <h1 className="share-title" title={summary}>{summary}</h1>
+            <div className="share-chips">
+              {projectName && <span className="share-chip">项目：{projectName}</span>}
+              {sharedAt && <span className="share-chip">分享于 {sharedAt}</span>}
+              <span className="share-chip">共 {detail?.total ?? messages.length} 条消息</span>
+            </div>
+          </div>
+
+          <span className="share-stamp">SNAPSHOT</span>
         </header>
 
         <div ref={scrollRef} className="share-page-scroll">

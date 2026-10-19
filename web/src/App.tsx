@@ -7,6 +7,7 @@ import { clearSession, getSession, saveSession, subscribeSession } from './auth/
 import type { AuthSession } from './auth/session';
 import { MessageList } from './chat/MessageList';
 import { ChatSkeleton } from './chat/ChatSkeleton';
+import { EmptyState } from './chat/EmptyState';
 import {
   addToolCallWithSegment,
   appendErrorSegment,
@@ -38,6 +39,8 @@ import { ProfileModal } from './profile/ProfileModal';
 import { SessionPanel } from './sessions/SessionPanel';
 import { createShareLink } from './share/api';
 import { SharedSessionView } from './share/SharedSessionView';
+import { MenuIcon } from './ui/icons';
+import { sectionHueAt, sectionLabel, shortId } from './ui/palette';
 import type { ChatMessage, ChatRunActiveResp, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent, VersionInfo } from './types/chat';
 
 // 会话列表项在后端已截断到 200 字，负载很小，保持 20 条一页。
@@ -170,6 +173,9 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
   const [isLoadingSessionDetail, setIsLoadingSessionDetail] = useState(false);
   const [isComposerExpanded, setIsComposerExpanded] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // 右侧页缘标签轨当前指向的消息；用来给顶部图幅标签染上同一块分区色。
+  const [activeMessageId, setActiveMessageId] = useState('');
   // 登录后先弹画像：挂载即打开，并且是「强引导」——不填完保存进不去工作区。
   // 手动打开（会话面板的「基础画像」按钮）走可关闭的编辑模式。
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(true);
@@ -280,7 +286,8 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
   }, [sessionId, isLoadingSessionDetail, isStreaming]);
 
   useEffect(() => {
-    if (!shouldStickToBottomRef.current) {
+    // 空工作区的封面从顶部开始读，不要因为初始化就滚到底部把标题藏起来。
+    if (messages.length === 0 || !shouldStickToBottomRef.current) {
       return;
     }
     const frame = window.requestAnimationFrame(() => {
@@ -464,6 +471,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     // ① 立刻切到点中的标签页。
     setSessionId(nextSessionId);
     setLastTraceId('');
+    setActiveMessageId('');
     setPanelError('');
 
     const cached = sessionCacheRef.current.get(nextSessionId);
@@ -473,7 +481,13 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
       setMessages(cached.messages);
       setMessagePage(cached.page);
       setHasMoreMessages(cached.hasMore);
-      window.requestAnimationFrame(() => scrollConversationToBottom('auto'));
+      window.requestAnimationFrame(() => {
+        if (cached.messages.length === 0) {
+          scrollConversationToTop();
+        } else {
+          scrollConversationToBottom('auto');
+        }
+      });
       return;
     }
 
@@ -498,7 +512,13 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
       setMessages(loadedMessages);
       setMessagePage(page);
       setHasMoreMessages(hasMore);
-      window.requestAnimationFrame(() => scrollConversationToBottom('auto'));
+      window.requestAnimationFrame(() => {
+        if (loadedMessages.length === 0) {
+          scrollConversationToTop();
+        } else {
+          scrollConversationToBottom('auto');
+        }
+      });
       cacheSessionDetail(nextSessionId, loadedMessages, page, hasMore);
       // ④ 剩下的历史在后台安静补齐，用户不用等也不用滚。
       void hydrateSessionHistory(nextSessionId, token, loadedMessages, page, hasMore);
@@ -660,6 +680,8 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
         setHasMoreMessages(false);
         setIsLoadingSessionDetail(false);
         setLastTraceId('');
+        setActiveMessageId('');
+        window.requestAnimationFrame(() => scrollConversationToTop());
       }
       setPanelError('');
     } catch (error) {
@@ -705,6 +727,8 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     setMessagePage(1);
     setHasMoreMessages(false);
     setLastTraceId('');
+    setActiveMessageId('');
+    window.requestAnimationFrame(() => scrollConversationToTop());
   }
 
   // ── 项目分析导出 ──────────────────────────────────────────────
@@ -1176,6 +1200,10 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     scrollElement.scrollTo({ top: scrollElement.scrollHeight, behavior });
   }
 
+  function scrollConversationToTop(behavior: ScrollBehavior = 'auto') {
+    conversationScrollRef.current?.scrollTo({ top: 0, behavior });
+  }
+
   const scrollToTop = useCallback(() => {
     const scrollElement = conversationScrollRef.current;
     if (!scrollElement) return;
@@ -1190,9 +1218,16 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
     scrollConversationToBottom('smooth');
   }, []);
 
+  const activeSession = sessions.find((item) => item.session_id === sessionId);
+  const activeSessionTitle = activeSession?.last_user_message || activeSession?.summary
+      || (sessionId ? '当前会话' : '新的分析');
+  const activeMessageIndex = messages.findIndex((item) => item.id === activeMessageId);
+  const activeHue = sectionHueAt(activeMessageIndex >= 0 ? activeMessageIndex : Math.max(messages.length - 1, 0));
+  const healthText = health === 'online' ? '后端在线' : health === 'offline' ? '后端离线' : '检查中';
+
   return (
-      <div className="app-shell">
-        <aside className="control-panel">
+      <div className={`app-shell${isSidebarOpen ? ' sidebar-open' : ''}`}>
+        <aside className="index-board" aria-label="会话索引">
           <SessionPanel
               health={health}
               panelError={panelError}
@@ -1201,41 +1236,89 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
               isStreaming={isStreaming}
               isLoadingMoreSessions={isLoadingMoreSessions}
               hasMoreSessions={hasMoreSessions}
-              onStartNewSession={startNewSession}
-              onLoadSession={loadSession}
+              userId={authSession.user_id}
+              plan={authSession.plan}
+              isGuest={authSession.user_id.startsWith(GUEST_ID_PREFIX)}
+              onStartNewSession={() => {
+                setIsSidebarOpen(false);
+                startNewSession();
+              }}
+              onLoadSession={(nextSessionId) => {
+                setIsSidebarOpen(false);
+                void loadSession(nextSessionId);
+              }}
               onLoadMoreSessions={loadMoreSessions}
               onDeleteSession={deleteSession}
               onShareSession={shareSession}
               onOpenProfile={() => {
                 // 手动打开是编辑，不是登录后的强引导：允许取消关闭。
+                // 移动端从抽屉里打开时先收起抽屉，避免弹窗被索引板盖住。
+                setIsSidebarOpen(false);
                 setIsProfileGate(false);
                 setIsProfileModalOpen(true);
               }}
+              onLogout={() => void handleLogout()}
+              onClose={() => setIsSidebarOpen(false)}
               shareNotice={shareNotice}
           />
         </aside>
+        <button
+            type="button"
+            className="drawer-scrim"
+            aria-label="关闭会话索引"
+            onClick={() => setIsSidebarOpen(false)}
+        />
 
         <main className="chat-stage">
+          <header className="stage-bar">
+            <button
+                className="mobile-menu-button"
+                type="button"
+                onClick={() => setIsSidebarOpen(true)}
+                aria-label="打开会话索引"
+            >
+              <MenuIcon size={20} />
+            </button>
+            <div className="stage-identity">
+              <div className="stage-title-row">
+                {activeMessageIndex >= 0 && (
+                    <span
+                        className="stage-section-tab"
+                        style={{ background: activeHue.value, color: activeHue.on }}
+                        aria-hidden="true"
+                    >
+                      {sectionLabel(activeMessageIndex)}
+                    </span>
+                )}
+                <h1 className="stage-title" title={activeSessionTitle}>{activeSessionTitle}</h1>
+              </div>
+              <div className="stage-subline">
+                <span className={`stage-health stage-health-${health}`}>
+                  <span className="status-dot" aria-hidden="true" />
+                  {healthText}
+                </span>
+                <span className="stage-meta-item">
+                  SESSION {sessionId ? shortId(sessionId, 12) : 'NOT SAVED'}
+                </span>
+                {lastTraceId && <span className="stage-meta-item">TRACE {shortId(lastTraceId, 12)}</span>}
+              </div>
+            </div>
+            <div className="stage-stamps">
+              <span className={`run-stamp ${isStreaming ? 'run-stamp-live' : 'run-stamp-ready'}`}>
+                {isStreaming ? 'RUNNING' : 'READY'}
+              </span>
+            </div>
+          </header>
+
           <div
               ref={conversationScrollRef}
               className={`conversation-scroll${shouldShowElevatorNav(messages) ? ' has-elevator' : ''}`}
               onScroll={handleConversationScroll}
           >
-            <section className="workspace-meta-bar">
-              <span className="workspace-meta-chip">
-                {authSession.user_id.startsWith(GUEST_ID_PREFIX)
-                    ? `游客身份: ${authSession.user_id}（${authSession.plan}）`
-                    : `账号: ${authSession.user_id}（${authSession.plan}）`}
-              </span>
-              {sessionId && <span className="workspace-meta-chip">Session: {sessionId}</span>}
-              {lastTraceId && <span className="workspace-meta-chip">Trace: {lastTraceId}</span>}
-              <button className="workspace-meta-chip trace-entry-button" type="button" onClick={handleLogout}>
-                退出登录
-              </button>
-            </section>
-
             {isLoadingSessionDetail && messages.length === 0 ? (
                 <ChatSkeleton />
+            ) : messages.length === 0 ? (
+                <EmptyState />
             ) : (
                 <MessageList
                     messages={messages}
@@ -1250,6 +1333,7 @@ function ChatWorkspace({ authSession }: { authSession: AuthSession }) {
           <ElevatorNav
               messages={messages}
               containerRef={conversationScrollRef}
+              onActiveChange={setActiveMessageId}
           />
 
           <Composer

@@ -1,0 +1,466 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-19T13:15:09.218815Z",
+  "title": "Design System: Repo Agent",
+  "extensions": {
+    "colorMeta": {
+      "deep-ink-case": {
+        "role": "neutral",
+        "displayName": "Deep Ink Case",
+        "canonical": "#1b2024",
+        "tonalRamp": [
+          "#1c2226",
+          "#364048",
+          "#505e6a",
+          "#697d8c",
+          "#8a9aa7",
+          "#adb8c0",
+          "#cfd5da",
+          "#f1f2f4"
+        ]
+      },
+      "index-board": {
+        "role": "neutral",
+        "displayName": "Index Board",
+        "canonical": "#242b30",
+        "tonalRamp": [
+          "#1c2226",
+          "#364148",
+          "#505f6a",
+          "#697e8c",
+          "#8a9ba7",
+          "#adb8c0",
+          "#cfd5da",
+          "#f1f3f4"
+        ]
+      },
+      "map-paper": {
+        "role": "neutral",
+        "displayName": "Map Paper",
+        "canonical": "#f4f1e6",
+        "tonalRamp": [
+          "#2e2914",
+          "#584d27",
+          "#817239",
+          "#ab964b",
+          "#c0af72",
+          "#d1c69c",
+          "#e3ddc6",
+          "#f6f5ee"
+        ]
+      },
+      "paper-deep": {
+        "role": "neutral",
+        "displayName": "Paper Deep",
+        "canonical": "#eae5d6",
+        "tonalRamp": [
+          "#2c2616",
+          "#53492b",
+          "#7b6c3f",
+          "#a28f53",
+          "#b9a978",
+          "#ccc1a1",
+          "#e1dbc8",
+          "#f6f4ef"
+        ]
+      },
+      "milk-acetate": {
+        "role": "neutral",
+        "displayName": "Milk Acetate",
+        "canonical": "#fbf8ee",
+        "tonalRamp": [
+          "#362c0d",
+          "#665418",
+          "#967c23",
+          "#c7a42f",
+          "#d7ba5b",
+          "#e0cd8d",
+          "#ece1bd",
+          "#f9f6ec"
+        ]
+      },
+      "graphite-ink": {
+        "role": "neutral",
+        "displayName": "Graphite Ink",
+        "canonical": "#1b2024",
+        "tonalRamp": [
+          "#1c2226",
+          "#364048",
+          "#505e6a",
+          "#697d8c",
+          "#8a9aa7",
+          "#adb8c0",
+          "#cfd5da",
+          "#f1f2f4"
+        ]
+      },
+      "soft-ink": {
+        "role": "neutral",
+        "displayName": "Soft Ink",
+        "canonical": "#54584f",
+        "tonalRamp": [
+          "#21231f",
+          "#3f423c",
+          "#5d6258",
+          "#7b8174",
+          "#999e93",
+          "#b7bab3",
+          "#d5d6d2",
+          "#f2f3f2"
+        ]
+      },
+      "faint-ink": {
+        "role": "neutral",
+        "displayName": "Faint Ink",
+        "canonical": "#63675c",
+        "tonalRamp": [
+          "#22231f",
+          "#40433b",
+          "#5e6258",
+          "#7d8274",
+          "#9a9e93",
+          "#b8bab3",
+          "#d5d7d2",
+          "#f2f3f2"
+        ]
+      },
+      "oxide-divider": {
+        "role": "primary",
+        "displayName": "Oxide Divider",
+        "canonical": "#a8461f",
+        "tonalRamp": [
+          "#38170a",
+          "#6a2c14",
+          "#9d411d",
+          "#cf5626",
+          "#de7b54",
+          "#e5a288",
+          "#efc9ba",
+          "#faefeb"
+        ]
+      },
+      "chrome-index": {
+        "role": "secondary",
+        "displayName": "Chrome Index",
+        "canonical": "#e0b11f",
+        "tonalRamp": [
+          "#3a2e08",
+          "#6f570f",
+          "#a38117",
+          "#d8aa1e",
+          "#e4c04d",
+          "#ead183",
+          "#f1e3b8",
+          "#faf6ea"
+        ]
+      },
+      "grass-signal": {
+        "role": "secondary",
+        "displayName": "Grass Signal",
+        "canonical": "#4f6d33",
+        "tonalRamp": [
+          "#212d15",
+          "#3e5628",
+          "#5c7f3b",
+          "#79a74e",
+          "#97bd74",
+          "#b6cf9e",
+          "#d4e2c7",
+          "#f2f6ee"
+        ]
+      },
+      "teal-annotation": {
+        "role": "secondary",
+        "displayName": "Teal Annotation",
+        "canonical": "#2a6e6a",
+        "tonalRamp": [
+          "#12302e",
+          "#235b58",
+          "#338682",
+          "#44b2ab",
+          "#6cc5c0",
+          "#98d5d1",
+          "#c3e5e3",
+          "#edf7f7"
+        ]
+      },
+      "ultramarine-instruction": {
+        "role": "secondary",
+        "displayName": "Ultramarine Instruction",
+        "canonical": "#3d5c9e",
+        "tonalRamp": [
+          "#121c30",
+          "#23355b",
+          "#344e86",
+          "#4467b1",
+          "#6c89c5",
+          "#98acd5",
+          "#c4cee5",
+          "#edf1f7"
+        ]
+      },
+      "violet-profile": {
+        "role": "secondary",
+        "displayName": "Violet Profile",
+        "canonical": "#6a579c",
+        "tonalRamp": [
+          "#1d182b",
+          "#372d51",
+          "#514377",
+          "#6b589e",
+          "#8c7cb5",
+          "#aea3ca",
+          "#d0cadf",
+          "#f1eff5"
+        ]
+      },
+      "sienna-archive": {
+        "role": "secondary",
+        "displayName": "Sienna Archive",
+        "canonical": "#96583c",
+        "tonalRamp": [
+          "#2f1c13",
+          "#5a3524",
+          "#854e35",
+          "#af6746",
+          "#c4886e",
+          "#d4ac99",
+          "#e5cec4",
+          "#f7f0ee"
+        ]
+      },
+      "vermilion-errata": {
+        "role": "tertiary",
+        "displayName": "Vermilion Errata",
+        "canonical": "#c93a2b",
+        "tonalRamp": [
+          "#37100c",
+          "#681e16",
+          "#992c21",
+          "#ca3a2b",
+          "#da6458",
+          "#e2938b",
+          "#edc0bc",
+          "#f9edeb"
+        ]
+      },
+      "primary-action": {
+        "role": "primary",
+        "displayName": "Primary Action",
+        "canonical": "#b24a22",
+        "tonalRamp": [
+          "#38170b",
+          "#6a2c14",
+          "#9c411e",
+          "#ce5627",
+          "#dd7a55",
+          "#e5a288",
+          "#eec9bb",
+          "#faefeb"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Login cover promise only."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Empty-state and modal headlines."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Stage bar, card and section titles."
+      },
+      "body": {
+        "displayName": "Report Body",
+        "purpose": "Long-form report prose at a ~70ch measure."
+      },
+      "ui": {
+        "displayName": "UI Text",
+        "purpose": "Working-screen copy, buttons, inputs."
+      },
+      "label": {
+        "displayName": "Machine Label",
+        "purpose": "Stamps, IDs, metrics, code, tool names."
+      }
+    },
+    "shadows": [
+      {
+        "name": "leaf",
+        "value": "0 1px 2px rgba(20,24,20,.14), 0 18px 38px -26px rgba(20,24,20,.5)",
+        "purpose": "Assistant leaves, empty sheet, skeleton leaves."
+      },
+      {
+        "name": "lift",
+        "value": "0 2px 4px rgba(20,24,20,.16), 0 24px 48px -24px rgba(20,24,20,.55)",
+        "purpose": "Composer, login card, menus, modals."
+      }
+    ],
+    "motion": [
+      {
+        "name": "step-90",
+        "value": "steps(2) 90ms",
+        "purpose": "All state transitions; no easing curves."
+      },
+      {
+        "name": "drawer-120",
+        "value": "steps(3) 120ms",
+        "purpose": "Mobile index drawer and scrim."
+      },
+      {
+        "name": "spin-800",
+        "value": "steps(8) 800ms",
+        "purpose": "Loading indicators only."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "index-narrow",
+        "value": "1180px"
+      },
+      {
+        "name": "drawer",
+        "value": "900px"
+      },
+      {
+        "name": "phone",
+        "value": "560px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The new-analysis and send action; oxide on milk.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">新建分析</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border:1px solid var(--primary-action);border-radius:2px;background:var(--primary-action);color:var(--milk-acetate);font-family:Archivo,\"PingFang SC\",\"Microsoft YaHei\",sans-serif;font-size:13px;font-weight:600;line-height:1.2;cursor:pointer;transition:background 90ms steps(2),border-color 90ms steps(2)}.ds-btn-primary:hover{background:#9f4520;border-color:#9f4520}.ds-btn-primary:focus-visible{outline:2px solid var(--teal-annotation);outline-offset:2px}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary and cancel actions; transparent with a hairline rule.",
+      "html": "<button class=\"ds-btn-ghost\" type=\"button\">取消</button>",
+      "css": ".ds-btn-ghost{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border:1px solid var(--rule-strong);border-radius:2px;background:transparent;color:var(--graphite-ink);font-family:Archivo,\"PingFang SC\",\"Microsoft YaHei\",sans-serif;font-size:13px;font-weight:600;line-height:1.2;cursor:pointer;transition:background 90ms steps(2)}.ds-btn-ghost:hover{background:var(--paper-deep)}.ds-btn-ghost:focus-visible{outline:2px solid var(--teal-annotation);outline-offset:2px}"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A paper field with a hairline rule and teal focus.",
+      "html": "<label class=\"ds-field\"><span>当前主题</span><input type=\"text\" placeholder=\"例如 Go Agent Eino 实战\" /></label>",
+      "css": ".ds-field{display:grid;gap:5px;font-family:Archivo,\"PingFang SC\",\"Microsoft YaHei\",sans-serif}.ds-field>span{font-family:Azeret Mono,\"SFMono-Regular\",Consolas,monospace;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--soft-ink)}.ds-field input{width:100%;padding:9px 10px;border:1px solid var(--rule-strong);border-radius:2px;background:var(--map-paper);color:var(--graphite-ink);font:13px/1.5 Archivo,\"PingFang SC\",\"Microsoft YaHei\",sans-serif;outline:none}.ds-field input:focus{border-color:var(--teal-annotation);box-shadow:0 0 0 2px rgba(42,110,106,.18)}.ds-field input::placeholder{color:var(--faint-ink)}"
+    },
+    {
+      "name": "Session Nav Item",
+      "kind": "nav",
+      "refersTo": "session-item-active",
+      "description": "Index-board row; the active session becomes a paper tab with its hue swatch.",
+      "html": "<button class=\"ds-session is-active\" type=\"button\"><span class=\"ds-session-swatch\"></span><span class=\"ds-session-copy\"><strong>分析 Code-Analyse-Agent 的架构</strong><small>10/19 18:42</small></span></button>",
+      "css": ".ds-session{display:flex;align-items:center;gap:10px;width:100%;padding:8px;border:1px solid transparent;border-radius:2px;background:transparent;color:var(--case-ink);text-align:left;cursor:pointer;transition:background 90ms steps(2)}.ds-session:hover{background:var(--index-board);border-color:var(--rule)}.ds-session.is-active{background:var(--map-paper);color:var(--graphite-ink);box-shadow:0 1px 0 rgba(0,0,0,.3)}.ds-session:focus-visible{outline:2px solid var(--chrome-index);outline-offset:2px}.ds-session-swatch{align-self:stretch;width:6px;min-height:20px;border-radius:1px;background:var(--oxide-divider)}.ds-session-copy{display:grid;gap:3px;min-width:0}.ds-session-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600}.ds-session-copy small{font-family:Azeret Mono,\"SFMono-Regular\",Consolas,monospace;font-size:9.5px;color:var(--soft-ink)}"
+    },
+    {
+      "name": "Assistant Acetate Leaf",
+      "kind": "card",
+      "refersTo": "message-leaf",
+      "description": "A punched milk-acetate answer with a section tab and soft cut edge.",
+      "html": "<article class=\"ds-leaf\"><span class=\"ds-leaf-tab\">§02</span><span class=\"ds-punch ds-punch-a\"></span><span class=\"ds-punch ds-punch-b\"></span><div class=\"ds-leaf-meta\">ANALYSIS</div><h2>Code-Analyse-Agent 架构分析</h2><p>仓库由 Go 后端与 React 前端组成。后端使用 Gin 暴露 HTTP/SSE，Eino 编排多 Agent。</p></article>",
+      "css": ".ds-leaf{position:relative;padding:26px 28px 24px 38px;border:1px solid var(--rule);border-radius:2px;background:var(--milk-acetate);box-shadow:0 1px 2px rgba(20,24,20,.14),0 18px 38px -26px rgba(20,24,20,.5);font-family:\"Source Serif 4\",\"Songti SC\",serif;color:var(--graphite-ink)}.ds-leaf-tab{position:absolute;top:-1px;left:24px;transform:translateY(-100%);display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:22px;padding:0 8px;border-radius:2px 2px 0 0;background:var(--oxide-divider);color:var(--milk-acetate);font:9.5px/1 Azeret Mono,monospace}.ds-punch{position:absolute;left:12px;width:9px;height:9px;border-radius:50%;background:var(--map-paper);box-shadow:inset 0 1px 2px rgba(20,24,20,.35),0 0 0 1px var(--rule)}.ds-punch-a{top:38px}.ds-punch-b{bottom:38px}.ds-leaf-meta{margin-bottom:12px;font:9.5px/1 Azeret Mono,monospace;letter-spacing:.05em;color:var(--teal-annotation)}.ds-leaf h2{margin:0 0 10px;font-family:Archivo,\"PingFang SC\",sans-serif;font-size:1.34rem;letter-spacing:-.02em}.ds-leaf p{margin:0;font-size:16.5px;line-height:1.75}"
+    },
+    {
+      "name": "Tool Evidence Card",
+      "kind": "card",
+      "refersTo": "tool-card",
+      "description": "A quiet disclosure inside a leaf; arguments on ink, result on paper.",
+      "html": "<details class=\"ds-tool\" open><summary><span class=\"ds-chevron\">›</span><strong>repo_analyzer</strong><span class=\"ds-stamp\">已完成</span></summary><div class=\"ds-tool-body\"><span class=\"ds-label\">参数</span><pre>{\"repo\":\"https://github.com/Anyeling0620/Code-Analyse-Agent\"}</pre></div></details>",
+      "css": ".ds-tool{border:1px solid var(--rule-strong);border-radius:2px;background:var(--milk-acetate);box-shadow:0 1px 2px rgba(20,24,20,.14),0 18px 38px -26px rgba(20,24,20,.5);font-family:Archivo,\"PingFang SC\",sans-serif;color:var(--graphite-ink)}.ds-tool summary{display:flex;align-items:center;gap:8px;padding:9px 12px;list-style:none;cursor:pointer}.ds-tool summary::-webkit-details-marker{display:none}.ds-chevron{display:inline-block;transform:rotate(90deg);color:var(--soft-ink);font-size:14px}.ds-tool strong{flex:1;font:600 10.5px Azeret Mono,monospace}.ds-stamp{padding:3px 6px;border:1px solid var(--grass-signal);border-radius:2px;color:var(--grass-signal);font:9.5px/1 Azeret Mono,monospace}.ds-tool-body{display:grid;gap:5px;padding:0 12px 12px}.ds-label{font:9.5px Azeret Mono,monospace;letter-spacing:.08em;color:var(--soft-ink);text-transform:uppercase}.ds-tool pre{margin:0;padding:10px 12px;border-radius:2px;background:var(--deep-ink-case);color:#e9e4d6;font:10.5px/1.6 Azeret Mono,monospace;white-space:pre-wrap}"
+    },
+    {
+      "name": "Fore-edge Tab Rail",
+      "kind": "nav",
+      "refersTo": "elevator-item",
+      "description": "Stepped reading rail; tab height carries message extent, active tab extends.",
+      "html": "<nav class=\"ds-rail\" aria-label=\"阅读位置\"><span class=\"ds-rail-rule\"></span><button class=\"ds-rail-item is-active\" style=\"--tab-h:18px;--tab-hue:var(--chrome-index)\" type=\"button\"><span></span></button><button class=\"ds-rail-item\" style=\"--tab-h:10px;--tab-hue:var(--teal-annotation)\" type=\"button\"><span></span></button><button class=\"ds-rail-item\" style=\"--tab-h:14px;--tab-hue:var(--ultramarine-instruction)\" type=\"button\"><span></span></button><span class=\"ds-rail-rule\"></span></nav>",
+      "css": ".ds-rail{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;border-right:1px solid var(--rule-strong);font-family:Archivo,\"PingFang SC\",sans-serif}.ds-rail-rule{width:1px;height:18px;background:var(--rule-strong)}.ds-rail-item{display:flex;align-items:center;justify-content:flex-end;width:38px;padding:2px 0;border:0;background:transparent;cursor:pointer}.ds-rail-item span{display:block;width:12px;height:var(--tab-h,10px);border-radius:1px;background:var(--tab-hue);transition:width 90ms steps(2),height 90ms steps(2)}.ds-rail-item:hover span{width:20px}.ds-rail-item.is-active span{width:28px;height:calc(var(--tab-h,10px) + 2px);box-shadow:0 0 0 1px var(--graphite-ink)}.ds-rail-item:focus-visible{outline:2px solid var(--teal-annotation);outline-offset:2px}"
+    },
+    {
+      "name": "Acetate Composer",
+      "kind": "input",
+      "refersTo": "composer",
+      "description": "The bottom strip: punched acetate, standard textarea, oxide send square.",
+      "html": "<form class=\"ds-composer\"><div class=\"ds-composer-top\"><span>指令</span><small>Enter 发送 · Shift+Enter 换行</small></div><textarea rows=\"2\" placeholder=\"描述要分析的项目，或继续追问当前代码…\"></textarea><div class=\"ds-composer-foot\"><span>成本 ¥0.331600 · 额度 12/200</span><button class=\"ds-send\" type=\"button\" aria-label=\"发送\">→</button></div></form>",
+      "css": ".ds-composer{position:relative;padding:14px 18px 12px;border:1px solid var(--rule-strong);border-radius:2px;background:var(--milk-acetate);box-shadow:0 2px 4px rgba(20,24,20,.16),0 24px 48px -24px rgba(20,24,20,.55);font-family:Archivo,\"PingFang SC\",sans-serif;color:var(--graphite-ink)}.ds-composer::before,.ds-composer::after{content:\"\";position:absolute;top:-5px;width:9px;height:9px;border-radius:50%;background:var(--map-paper);box-shadow:inset 0 1px 2px rgba(20,24,20,.35),0 0 0 1px var(--rule)}.ds-composer::before{left:18px}.ds-composer::after{right:18px}.ds-composer-top{display:flex;justify-content:space-between;gap:12px;margin-bottom:6px}.ds-composer-top span{padding:2px 5px;border:1px solid var(--oxide-divider);border-radius:2px;color:var(--oxide-divider);font:9.5px/1.2 Azeret Mono,monospace;letter-spacing:.12em}.ds-composer-top small{font:9.5px/1.2 Azeret Mono,monospace;color:var(--soft-ink)}.ds-composer textarea{width:100%;height:52px;padding:4px 2px;resize:none;border:0;background:transparent;color:var(--graphite-ink);font:15px/1.55 Archivo,\"PingFang SC\",sans-serif;outline:none}.ds-composer textarea::placeholder{color:var(--faint-ink)}.ds-composer-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:8px;border-top:1px solid var(--rule)}.ds-composer-foot span{font:9.5px Azeret Mono,monospace;color:var(--soft-ink)}.ds-send{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--primary-action);border-radius:2px;background:var(--primary-action);color:var(--milk-acetate);font-size:18px;cursor:pointer}.ds-send:hover{background:#9f4520}.ds-send:focus-visible{outline:2px solid var(--teal-annotation);outline-offset:2px}"
+    },
+    {
+      "name": "Status Stamp",
+      "kind": "chip",
+      "refersTo": "status-stamp",
+      "description": "Small mono stamp for roles, states, traces, and risk.",
+      "html": "<span class=\"ds-stamp-row\"><span class=\"ds-status\">ANALYSIS</span><span class=\"ds-status ds-status-live\">流式返回中</span><span class=\"ds-status ds-status-risk\">破坏性命令</span></span>",
+      "css": ".ds-stamp-row{display:flex;flex-wrap:wrap;gap:6px;font-family:Azeret Mono,\"SFMono-Regular\",Consolas,monospace}.ds-status{display:inline-flex;align-items:center;gap:5px;padding:3px 6px;border:1px solid currentColor;border-radius:2px;font-size:9.5px;letter-spacing:.05em;line-height:1;color:var(--teal-annotation);text-transform:uppercase}.ds-status-live{color:var(--oxide-divider)}.ds-status-risk{color:var(--vermilion-errata)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Live Reference Manual",
+    "overview": "Repo Agent is a working reference book that happens to be software. The session index is a dark case; the conversation is a paper field; each assistant answer is a milk-acetate leaf punched and tabbed with its section colour. The world is present in the type, the palette, the density, and one signature move — the tabbed leaf and the fore-edge rail — while the navigation, buttons, inputs, and menus stay standard web controls an engineer already knows. The system is professional, restrained, and trustworthy. It refuses the generic white chat shell, the neon dashboard, and glass decoration. Colour is not scattered as accent: the seven section hues are full-strength boards used for tabs, the user's instruction slip, status stamps, and small reading markers. Long-form prose always sits on paper or acetate, never on a saturated field.",
+    "keyCharacteristics": [
+      "Deep-ink index case and a paper reading field.",
+      "Milk-acetate assistant leaves with punched holes and section tabs.",
+      "A stepped fore-edge rail that tracks message order and reading position.",
+      "Three self-hosted voices: Archivo for UI and headings, Source Serif 4 for report prose, Azeret Mono for machine data.",
+      "Standard controls, precise rules, and steps(2) motion; no easing curves."
+    ],
+    "rules": [
+      {
+        "name": "The One Board Rule",
+        "body": "Saturated section hues belong to tabs, the user slip, status stamps, and small boards. Long-form reading fields are always paper or acetate.",
+        "section": "colors"
+      },
+      {
+        "name": "The Errata Rule",
+        "body": "Vermilion is for errors, destructive actions, and approval risk. It never becomes an accent colour.",
+        "section": "colors"
+      },
+      {
+        "name": "The Reading Measure Rule",
+        "body": "Report prose stays near 70ch and never stretches across the full desktop width. A wide window earns margin, not longer lines.",
+        "section": "typography"
+      },
+      {
+        "name": "The Machine Voice Rule",
+        "body": "Monospace is for code, data, measurement, names, and IDs — never for long prose or decorative \"technical\" labels.",
+        "section": "typography"
+      },
+      {
+        "name": "The Printed Edge Rule",
+        "body": "Depth comes from a 1px rule, a short soft shadow, and the material of the sheet — not from a floating card with a large radius.",
+        "section": "elevation"
+      },
+      {
+        "name": "The No Glow Rule",
+        "body": "No coloured halos, neon edges, or ambient glows. Status colour sits in a dot or a stamp, not in light.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep report prose on Source Serif 4 at 16.5px/1.75 with a ~70ch measure.",
+      "Do use full-strength section hues on tabs, stamps, the user slip, and small boards only.",
+      "Do keep the fore-edge rail aligned to message order and message extent, and let the active tab extend.",
+      "Do use the three self-hosted faces and the tab/leaf material as the signature.",
+      "Do keep standard web controls, visible focus rings, and prefers-reduced-motion support.",
+      "Do use SVG icons in one 1.75px stroke and label every icon-only button."
+    ],
+    "donts": [
+      "Don't introduce rounded chat bubbles, gradient text, glass panels, neon glows, or emoji icons.",
+      "Don't put long-form text on a saturated hue or use a saturated hue as a page wash.",
+      "Don't use vermilion as an accent; it is reserved for errors, destructive actions, and approval risk.",
+      "Don't replace standard navigation, inputs, or menus with manual/costume chrome.",
+      "Don't bring back the old green/white ChatGPT palette or the generic white-shell composition.",
+      "Don't add large radii, pill cards, or floating glass surfaces; depth is a printed edge and a short soft shadow."
+    ]
+  }
+}

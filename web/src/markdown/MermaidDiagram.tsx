@@ -1,11 +1,54 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronDownIcon, CopyIcon, DownloadIcon } from '../ui/icons';
 
 type MermaidModule = { render: (id: string, code: string) => Promise<{ svg: string }> };
 type MermaidLoadable = MermaidModule & { initialize: (cfg: Record<string, unknown>) => void };
 
 let mermaidModulePromise: Promise<MermaidModule | null> | null = null;
 let mermaidInitialized = false;
-const MERMAID_RENDER_VERSION = 'default-theme-v2';
+const MERMAID_RENDER_VERSION = 'manual-acetate-v1';
+
+// 图表也走手册的纸面系统：纸色节点、石墨线、Archivo 标签。
+// 不引用外部主题样式，Mermaid 的变量在这里一次写死。
+const MERMAID_THEME_VARIABLES = {
+  background: '#f8f5ec',
+  primaryColor: '#f4f1e6',
+  primaryTextColor: '#1b2024',
+  primaryBorderColor: '#54584f',
+  lineColor: '#54584f',
+  secondaryColor: '#eae5d6',
+  tertiaryColor: '#f8f5ec',
+  mainBkg: '#f4f1e6',
+  secondBkg: '#eae5d6',
+  tertiaryBkg: '#f8f5ec',
+  nodeBorder: '#54584f',
+  clusterBkg: '#f8f5ec',
+  clusterBorder: '#c9c5b7',
+  edgeLabelBackground: '#f4f1e6',
+  textColor: '#1b2024',
+  fontFamily: '"Archivo", "PingFang SC", "Microsoft YaHei", sans-serif',
+  fontSize: '14px',
+  actorBkg: '#f4f1e6',
+  actorBorder: '#54584f',
+  actorTextColor: '#1b2024',
+  signalColor: '#54584f',
+  signalTextColor: '#1b2024',
+  labelBoxBkgColor: '#f4f1e6',
+  labelBoxBorderColor: '#54584f',
+  labelTextColor: '#1b2024',
+  loopTextColor: '#1b2024',
+  noteBkgColor: '#e0b11f',
+  noteTextColor: '#1b2024',
+  noteBorderColor: '#54584f',
+};
+
+const MERMAID_CONFIG = {
+  startOnLoad: false,
+  theme: 'base',
+  securityLevel: 'loose',
+  fontFamily: '"Archivo", "PingFang SC", "Microsoft YaHei", sans-serif',
+  themeVariables: MERMAID_THEME_VARIABLES,
+};
 
 function loadMermaid(): Promise<MermaidModule | null> {
   if (!mermaidModulePromise) {
@@ -14,12 +57,7 @@ function loadMermaid(): Promise<MermaidModule | null> {
           const mod = (m.default ?? m) as MermaidLoadable;
           if (!mermaidInitialized) {
             try {
-              mod.initialize({
-                startOnLoad: false,
-                theme: 'default',
-                securityLevel: 'loose',
-                fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
-              });
+              mod.initialize(MERMAID_CONFIG);
               mermaidInitialized = true;
             } catch {
             }
@@ -132,12 +170,7 @@ export function MermaidDiagram({ code }: { code: string }) {
           return;
         }
         try {
-          (mod as MermaidLoadable).initialize({
-            startOnLoad: false,
-            theme: 'default',
-            securityLevel: 'loose',
-            fontFamily: '"PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
-          });
+          (mod as MermaidLoadable).initialize(MERMAID_CONFIG);
         } catch {
         }
         const { svg: rendered } = await mod.render(idRef.current, code);
@@ -180,17 +213,7 @@ export function MermaidDiagram({ code }: { code: string }) {
 
   if (errored || !svg) {
     return (
-        <pre className="mermaid-fallback" style={{
-          margin: '14px 0 18px',
-          padding: '14px 16px',
-          borderRadius: '14px',
-          background: 'rgba(20,26,33,0.85)',
-          color: '#dce0e6',
-          overflowX: 'auto',
-          fontFamily: '"JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas", monospace',
-          fontSize: '0.88rem',
-          lineHeight: 1.7,
-        }}>
+        <pre className="mermaid-fallback">
         <code>{code}</code>
       </pre>
     );
@@ -205,14 +228,16 @@ export function MermaidDiagram({ code }: { code: string }) {
               onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
               title="下载图表"
           >
-            下载
+            <DownloadIcon size={14} />
+            导出
+            <ChevronDownIcon size={12} />
           </button>
           {menuOpen && (
               <div className="mermaid-download-menu">
-                <button type="button" onClick={handleDownloadSVG}>下载 SVG</button>
-                <button type="button" onClick={handleDownloadPNG}>下载 PNG</button>
+                <button type="button" onClick={handleDownloadSVG}><DownloadIcon size={14} />下载 SVG</button>
+                <button type="button" onClick={handleDownloadPNG}><DownloadIcon size={14} />下载 PNG</button>
                 <div className="mermaid-download-menu-divider" />
-                <button type="button" onClick={handleCopyCode}>复制代码</button>
+                <button type="button" onClick={handleCopyCode}><CopyIcon size={14} />复制代码</button>
               </div>
           )}
         </div>

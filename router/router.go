@@ -27,7 +27,8 @@ func routeRegister(app *gin.Engine, h *api.Handler) {
 	app.GET("/api/cost/by_user", h.CostByUser)               // 按用户统计成本
 	app.GET("/api/cost/by_tool", h.CostByTool)               // 按工具统计成本
 	app.GET("/api/sessions", h.ListSessions)                 // 获取会话列表
-	app.GET("/api/sessions/info", h.GetSessionInfo)          // 获取会话详情
+	app.GET("/api/sessions/info", h.GetSessionInfo)          // 获取会话详情（默认轻量，不含 render_events）
+	app.GET("/api/sessions/message", h.GetMessage)           // 按单条消息读取完整调用事件
 	app.DELETE("/api/sessions/delete", h.DeleteSession)      // 删除会话
 	app.POST("/api/sessions/share", h.CreateSessionShare)    // 创建只读分享
 	app.DELETE("/api/sessions/share", h.RevokeSessionShare)  // 撤销只读分享

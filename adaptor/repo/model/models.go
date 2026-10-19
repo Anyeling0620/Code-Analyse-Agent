@@ -83,14 +83,19 @@ func (Session) TableName() string {
 //	}
 //
 // ChatMessage 是会话消息表的 GORM 模型。
+//
+// 复合索引 idx_chat_messages_user_session_created 精确匹配历史接口的
+// "按用户+会话过滤、按时间倒序分页"查询；只有单列索引时 SQLite 需要
+// 先取候选行再排序，深页会随数据量变慢。AutoMigrate 会幂等创建该索引。
 type ChatMessage struct {
-	ID           uint   `gorm:"primaryKey"`
-	SessionID    string `gorm:"size:128;index"`
-	UserID       string `gorm:"size:128;index"`
-	Role         string `gorm:"size:32;index"`
-	Content      string `gorm:"type:text"`
+	ID        uint      `gorm:"primaryKey;index:idx_chat_messages_user_session_created,priority:4"`
+	SessionID string    `gorm:"size:128;index;index:idx_chat_messages_user_session_created,priority:2"`
+	UserID    string    `gorm:"size:128;index;index:idx_chat_messages_user_session_created,priority:1"`
+	Role      string    `gorm:"size:32;index"`
+	Content   string    `gorm:"type:text"`
+	CreatedAt time.Time `gorm:"index:idx_chat_messages_user_session_created,priority:3"`
+
 	RenderEvents string `gorm:"type:text"`
-	CreatedAt    time.Time
 }
 
 // TableName 返回会话消息表名。

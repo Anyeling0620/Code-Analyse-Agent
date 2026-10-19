@@ -115,14 +115,14 @@ func TestResolveSessionSummaryMessageRespectsCompactSwitch(t *testing.T) {
 	enabled := config.ContextCompact{Enabled: true}
 	disabled := config.ContextCompact{Enabled: false}
 
-	if message := resolveSessionSummaryMessage(disabled, session, 100, historyWindowSize); message != nil {
+	if message := resolveSessionSummaryMessage(disabled, session, true); message != nil {
 		t.Fatalf("disabled compaction must not inject a summary, got %+v", message)
 	}
-	if message := resolveSessionSummaryMessage(enabled, session, 20, historyWindowSize); message != nil {
+	if message := resolveSessionSummaryMessage(enabled, session, false); message != nil {
 		t.Fatal("summary must not be injected while the whole history still fits the window")
 	}
 
-	message := resolveSessionSummaryMessage(enabled, session, 61, historyWindowSize)
+	message := resolveSessionSummaryMessage(enabled, session, true)
 	if message == nil {
 		t.Fatal("summary should be injected once the history is longer than the window")
 	}

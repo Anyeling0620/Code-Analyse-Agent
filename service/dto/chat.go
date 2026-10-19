@@ -87,13 +87,18 @@ type ChatStreamEvent struct {
 }
 
 type ChatMessageRecord struct {
-	ID           uint              `json:"id"`
-	SessionID    string            `json:"session_id"`
-	UserID       string            `json:"user_id"`
-	Role         string            `json:"role"`
-	Content      string            `json:"content"`
-	RenderEvents []ChatStreamEvent `json:"render_events"`
-	CreatedAt    time.Time         `json:"created_at"`
+	ID        uint   `json:"id"`
+	SessionID string `json:"session_id"`
+	UserID    string `json:"user_id"`
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	// RenderEvents 在轻量历史接口里省略（omitempty），前端需要时按消息懒加载。
+	RenderEvents []ChatStreamEvent `json:"render_events,omitempty"`
+	// HasRenderEvents 标记库里是否存在调用事件；轻量响应靠它显示“调用详情”入口。
+	HasRenderEvents bool `json:"has_render_events,omitempty"`
+	// HasProjectAnalysis 标记调用过 repo_analyzer，前端据此在未加载事件时也能显示导出。
+	HasProjectAnalysis bool      `json:"has_project_analysis,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
 }
 
 type ToolCallState struct {

@@ -19,6 +19,8 @@ type CreateShareResult struct {
 // GetSharedSession 是读取只读分享的查询参数。
 type GetSharedSession struct {
 	ShareToken string `json:"share_token" form:"share_token"`
+	// Raw 默认 false：返回前端可渲染的压缩事件；raw=1 时返回快照里的原始事件。
+	Raw bool `json:"raw" form:"raw"`
 }
 
 // SharedSessionInfo 是只读分享页拿到的完整数据，全部来自分享时刻的快照。

@@ -57,5 +57,11 @@ type ChatMessageRecord struct {
 	Role         string            `json:"role"`
 	Content      string            `json:"content"`
 	RenderEvents []ChatStreamEvent `json:"render_events"`
-	CreatedAt    time.Time         `json:"created_at"`
+	// HasRenderEvents 标记这条消息在库里是否存有调用事件。
+	// 轻量分页不会反序列化 RenderEvents，前端靠它决定是否懒加载单条详情。
+	HasRenderEvents bool `json:"has_render_events"`
+	// HasProjectAnalysis 标记事件里是否调用过 repo_analyzer，用 SQLite instr
+	// 轻量探测，避免为了显示导出按钮而加载完整事件。
+	HasProjectAnalysis bool      `json:"has_project_analysis"`
+	CreatedAt          time.Time `json:"created_at"`
 }

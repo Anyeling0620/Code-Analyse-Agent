@@ -245,8 +245,9 @@ function isComplete(profile: ProfileForm): boolean {
 // 不能因为一个格式异常把整条存档隐藏掉。
 function formatProfileTime(value: string): string {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
+  // Go time.Time 的零值代表“没有记录”，不能显示成 0001/01/01。
+  if (Number.isNaN(date.getTime()) || date.getUTCFullYear() <= 1) {
+    return '';
   }
   return date.toLocaleString('zh-CN', {
     year: 'numeric',

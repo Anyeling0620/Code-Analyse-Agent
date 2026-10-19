@@ -24,6 +24,8 @@ import {
 import { Composer } from './composer/Composer';
 import { loadProfile, profileFromServer, saveProfile as cacheProfile } from './profile/storage';
 import { fetchProfile, saveProfileToServer } from './profile/api';
+import { profileForChat, normalizeProfileUpdatedAt } from './profile/sync';
+import type { ProfileSyncStatus } from './profile/sync';
 import { ExportPrintRoot } from './export/ExportPrintRoot';
 import {
   buildEntryAt,
@@ -231,9 +233,12 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   // 走可关闭的编辑模式。
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(promptProfileOnLogin);
   const [isProfileGate, setIsProfileGate] = useState(promptProfileOnLogin);
-  // 画像从服务端回读完成后才渲染强引导弹窗：否则弹窗会拿着本地缓存/默认值先渲染，
-  // 服务端值回来时表单已经开了、草稿状态不会跟着变（用户会看到旧值并可能原样提交）。
-  const [isProfileSynced, setIsProfileSynced] = useState(false);
+  // 画像从服务端回读的状态。只有 ready 才允许随对话提交画像；
+  // pending（仍在请求）和 failed（请求失败）都必须发送 null，避免默认值覆盖服务端。
+  const [profileSyncStatus, setProfileSyncStatus] = useState<ProfileSyncStatus>('pending');
+  // 弹窗要等回读“有结果”才渲染：否则表单会先拿本地默认值渲染，服务端值回来后
+  // 草稿状态不会跟着变。成功/失败都算有结果；失败时允许用户手动填写并显式保存。
+  const isProfileSyncSettled = profileSyncStatus !== 'pending';
   const [shareNotice, setShareNotice] = useState('');
   const [printEntries, setPrintEntries] = useState<ExportEntry[] | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
@@ -281,14 +286,14 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
           cacheProfile(authSession.user_id, merged);
           return merged;
         });
-        setProfileUpdatedAt(server.updated_at ?? '');
+        setProfileUpdatedAt(normalizeProfileUpdatedAt(server.updated_at));
+        // 只有真正拿到服务端画像才算同步完成；失败必须保持 failed，
+        // 否则下一轮对话会把本地默认画像全量写回服务端。
+        setProfileSyncStatus('ready');
       })
       .catch(() => {
-        // 读不到不影响使用：缓存里有上次填的，没有就是默认值，用户照样能填能存。
-      })
-      .finally(() => {
         if (!cancelled) {
-          setIsProfileSynced(true);
+          setProfileSyncStatus('failed');
         }
       });
     return () => {
@@ -852,7 +857,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
         message,
         // 服务端画像回读完成前不要提交本地缓存/默认值：后端会把请求里的 profile
         // 全量写库，拿默认值先发一轮会把用户真正保存的画像覆盖掉。
-        profile: isProfileSynced ? profile : null,
+        profile: profileForChat(profile, profileSyncStatus),
         signal: controller.signal,
         onPhase: (phase) => notifyRunPhase(assistantId, phase),
         onEvent: (eventName, payload) => {
@@ -895,7 +900,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       void refreshMetrics();
       void refreshSessions();
     }
-  }, [profile, isProfileSynced]);
+  }, [profile, profileSyncStatus]);
 
   // notifyRunPhase 把"连接中断，正在重连"这类传输层状态显示出来。
   // 关键点：重连中不能把消息标成 error——执行其实还在服务端继续跑。
@@ -1102,7 +1107,9 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
           const nextProfile = profileFromServer(profile, payload.result.profile);
           setProfile(nextProfile);
           cacheProfile(authSession.user_id, nextProfile);
-          setProfileUpdatedAt(payload.result.profile.updated_at ?? '');
+          setProfileUpdatedAt(normalizeProfileUpdatedAt(payload.result.profile.updated_at));
+          // 这一轮能拿到服务端画像，说明画像已经是权威值，后续对话可以正常携带。
+          setProfileSyncStatus('ready');
         }
         patchAssistant(assistantId, (item) => ({
           ...item,
@@ -1403,7 +1410,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
               onScrollBottom={scrollToBottom}
           />
         </main>
-        {isProfileModalOpen && isProfileSynced && (
+        {isProfileModalOpen && isProfileSyncSettled && (
             <ProfileModal
                 profile={profile}
                 updatedAt={profileUpdatedAt}
@@ -1414,7 +1421,9 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
                   const merged = profileFromServer(nextProfile, saved);
                   setProfile(merged);
                   cacheProfile(authSession.user_id, merged);
-                  setProfileUpdatedAt(saved.updated_at ?? '');
+                  setProfileUpdatedAt(normalizeProfileUpdatedAt(saved.updated_at));
+                  // 显式保存成功后，本地值已确认写入服务端，可以恢复正常携带。
+                  setProfileSyncStatus('ready');
                   setIsProfileModalOpen(false);
                   // 保存过一次之后就是普通编辑：再打开时可以取消关闭。
                   setIsProfileGate(false);

@@ -255,9 +255,9 @@ npm test
 CI（`.github/workflows/deploy.yml`）在 push 到 `main` 时构建一次，并同时发布两个 Release：
 
 - `release-latest`：滚动最新版，每次推送更新；
-- `release2.0`：当前 2.x 版本线，每次推送更新；升级大版本时修改 workflow 顶部的 `CURRENT_RELEASE_TAG`（例如改成 `release3.0`），旧版本线随之冻结。
+- `release-2.0`：当前 2.x 版本线，每次推送更新；升级大版本时修改 workflow 顶部的 `CURRENT_RELEASE_TAG`（例如改成 `release-3.0`），旧版本线随之冻结。
 
-另有 `release1.0`：改造前旧版前端的冻结快照，只用于回滚，不随推送更新。每个 Release 的产物为：
+另有 `release-1.0`：改造前旧版前端的冻结快照，只用于回滚，不随推送更新。标签统一使用「`release-<版本号>`」形式。每个 Release 的产物为：
 
 - `code-analyse-agent.gz`（Linux amd64 后端二进制）
 - `web-dist.tar.gz`（前端静态产物）
@@ -267,8 +267,8 @@ CI（`.github/workflows/deploy.yml`）在 push 到 `main` 时构建一次，并�
 
 ```bash
 RELEASE_TAG="release-latest"   # 最新推送
-# RELEASE_TAG="release2.0"     # 固定到 2.x 当前版本线
-# RELEASE_TAG="release1.0"     # 回滚到改造前版本
+# RELEASE_TAG="release-2.0"    # 固定到 2.x 当前版本线
+# RELEASE_TAG="release-1.0"    # 回滚到改造前版本
 ```
 
 修改后下一次 timer 触发（最长约 1 分钟）即按新选择拉取部署。

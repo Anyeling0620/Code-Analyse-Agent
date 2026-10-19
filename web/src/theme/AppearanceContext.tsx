@@ -58,6 +58,21 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     persistAppearance(state);
   }, [state, resolvedTheme]);
 
+  // Logging out / leaving the workspace unmounts this provider. Remove the
+  // design attributes so the login and shared-session pages get the original
+  // classic tokens instead of inheriting half a world.
+  useEffect(() => {
+    return () => {
+      if (typeof document === 'undefined') {
+        return;
+      }
+      const root = document.documentElement;
+      delete root.dataset.ui;
+      delete root.dataset.theme;
+      root.style.colorScheme = '';
+    };
+  }, []);
+
   const value = useMemo<AppearanceContextValue>(
     () => ({
       design: state.design,

@@ -39,6 +39,7 @@ import { ProfileModal } from './profile/ProfileModal';
 import { SessionPanel } from './sessions/SessionPanel';
 import { createShareLink } from './share/api';
 import { SharedSessionView } from './share/SharedSessionView';
+import { AppearanceProvider } from './theme/AppearanceContext';
 import { AppearanceSwitcher } from './theme/AppearanceSwitcher';
 import { MenuIcon } from './ui/icons';
 import { sectionHueAt, sectionLabel, shortId } from './ui/palette';
@@ -154,7 +155,13 @@ export default function App() {
   }
   // 用 user_id 作 key：换账号时整棵工作区重新挂载，
   // 画像、会话、消息等本地状态不会残留到下一个账号。
-  return <ChatWorkspace key={authSession.user_id} authSession={authSession} promptProfileOnLogin={promptProfileOnLogin} />;
+  // 外观 Provider 只包住已登录工作区：登录页与只读分享页保持经典样式，
+  // 不会被持久化的新设计色板“半套”污染。
+  return (
+    <AppearanceProvider>
+      <ChatWorkspace key={authSession.user_id} authSession={authSession} promptProfileOnLogin={promptProfileOnLogin} />
+    </AppearanceProvider>
+  );
 }
 
 // readShareToken 从地址栏读取分享令牌；没有就返回空串，走正常的登录流程。

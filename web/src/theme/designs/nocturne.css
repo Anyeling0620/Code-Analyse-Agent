@@ -3,16 +3,3095 @@
    --------------------------------------------------------------------------
    OWNERSHIP: the Nocturne agent owns this file. Do not edit other files.
    CONTRACT:
-   - Every selector must be scoped under html[data-ui='nocturne'] (directly or
-     via a descendant), so the design cannot leak into other worlds.
-   - Style BOTH html[data-ui='nocturne'][data-theme='light'] and
-     html[data-ui='nocturne'][data-theme='dark'].
-   - The shell DOM is fixed. Re-flow it with grid/flex/order/position; you may
-     use pseudo-elements for decoration.
-   - Keep .appearance-control (the switcher) usable and visible in both modes.
+   - Every selector is scoped under html[data-ui='nocturne'].
+   - Both html[data-ui='nocturne'][data-theme='light'] and [data-theme='dark']
+     are complete worlds, not an inversion.
+   - The shell DOM is fixed. The index board is re-flowed to a right-hand
+     telemetry rail with grid placement; mobile keeps a right-side drawer.
    ========================================================================== */
 
+/* ---- Tokens -------------------------------------------------------------- */
+
 html[data-ui='nocturne'] {
-  --paper: #0a1016;
-  --ink: #d9efe8;
+  --paper: #070c10;
+  --paper-soft: #0e161d;
+  --paper-deep: #131f27;
+  --acetate: #0b141a;
+  --inset: #050a0e;
+  --band-bg: #0a1218;
+  --composer-bg: #060c10;
+
+  --case: #060b0e;
+  --case-raised: #0d151b;
+  --case-line: rgba(126, 240, 200, 0.12);
+  --case-ink: #d9e8e2;
+  --case-soft: #89a39b;
+  --case-faint: #7a918a;
+
+  --ink: #d9e8e2;
+  --ink-soft: #89a39b;
+  --ink-faint: #7a918a;
+  --rule: rgba(126, 240, 200, 0.14);
+  --rule-strong: rgba(126, 240, 200, 0.3);
+
+  --accent: #7ef0c8;
+  --on-accent: #04120d;
+  --amber: #f5b84a;
+  --on-amber: #171004;
+  --danger: #ff6b57;
+  --on-danger: #190704;
+
+  --section-oxide: var(--accent);
+  --on-oxide: var(--on-accent);
+  --section-chrome: var(--amber);
+  --on-chrome: var(--on-amber);
+  --section-grass: var(--accent);
+  --on-grass: var(--on-accent);
+  --section-teal: var(--accent);
+  --on-teal: var(--on-accent);
+  --section-ultramarine: #7fb6c6;
+  --on-ultramarine: #041014;
+  --section-violet: #9bb3ab;
+  --on-violet: #04120d;
+  --section-sienna: #c79079;
+  --on-sienna: #170c06;
+  --vermilion: var(--danger);
+  --on-vermilion: var(--on-danger);
+
+  --grid-line: rgba(126, 240, 200, 0.045);
+  --scan-line: rgba(126, 240, 200, 0.016);
+  --accent-weak: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-mid: color-mix(in srgb, var(--accent) 34%, transparent);
+  --accent-signal: color-mix(in srgb, var(--accent) 58%, transparent);
+  --amber-weak: color-mix(in srgb, var(--amber) 12%, transparent);
+  --danger-weak: color-mix(in srgb, var(--danger) 12%, transparent);
+  --led-glow: 0 0 6px rgba(126, 240, 200, 0.45);
+
+  --code-bg: #050b0f;
+  --code-bar: #0a1319;
+  --code-ink: #cfe4dc;
+  --code-line: rgba(126, 240, 200, 0.18);
+
+  --font-ui: 'Archivo', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --font-mono: 'Azeret Mono', 'JetBrains Mono', 'PingFang SC', 'Microsoft YaHei', monospace;
+  --font-serif: var(--font-ui);
+
+  --measure: 72ch;
+  --radius: 2px;
+  --shadow-leaf: none;
+  --shadow-lift: 0 18px 44px -20px rgba(0, 0, 0, 0.72);
+}
+
+html[data-ui='nocturne'][data-theme='light'] {
+  --paper: #eef3f5;
+  --paper-soft: #f8fbfc;
+  --paper-deep: #ffffff;
+  --acetate: #f7fbfc;
+  --inset: #f3f9fa;
+  --band-bg: #f6fafb;
+  --composer-bg: #f2f8f9;
+
+  --case: #e5edef;
+  --case-raised: #f4f9fa;
+  --case-line: rgba(10, 40, 38, 0.14);
+  --case-ink: #0d2220;
+  --case-soft: #4e6a64;
+  --case-faint: #5c7772;
+
+  --ink: #0d2220;
+  --ink-soft: #4e6a64;
+  --ink-faint: #5c7772;
+  --rule: rgba(10, 40, 38, 0.14);
+  --rule-strong: rgba(10, 40, 38, 0.3);
+
+  --accent: #0b7a66;
+  --on-accent: #f2fffb;
+  --amber: #a96b0b;
+  --on-amber: #fff8e8;
+  --danger: #b3341f;
+  --on-danger: #fff6f3;
+
+  --section-ultramarine: #2f6f7d;
+  --on-ultramarine: #f2fffb;
+  --section-violet: #527a70;
+  --on-violet: #f2fffb;
+  --section-sienna: #8a563f;
+  --on-sienna: #fff8f2;
+
+  --grid-line: rgba(10, 40, 38, 0.055);
+  --scan-line: rgba(10, 40, 38, 0.018);
+  --led-glow: none;
+
+  --code-bg: #081115;
+  --code-bar: #0c171c;
+  --code-line: rgba(126, 240, 200, 0.22);
+
+  --shadow-lift: 0 20px 46px -22px rgba(13, 34, 32, 0.3);
+}
+
+/* ---- Document ------------------------------------------------------------ */
+
+html[data-ui='nocturne'] body {
+  background: var(--case);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+}
+
+html[data-ui='nocturne'] ::selection {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+html[data-ui='nocturne'] :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+html[data-ui='nocturne'] a {
+  color: var(--accent);
+  text-underline-offset: 3px;
+}
+
+html[data-ui='nocturne'] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-mid) transparent;
+}
+
+html[data-ui='nocturne'] ::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+html[data-ui='nocturne'] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html[data-ui='nocturne'] ::-webkit-scrollbar-thumb {
+  background: var(--accent-mid);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+html[data-ui='nocturne'] ::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-signal);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+html[data-ui='nocturne'] ::placeholder {
+  color: var(--ink-faint);
+  opacity: 1;
+}
+
+html[data-ui='nocturne'] input,
+html[data-ui='nocturne'] textarea {
+  caret-color: var(--accent);
+}
+
+/* ---- Shell · reading field left, telemetry rail right -------------------- */
+
+html[data-ui='nocturne'] .app-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+html[data-ui='nocturne'] .chat-stage {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+html[data-ui='nocturne'] .index-board {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100vh;
+  overflow: hidden;
+  border-right: 0;
+  border-left: 1px solid var(--case-line);
+  background: var(--case);
+  color: var(--case-ink);
+}
+
+html[data-ui='nocturne'] .drawer-scrim {
+  display: none;
+}
+
+/* Deep-space grid + very fine scanlines; sits under every stage layer. */
+html[data-ui='nocturne'] .chat-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(0deg, var(--scan-line) 0 1px, transparent 1px 4px),
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 100% 4px, 72px 72px, 72px 72px;
+  background-position: 0 0, 0 0, 0 0;
+}
+
+/* ---- Telemetry rail ------------------------------------------------------ */
+
+html[data-ui='nocturne'] .session-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100vh;
+  padding: 16px 14px 12px;
+  overflow: hidden;
+}
+
+html[data-ui='nocturne'] .brand-block {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 2px 14px;
+  border-bottom: 1px solid var(--case-line);
+}
+
+html[data-ui='nocturne'] .brand-mark {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  border: 1px solid var(--case-line);
+  border-radius: var(--radius);
+  background: transparent;
+}
+
+html[data-ui='nocturne'] .brand-mark-line {
+  display: block;
+  width: 2px;
+  background: var(--accent);
+}
+
+html[data-ui='nocturne'] .brand-mark-line:nth-child(1) {
+  height: 54%;
+  opacity: 0.5;
+}
+
+html[data-ui='nocturne'] .brand-mark-line:nth-child(2) {
+  height: 100%;
+  opacity: 1;
+}
+
+html[data-ui='nocturne'] .brand-mark-line:nth-child(3) {
+  height: 74%;
+  opacity: 0.72;
+}
+
+html[data-ui='nocturne'] .brand-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+html[data-ui='nocturne'] .brand-name {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 680;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  color: var(--case-ink);
+}
+
+html[data-ui='nocturne'] .brand-sub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  line-height: 1.3;
+  color: var(--case-faint);
+}
+
+html[data-ui='nocturne'] .panel-close-button {
+  display: none;
+  margin-left: auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--case-line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--case-soft);
+}
+
+html[data-ui='nocturne'] .panel-close-button:hover {
+  background: var(--case-raised);
+  color: var(--case-ink);
+}
+
+html[data-ui='nocturne'] .new-session-button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--accent-signal);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 620;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  text-align: left;
+  box-shadow: none;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+html[data-ui='nocturne'] .new-session-button:hover:not(:disabled) {
+  background: var(--accent-weak);
+  border-color: var(--accent);
+  transform: none;
+}
+
+html[data-ui='nocturne'] .new-session-button:disabled {
+  opacity: 0.45;
+}
+
+html[data-ui='nocturne'] .new-session-icon {
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border: 1px solid var(--accent-signal);
+  border-radius: var(--radius);
+}
+
+html[data-ui='nocturne'] .panel-error,
+html[data-ui='nocturne'] .share-notice {
+  margin: 0;
+  padding: 7px 9px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+html[data-ui='nocturne'] .panel-error {
+  color: var(--danger);
+  background: var(--danger-weak);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+}
+
+html[data-ui='nocturne'] .share-notice {
+  color: var(--amber);
+  background: var(--amber-weak);
+  border: 1px solid color-mix(in srgb, var(--amber) 36%, transparent);
+}
+
+html[data-ui='nocturne'] .session-list-section {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  min-width: 0;
+}
+
+html[data-ui='nocturne'] .session-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px 6px;
+  border-bottom: 1px solid var(--case-line);
+  color: var(--case-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+html[data-ui='nocturne'] .session-count {
+  padding: 1px 5px;
+  border: 1px solid var(--case-line);
+  border-radius: var(--radius);
+  color: var(--case-soft);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+html[data-ui='nocturne'] .session-list {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-mid) transparent;
+}
+
+html[data-ui='nocturne'] .empty-session {
+  margin: 0;
+  padding: 8px 4px;
+  color: var(--case-faint);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+html[data-ui='nocturne'] .session-item {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+}
+
+html[data-ui='nocturne'] .session-item-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 7px 8px 8px;
+  border: 1px solid transparent;
+  border-left: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--case-ink);
+  text-align: left;
+  transition: background 110ms ease, border-color 110ms ease;
+}
+
+html[data-ui='nocturne'] .session-item-main:hover:not(:disabled) {
+  background: var(--case-raised);
+  border-color: var(--case-line);
+}
+
+html[data-ui='nocturne'] .session-item:hover .session-item-main,
+html[data-ui='nocturne'] .session-item:focus-within .session-item-main,
+html[data-ui='nocturne'] .session-item-active .session-item-main {
+  padding-right: 60px;
+}
+
+html[data-ui='nocturne'] .session-item-active .session-item-main {
+  background: var(--case-raised);
+  border-color: var(--case-line);
+  border-left-color: var(--accent);
+  color: var(--case-ink);
+  box-shadow: none;
+}
+
+html[data-ui='nocturne'] .session-item-main:disabled {
+  opacity: 0.5;
+}
+
+html[data-ui='nocturne'] .session-swatch {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 2px;
+  min-height: 18px;
+  border-radius: 0;
+  background: var(--accent-mid) !important;
+}
+
+html[data-ui='nocturne'] .session-item-active .session-swatch {
+  background: var(--accent) !important;
+}
+
+html[data-ui='nocturne'] .session-item-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+html[data-ui='nocturne'] .session-title-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 560;
+  letter-spacing: 0.005em;
+  line-height: 1.4;
+}
+
+html[data-ui='nocturne'] .session-item-meta {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  color: var(--case-faint);
+}
+
+html[data-ui='nocturne'] .session-item-active .session-item-meta {
+  color: var(--case-soft);
+}
+
+html[data-ui='nocturne'] .session-item-actions {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--case-line);
+  border-radius: var(--radius);
+  background: var(--case-raised);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 110ms ease;
+}
+
+html[data-ui='nocturne'] .session-item:hover .session-item-actions,
+html[data-ui='nocturne'] .session-item:focus-within .session-item-actions,
+html[data-ui='nocturne'] .session-item-active .session-item-actions {
+  opacity: 1;
+}
+
+html[data-ui='nocturne'] .session-icon-button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--case-soft);
+}
+
+html[data-ui='nocturne'] .session-icon-button:hover:not(:disabled) {
+  background: var(--accent-weak);
+  border-color: var(--case-line);
+  color: var(--accent);
+}
+
+html[data-ui='nocturne'] .session-item-active .session-icon-button {
+  color: var(--case-soft);
+}
+
+html[data-ui='nocturne'] .session-delete-button:hover:not(:disabled) {
+  background: var(--danger-weak);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
+}
+
+html[data-ui='nocturne'] .session-list-loader {
+  padding: 8px 0;
+  color: var(--case-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+html[data-ui='nocturne'] .panel-footer {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--case-line);
+}
+
+html[data-ui='nocturne'] .profile-entry-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 9px;
+  border: 1px solid var(--case-line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--case-soft);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 560;
+  letter-spacing: 0.02em;
+}
+
+html[data-ui='nocturne'] .profile-entry-button:hover {
+  background: var(--case-raised);
+  border-color: var(--rule-strong);
+  color: var(--case-ink);
+}
+
+html[data-ui='nocturne'] .account-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 8px;
+  padding: 8px 9px;
+  border: 1px solid var(--case-line);
+  border-radius: var(--radius);
+  background: transparent;
+}
+
+html[data-ui='nocturne'] .account-kind {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--amber);
+}
+
+html[data-ui='nocturne'] .account-id {
+  grid-column: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--case-soft);
+}
+
+html[data-ui='nocturne'] .account-plan {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  padding: 2px 5px;
+  border: 1px solid var(--case-line);
+  border-radius: var(--radius);
+  color: var(--case-ink);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+html[data-ui='nocturne'] .panel-status-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--case-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.03em;
+}
+
+html[data-ui='nocturne'] .health {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--case-faint);
+}
+
+html[data-ui='nocturne'] .health-online {
+  background: var(--accent);
+  box-shadow: var(--led-glow);
+  animation: nocturne-led 3.6s ease-in-out infinite;
+}
+
+html[data-ui='nocturne'] .health-offline {
+  background: var(--danger);
+}
+
+html[data-ui='nocturne'] .health-checking {
+  background: var(--amber);
+  animation: nocturne-led 1.6s steps(2, jump-none) infinite;
+}
+
+html[data-ui='nocturne'] .health-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-ui='nocturne'] .logout-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--case-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+html[data-ui='nocturne'] .logout-button:hover {
+  color: var(--danger);
+  text-decoration: none;
+}
+
+/* ---- Stage bar · telemetry status band ---------------------------------- */
+
+html[data-ui='nocturne'] .stage-bar {
+  position: relative;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 58px;
+  padding: 10px 44px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--band-bg);
+}
+
+html[data-ui='nocturne'] .mobile-menu-button {
+  display: none;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+}
+
+html[data-ui='nocturne'] .mobile-menu-button:hover {
+  background: var(--accent-weak);
+}
+
+html[data-ui='nocturne'] .stage-identity {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+html[data-ui='nocturne'] .stage-title-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+html[data-ui='nocturne'] .stage-section-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 34px;
+  height: 19px;
+  padding: 0 6px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: transparent !important;
+  color: var(--accent) !important;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+html[data-ui='nocturne'] .stage-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 640;
+  letter-spacing: -0.012em;
+  line-height: 1.25;
+}
+
+html[data-ui='nocturne'] .stage-subline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 14px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+html[data-ui='nocturne'] .stage-health {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-soft);
+}
+
+html[data-ui='nocturne'] .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+html[data-ui='nocturne'] .stage-health-online .status-dot {
+  background: var(--accent);
+  box-shadow: var(--led-glow);
+  animation: nocturne-led 3.6s ease-in-out infinite;
+}
+
+html[data-ui='nocturne'] .stage-health-offline .status-dot {
+  background: var(--danger);
+}
+
+html[data-ui='nocturne'] .stage-health-checking .status-dot {
+  background: var(--amber);
+  animation: nocturne-led 1.6s steps(2, jump-none) infinite;
+}
+
+html[data-ui='nocturne'] .stage-meta-item {
+  white-space: nowrap;
+}
+
+html[data-ui='nocturne'] .stage-stamps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+html[data-ui='nocturne'] .run-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+html[data-ui='nocturne'] .run-stamp::before {
+  content: '';
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.8;
+}
+
+html[data-ui='nocturne'] .run-stamp-ready {
+  border-color: var(--rule-strong);
+  background: transparent;
+  color: var(--accent);
+}
+
+html[data-ui='nocturne'] .run-stamp-live {
+  border-color: color-mix(in srgb, var(--amber) 55%, transparent);
+  background: var(--amber-weak);
+  color: var(--amber);
+}
+
+html[data-ui='nocturne'] .run-stamp-live::before {
+  animation: nocturne-led 1.1s steps(2, jump-none) infinite;
+}
+
+/* The switcher keeps its shared chrome; align it with the console band. */
+html[data-ui='nocturne'] .appearance-trigger {
+  height: 29px;
+  padding: 0 9px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+
+html[data-ui='nocturne'] .appearance-trigger:hover,
+html[data-ui='nocturne'] .appearance-trigger.is-open {
+  border-color: var(--accent-signal);
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+html[data-ui='nocturne'] .appearance-trigger-chip {
+  border-color: var(--ink-faint);
+  opacity: 1;
+}
+
+html[data-ui='nocturne'] .appearance-popover {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+  color: var(--ink);
+  box-shadow: var(--shadow-lift);
+}
+
+html[data-ui='nocturne'] .appearance-kicker,
+html[data-ui='nocturne'] .appearance-section-label {
+  color: var(--ink-faint);
+  letter-spacing: 0.16em;
+}
+
+html[data-ui='nocturne'] .appearance-title {
+  color: var(--ink);
+  font-weight: 680;
+}
+
+html[data-ui='nocturne'] .appearance-design,
+html[data-ui='nocturne'] .appearance-theme {
+  border-radius: var(--radius);
+  border-color: var(--rule);
+}
+
+html[data-ui='nocturne'] .appearance-design:hover,
+html[data-ui='nocturne'] .appearance-theme:hover {
+  background: var(--paper-deep);
+  border-color: var(--rule-strong);
+}
+
+html[data-ui='nocturne'] .appearance-design.is-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+html[data-ui='nocturne'] .appearance-note {
+  color: var(--ink-faint);
+}
+
+/* ---- Reading field ------------------------------------------------------- */
+
+html[data-ui='nocturne'] .conversation-scroll {
+  position: relative;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 32px 0 244px;
+  background: transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-mid) transparent;
+}
+
+html[data-ui='nocturne'] .conversation-scroll.has-elevator {
+  padding-right: 0;
+}
+
+html[data-ui='nocturne'] .message-list {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  width: min(900px, calc(100% - 88px));
+  margin: 0 auto;
+}
+
+html[data-ui='nocturne'] .message-history-loader {
+  align-self: center;
+  padding: 5px 9px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---- Messages ------------------------------------------------------------ */
+
+html[data-ui='nocturne'] .message {
+  position: relative;
+  min-width: 0;
+  border-radius: var(--radius);
+  --section-hue: var(--accent) !important;
+}
+
+html[data-ui='nocturne'] .message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 11px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+html[data-ui='nocturne'] .message-assistant .message-meta {
+  padding-right: 96px;
+}
+
+html[data-ui='nocturne'] .message-user .message-meta {
+  padding-right: 34px;
+  color: var(--ink-faint);
+}
+
+html[data-ui='nocturne'] .message-role-stamp {
+  padding: 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  line-height: 1.1;
+}
+
+html[data-ui='nocturne'] .message-role-assistant {
+  color: var(--accent);
+}
+
+html[data-ui='nocturne'] .message-role-user {
+  color: var(--amber);
+}
+
+html[data-ui='nocturne'] .stream-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  line-height: 1.1;
+}
+
+html[data-ui='nocturne'] .stream-stamp-live {
+  color: var(--accent);
+  background: var(--accent-weak);
+}
+
+html[data-ui='nocturne'] .stream-stamp-error {
+  color: var(--danger);
+  background: var(--danger-weak);
+}
+
+html[data-ui='nocturne'] .live-square {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+  animation: nocturne-led 1.1s steps(2, jump-none) infinite;
+}
+
+html[data-ui='nocturne'] .tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+}
+
+html[data-ui='nocturne'] .trace-entry-button {
+  border-color: var(--rule-strong);
+  cursor: pointer;
+}
+
+html[data-ui='nocturne'] .trace-entry-button:hover {
+  border-color: var(--accent-signal);
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+html[data-ui='nocturne'] .message-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 110ms ease;
+}
+
+html[data-ui='nocturne'] .message:hover .message-actions,
+html[data-ui='nocturne'] .message:focus-within .message-actions {
+  opacity: 1;
+}
+
+html[data-ui='nocturne'] .message-copy-button,
+html[data-ui='nocturne'] .message-export-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 23px;
+  padding: 0 8px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+html[data-ui='nocturne'] .message-copy-button:hover:not(:disabled) {
+  border-color: var(--rule-strong);
+  background: var(--paper-soft);
+  color: var(--ink);
+}
+
+html[data-ui='nocturne'] .message-copy-button:disabled {
+  opacity: 0.4;
+}
+
+html[data-ui='nocturne'] .message-export-button {
+  border-color: color-mix(in srgb, var(--amber) 48%, transparent);
+  background: transparent;
+  color: var(--amber);
+}
+
+html[data-ui='nocturne'] .message-export-button:hover {
+  border-color: var(--amber);
+  background: var(--amber-weak);
+  color: var(--amber);
+}
+
+/* Assistant: a telemetry block with a signal conductor on its left edge. */
+html[data-ui='nocturne'] .message-assistant {
+  align-self: stretch;
+  width: 100%;
+  padding: 24px 26px 24px 32px;
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--accent-signal);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+  box-shadow: none;
+}
+
+html[data-ui='nocturne'] .message-section-tab {
+  position: absolute;
+  top: -1px;
+  left: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 19px;
+  padding: 0 7px;
+  transform: translateY(-100%);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--paper) !important;
+  color: var(--accent) !important;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+
+html[data-ui='nocturne'] .punch-hole {
+  position: absolute;
+  left: 10px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.55;
+  box-shadow: var(--led-glow);
+  animation: nocturne-led 4.2s ease-in-out infinite;
+}
+
+html[data-ui='nocturne'] .punch-hole-top {
+  top: 34px;
+}
+
+html[data-ui='nocturne'] .punch-hole-bottom {
+  bottom: 34px;
+  animation-delay: -2.1s;
+}
+
+html[data-ui='nocturne'] .message-content {
+  position: relative;
+  min-width: 0;
+}
+
+html[data-ui='nocturne'] .assistant-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  min-width: 0;
+}
+
+html[data-ui='nocturne'] .timeline-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+html[data-ui='nocturne'] .timeline-error {
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
+  border-left: 2px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--danger-weak);
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+html[data-ui='nocturne'] .plain-text {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.75;
+  letter-spacing: 0.005em;
+}
+
+/* User: an instruction pulse, right-aligned, with a narrow amber edge. */
+html[data-ui='nocturne'] .message-user {
+  align-self: flex-end;
+  width: fit-content;
+  max-width: min(78%, 620px);
+  margin-left: auto;
+  padding: 12px 16px 12px 18px;
+  border: 1px solid var(--rule);
+  border-right: 2px solid var(--amber);
+  border-radius: var(--radius);
+  background: var(--paper-deep);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+html[data-ui='nocturne'] .message-user .message-content {
+  padding-left: 17px;
+}
+
+html[data-ui='nocturne'] .message-user .message-content::before {
+  content: '>';
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--amber);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.85;
+}
+
+html[data-ui='nocturne'] .message-user .message-content .plain-text {
+  color: var(--ink);
+  font-size: 14.5px;
+}
+
+html[data-ui='nocturne'] .message-user .tool-chip {
+  border-color: var(--rule-strong);
+  color: var(--ink-soft);
+}
+
+html[data-ui='nocturne'] .message-user .message-copy-button {
+  border-color: var(--rule);
+  background: var(--paper-soft);
+  color: var(--ink-soft);
+}
+
+html[data-ui='nocturne'] .message-user .message-copy-button:hover {
+  border-color: var(--rule-strong);
+  background: var(--paper-soft);
+  color: var(--ink);
+}
+
+/* ---- Markdown ------------------------------------------------------------ */
+
+html[data-ui='nocturne'] .markdown-body {
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15.5px;
+  line-height: 1.8;
+  letter-spacing: 0.005em;
+  overflow-wrap: anywhere;
+}
+
+html[data-ui='nocturne'] .markdown-body p,
+html[data-ui='nocturne'] .markdown-body ul,
+html[data-ui='nocturne'] .markdown-body ol,
+html[data-ui='nocturne'] .markdown-body blockquote,
+html[data-ui='nocturne'] .markdown-body table,
+html[data-ui='nocturne'] .markdown-body pre {
+  max-width: var(--measure);
+  margin: 0 0 0.9rem;
+}
+
+html[data-ui='nocturne'] .markdown-body h1,
+html[data-ui='nocturne'] .markdown-body h2,
+html[data-ui='nocturne'] .markdown-body h3,
+html[data-ui='nocturne'] .markdown-body h4,
+html[data-ui='nocturne'] .markdown-body h5,
+html[data-ui='nocturne'] .markdown-body h6 {
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.018em;
+}
+
+html[data-ui='nocturne'] .markdown-body h1 {
+  margin: 1.5em 0 0.55em;
+  font-size: 1.55rem;
+  letter-spacing: -0.03em;
+}
+
+html[data-ui='nocturne'] .markdown-body h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 1.6em 0 0.6em;
+  padding-top: 0.55em;
+  border-top: 1px solid var(--rule);
+  font-size: 1.24rem;
+}
+
+html[data-ui='nocturne'] .markdown-body h2::before {
+  content: '';
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 4px;
+  height: 13px;
+  background: var(--accent);
+}
+
+html[data-ui='nocturne'] .markdown-body h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 1.35em 0 0.5em;
+  font-size: 1.06rem;
+}
+
+html[data-ui='nocturne'] .markdown-body h3::before {
+  content: '';
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  background: var(--amber);
+}
+
+html[data-ui='nocturne'] .markdown-body h4 {
+  margin: 1.15em 0 0.42em;
+  font-size: 0.98rem;
+}
+
+html[data-ui='nocturne'] .markdown-body h5,
+html[data-ui='nocturne'] .markdown-body h6 {
+  margin: 1em 0 0.4em;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+
+html[data-ui='nocturne'] .markdown-body a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-signal);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+html[data-ui='nocturne'] .markdown-body a:hover {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
+}
+
+html[data-ui='nocturne'] .markdown-body strong {
+  color: var(--ink);
+  font-weight: 640;
+}
+
+html[data-ui='nocturne'] .markdown-body ul,
+html[data-ui='nocturne'] .markdown-body ol {
+  padding-left: 1.3rem;
+}
+
+html[data-ui='nocturne'] .markdown-body li {
+  margin: 0.22rem 0;
+  line-height: 1.78;
+}
+
+html[data-ui='nocturne'] .markdown-body li::marker {
+  color: var(--accent);
+}
+
+html[data-ui='nocturne'] .markdown-body blockquote {
+  padding: 2px 0 2px 14px;
+  border: 0;
+  border-left: 2px solid var(--accent-signal);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+html[data-ui='nocturne'] .markdown-body hr {
+  height: 1px;
+  margin: 1.5rem 0;
+  border: 0;
+  background: var(--rule);
+}
+
+html[data-ui='nocturne'] .markdown-body :not(pre) > code {
+  padding: 0.1em 0.36em;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-deep);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  font-weight: 450;
+}
+
+html[data-ui='nocturne'] .markdown-body pre {
+  max-width: 100%;
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid var(--code-line);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  color: var(--code-ink);
+  box-shadow: none;
+}
+
+html[data-ui='nocturne'] .markdown-body pre code {
+  color: var(--code-ink);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.7;
+  white-space: pre;
+}
+
+html[data-ui='nocturne'] .markdown-table-wrapper {
+  position: relative;
+  max-width: 100%;
+  margin: 1rem 0 1.2rem;
+  overflow-x: auto;
+  border-radius: var(--radius);
+}
+
+html[data-ui='nocturne'] .markdown-body table {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  border: 1px solid var(--rule);
+  border-collapse: collapse;
+  background: var(--paper-soft);
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+html[data-ui='nocturne'] .markdown-body thead {
+  background: transparent;
+}
+
+html[data-ui='nocturne'] .markdown-body th {
+  padding: 8px 11px;
+  border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule-strong);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+html[data-ui='nocturne'] .markdown-body td {
+  padding: 8px 11px;
+  border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-soft);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+html[data-ui='nocturne'] .markdown-body tr > *:last-child {
+  border-right: 0;
+}
+
+html[data-ui='nocturne'] .markdown-body tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+html[data-ui='nocturne'] .markdown-body tbody tr:nth-child(even) {
+  background: transparent;
+}
+
+html[data-ui='nocturne'] .markdown-body tbody tr:hover {
+  background: var(--accent-weak);
+}
+
+html[data-ui='nocturne'] .markdown-table-cell {
+  min-width: 0;
+  max-width: 280px;
+}
+
+html[data-ui='nocturne'] .markdown-table-cell-text {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+html[data-ui='nocturne'] .markdown-table-cell-copied {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: 1;
+  padding: 2px 5px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+html[data-ui='nocturne'] .markdown-table-download-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+  opacity: 0;
+  transition: opacity 110ms ease, background 110ms ease;
+}
+
+html[data-ui='nocturne'] .markdown-table-wrapper:hover .markdown-table-download-button,
+html[data-ui='nocturne'] .markdown-table-download-button:focus-visible {
+  opacity: 1;
+}
+
+html[data-ui='nocturne'] .markdown-table-download-button:hover {
+  border-color: var(--accent-signal);
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+/* ---- Code · readout windows --------------------------------------------- */
+
+html[data-ui='nocturne'] .code-block-shell {
+  position: relative;
+  margin: 1rem 0 1.2rem;
+  overflow: hidden;
+  border: 1px solid var(--code-line);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  box-shadow: none;
+}
+
+html[data-ui='nocturne'] .code-block-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px 7px 14px;
+  border-bottom: 1px solid var(--code-line);
+  background: var(--code-bar);
+}
+
+html[data-ui='nocturne'] .code-block-language {
+  color: var(--accent-signal);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+html[data-ui='nocturne'] .code-block-copy-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid var(--code-line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--code-ink);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+html[data-ui='nocturne'] .code-block-copy-button:hover {
+  border-color: var(--accent-signal);
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+html[data-ui='nocturne'] .code-block-shell code {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--code-ink) !important;
+  font-family: var(--font-mono) !important;
+  font-weight: inherit;
+}
+
+html[data-ui='nocturne'] .idea-code-block {
+  background: transparent !important;
+}
+
+html[data-ui='nocturne'] .hljs {
+  color: var(--code-ink) !important;
+  background: transparent !important;
+}
+
+html[data-ui='nocturne'] .hljs-keyword,
+html[data-ui='nocturne'] .hljs-literal {
+  color: var(--amber) !important;
+}
+
+html[data-ui='nocturne'] .hljs-string,
+html[data-ui='nocturne'] .hljs-regexp,
+html[data-ui='nocturne'] .hljs-addition {
+  color: var(--accent) !important;
+  background: transparent !important;
+}
+
+html[data-ui='nocturne'] .hljs-comment,
+html[data-ui='nocturne'] .hljs-doctag,
+html[data-ui='nocturne'] .hljs-tag {
+  color: #6f8982 !important;
+  font-style: italic;
+}
+
+html[data-ui='nocturne'] .hljs-number,
+html[data-ui='nocturne'] .hljs-symbol,
+html[data-ui='nocturne'] .hljs-bullet {
+  color: #e8a06c !important;
+}
+
+html[data-ui='nocturne'] .hljs-built_in,
+html[data-ui='nocturne'] .hljs-type,
+html[data-ui='nocturne'] .hljs-attr,
+html[data-ui='nocturne'] .hljs-attribute {
+  color: #8fc7d8 !important;
+}
+
+html[data-ui='nocturne'] .hljs-title,
+html[data-ui='nocturne'] .hljs-section,
+html[data-ui='nocturne'] .hljs-name {
+  color: #d9b8a6 !important;
+}
+
+html[data-ui='nocturne'] .hljs-variable,
+html[data-ui='nocturne'] .hljs-template-variable {
+  color: var(--code-ink) !important;
+}
+
+html[data-ui='nocturne'] .hljs-meta {
+  color: #9fb4ac !important;
+}
+
+html[data-ui='nocturne'] .hljs-deletion {
+  color: var(--danger) !important;
+  background: rgba(255, 107, 87, 0.12) !important;
+}
+
+html[data-ui='nocturne'] .mermaid-diagram {
+  position: relative;
+  margin: 1rem 0 1.2rem;
+  padding: 24px 20px 20px;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+  text-align: center;
+}
+
+html[data-ui='nocturne'] .mermaid-download-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+html[data-ui='nocturne'] .mermaid-download-button:hover {
+  border-color: var(--accent-signal);
+  color: var(--accent);
+}
+
+html[data-ui='nocturne'] .mermaid-download-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  display: grid;
+  min-width: 128px;
+  padding: 4px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+  box-shadow: var(--shadow-lift);
+}
+
+html[data-ui='nocturne'] .mermaid-download-menu button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-align: left;
+}
+
+html[data-ui='nocturne'] .mermaid-download-menu button:hover {
+  background: var(--paper-deep);
+}
+
+html[data-ui='nocturne'] .mermaid-download-menu-divider {
+  height: 1px;
+  margin: 3px 4px;
+  background: var(--rule);
+}
+
+html[data-ui='nocturne'] .mermaid-fallback {
+  margin: 1rem 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border: 1px solid var(--code-line);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+/* ---- Tool cards · terminal fold panels ---------------------------------- */
+
+html[data-ui='nocturne'] .tool-card {
+  margin: 2px 0;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  box-shadow: none;
+}
+
+html[data-ui='nocturne'] .tool-card[open],
+html[data-ui='nocturne'] .tool-card-open {
+  border-color: var(--rule-strong);
+  background: var(--paper-deep);
+  box-shadow: none;
+}
+
+html[data-ui='nocturne'] .tool-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+html[data-ui='nocturne'] .tool-card-header:hover {
+  background: var(--accent-weak);
+}
+
+html[data-ui='nocturne'] .tool-card-header::-webkit-details-marker {
+  display: none;
+}
+
+html[data-ui='nocturne'] .tool-card-chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  transition: transform 120ms ease;
+}
+
+html[data-ui='nocturne'] .tool-card[open] .tool-card-chevron {
+  transform: rotate(90deg);
+}
+
+html[data-ui='nocturne'] .tool-card-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+html[data-ui='nocturne'] .tool-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  line-height: 1.1;
+}
+
+html[data-ui='nocturne'] .tool-status-calling {
+  color: var(--amber);
+  background: var(--amber-weak);
+}
+
+html[data-ui='nocturne'] .tool-status-done {
+  color: var(--accent);
+  background: var(--accent-weak);
+}
+
+html[data-ui='nocturne'] .tool-card-content {
+  display: grid;
+  gap: 11px;
+  padding: 10px 12px 12px;
+  margin-top: 0;
+  border-top: 1px solid var(--rule);
+  animation: nocturne-fold 120ms ease;
+}
+
+html[data-ui='nocturne'] .tool-card-block {
+  display: grid;
+  gap: 5px;
+}
+
+html[data-ui='nocturne'] .tool-card-label {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+html[data-ui='nocturne'] .tool-payload {
+  max-height: 260px;
+  margin: 0;
+  padding: 9px 11px;
+  overflow: auto;
+  border: 1px solid var(--code-line);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+html[data-ui='nocturne'] .tool-trace-result {
+  max-height: 360px;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+}
+
+html[data-ui='nocturne'] .tool-trace-result.markdown-body {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+html[data-ui='nocturne'] .tool-trace-result.markdown-body h1,
+html[data-ui='nocturne'] .tool-trace-result.markdown-body h2,
+html[data-ui='nocturne'] .tool-trace-result.markdown-body h3 {
+  margin-top: 1em;
+}
+
+html[data-ui='nocturne'] .tool-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+/* ---- Empty · boot / ready panel ----------------------------------------- */
+
+html[data-ui='nocturne'] .empty-state {
+  width: min(900px, calc(100% - 88px));
+  margin: 0 auto;
+  padding: 10px 0 40px;
+}
+
+html[data-ui='nocturne'] .empty-sheet {
+  position: relative;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 36px 46px 24px 52px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+  box-shadow: none;
+}
+
+html[data-ui='nocturne'] .empty-sheet::before {
+  content: '';
+  position: absolute;
+  inset: 10px;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--accent-signal), var(--accent-signal)) left top / 16px 1px no-repeat,
+    linear-gradient(var(--accent-signal), var(--accent-signal)) left top / 1px 16px no-repeat,
+    linear-gradient(var(--accent-signal), var(--accent-signal)) right top / 16px 1px no-repeat,
+    linear-gradient(var(--accent-signal), var(--accent-signal)) right top / 1px 16px no-repeat,
+    linear-gradient(var(--accent-signal), var(--accent-signal)) left bottom / 16px 1px no-repeat,
+    linear-gradient(var(--accent-signal), var(--accent-signal)) left bottom / 1px 16px no-repeat,
+    linear-gradient(var(--accent-signal), var(--accent-signal)) right bottom / 16px 1px no-repeat,
+    linear-gradient(var(--accent-signal), var(--accent-signal)) right bottom / 1px 16px no-repeat;
+  background-repeat: no-repeat;
+  opacity: 0.55;
+}
+
+html[data-ui='nocturne'] .empty-sheet::after {
+  content: '';
+  position: absolute;
+  top: 8%;
+  right: 0;
+  left: 0;
+  z-index: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-signal), transparent);
+  opacity: 0.3;
+  pointer-events: none;
+  animation: nocturne-sweep 11s linear infinite;
+}
+
+html[data-ui='nocturne'] .empty-heading,
+html[data-ui='nocturne'] .empty-index,
+html[data-ui='nocturne'] .empty-start {
+  position: relative;
+  z-index: 1;
+}
+
+html[data-ui='nocturne'] .empty-tab {
+  position: absolute;
+  top: -1px;
+  left: 28px;
+  z-index: 2;
+  transform: translateY(-100%);
+  padding: 2px 9px;
+  border: 1px solid var(--rule-strong);
+  border-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--paper) !important;
+  color: var(--accent) !important;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  line-height: 1.5;
+}
+
+html[data-ui='nocturne'] .empty-punch {
+  position: absolute;
+  left: 22px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.6;
+  box-shadow: var(--led-glow);
+  animation: nocturne-led 4.2s ease-in-out infinite;
+}
+
+html[data-ui='nocturne'] .empty-punch-top {
+  top: 46px;
+}
+
+html[data-ui='nocturne'] .empty-punch-bottom {
+  bottom: 46px;
+  animation-delay: -2.1s;
+}
+
+html[data-ui='nocturne'] .empty-heading h2 {
+  max-width: 20ch;
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: clamp(25px, 2.5vw, 31px);
+  font-weight: 660;
+  letter-spacing: -0.032em;
+  line-height: 1.22;
+  text-wrap: balance;
+}
+
+html[data-ui='nocturne'] .empty-heading p {
+  max-width: 58ch;
+  margin: 0 0 20px;
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 14.5px;
+  line-height: 1.8;
+}
+
+html[data-ui='nocturne'] .empty-index {
+  display: grid;
+  border-top: 1px solid var(--rule);
+}
+
+html[data-ui='nocturne'] .empty-index-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+html[data-ui='nocturne'] .empty-index-row:last-child {
+  border-bottom: 0;
+}
+
+html[data-ui='nocturne'] .empty-index-tab {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: transparent !important;
+  color: var(--accent) !important;
+}
+
+html[data-ui='nocturne'] .empty-index-copy h3 {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  font-weight: 640;
+  letter-spacing: 0.005em;
+}
+
+html[data-ui='nocturne'] .empty-index-copy p {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+html[data-ui='nocturne'] .empty-start {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  line-height: 1.7;
+}
+
+/* ---- Composer · instruction line ---------------------------------------- */
+
+html[data-ui='nocturne'] .composer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 6;
+  padding: 14px 0 18px;
+  border-top: 1px solid var(--rule);
+  background: var(--composer-bg);
+  pointer-events: none;
+}
+
+html[data-ui='nocturne'] .composer-shell {
+  position: relative;
+  width: min(900px, calc(100% - 88px));
+  margin: 0 auto;
+  padding: 12px 16px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--inset);
+  box-shadow: none;
+  pointer-events: auto;
+}
+
+html[data-ui='nocturne'] .composer-shell::before,
+html[data-ui='nocturne'] .composer-shell::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--led-glow);
+  opacity: 0.8;
+}
+
+html[data-ui='nocturne'] .composer-shell::before {
+  left: 14px;
+}
+
+html[data-ui='nocturne'] .composer-shell::after {
+  right: 14px;
+  background: var(--amber);
+  box-shadow: none;
+}
+
+html[data-ui='nocturne'] .composer-shell:focus-within {
+  border-color: var(--accent-signal);
+  box-shadow: inset 0 0 0 1px var(--accent-weak);
+}
+
+html[data-ui='nocturne'] .composer-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+html[data-ui='nocturne'] .composer-label {
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--amber) 44%, transparent);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--amber);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  line-height: 1.5;
+}
+
+html[data-ui='nocturne'] .composer-label::before {
+  content: '> ';
+  color: var(--accent);
+}
+
+html[data-ui='nocturne'] .composer-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+html[data-ui='nocturne'] .composer-hint::before {
+  content: '';
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.7;
+}
+
+html[data-ui='nocturne'] .composer textarea {
+  width: 100%;
+  height: 50px;
+  min-height: 50px;
+  padding: 4px 2px;
+  resize: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.6;
+  outline: none;
+  transition: height 120ms ease, min-height 120ms ease;
+}
+
+html[data-ui='nocturne'] .composer textarea::placeholder {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+html[data-ui='nocturne'] .composer textarea:focus-visible {
+  outline: none;
+}
+
+html[data-ui='nocturne'] .composer-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+}
+
+html[data-ui='nocturne'] .composer-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+html[data-ui='nocturne'] .cache-metrics,
+html[data-ui='nocturne'] .inline-metrics {
+  white-space: nowrap;
+}
+
+html[data-ui='nocturne'] .actions-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+html[data-ui='nocturne'] .icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+  transition: background 110ms ease, border-color 110ms ease, color 110ms ease;
+}
+
+html[data-ui='nocturne'] .icon-button:hover:not(:disabled) {
+  border-color: var(--rule-strong);
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+html[data-ui='nocturne'] .icon-button:disabled {
+  opacity: 0.4;
+}
+
+html[data-ui='nocturne'] .send-button {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+html[data-ui='nocturne'] .send-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 80%, white);
+  background: color-mix(in srgb, var(--accent) 88%, white);
+  color: var(--on-accent);
+}
+
+html[data-ui='nocturne'] .send-button:disabled {
+  border-color: var(--rule);
+  background: var(--paper-deep);
+  color: var(--ink-faint);
+}
+
+html[data-ui='nocturne'] .stop-button {
+  border-color: color-mix(in srgb, var(--danger) 60%, transparent);
+  background: var(--danger-weak);
+  color: var(--danger);
+}
+
+html[data-ui='nocturne'] .stop-button:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+  color: var(--danger);
+}
+
+html[data-ui='nocturne'] .scroll-button {
+  border-color: var(--rule);
+  background: transparent;
+}
+
+html[data-ui='nocturne'] .composer-compact .composer-shell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+}
+
+html[data-ui='nocturne'] .composer-compact .composer-topline,
+html[data-ui='nocturne'] .composer-compact .composer-metrics {
+  display: none;
+}
+
+html[data-ui='nocturne'] .composer-compact textarea {
+  flex: 1 1 auto;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  line-height: 34px;
+}
+
+html[data-ui='nocturne'] .composer-compact .composer-footer {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+}
+
+html[data-ui='nocturne'] .composer-compact .icon-button {
+  width: 30px;
+  height: 30px;
+}
+
+/* ---- Fore-edge elevator -------------------------------------------------- */
+
+html[data-ui='nocturne'] .elevator-nav {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-height: 72vh;
+  padding: 5px 3px;
+  transform: translateY(-50%);
+}
+
+html[data-ui='nocturne'] .elevator-nav::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--rule);
+}
+
+html[data-ui='nocturne'] .elevator-rule {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 16px;
+  background: var(--rule-strong);
+}
+
+html[data-ui='nocturne'] .elevator-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 5px 2px 2px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+html[data-ui='nocturne'] .elevator-list::-webkit-scrollbar {
+  display: none;
+}
+
+html[data-ui='nocturne'] .elevator-slot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 28px;
+}
+
+html[data-ui='nocturne'] .elevator-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  width: 28px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+}
+
+html[data-ui='nocturne'] .elevator-item {
+  --section-hue: var(--accent) !important;
+}
+
+html[data-ui='nocturne'] .elevator-tab {
+  display: block;
+  width: 10px;
+  height: var(--tab-height, 9px);
+  border-radius: 0;
+  background: var(--accent-mid);
+  transition: width 120ms ease, background 120ms ease;
+}
+
+html[data-ui='nocturne'] .elevator-item:hover .elevator-tab {
+  width: 18px;
+  background: var(--accent-signal);
+}
+
+html[data-ui='nocturne'] .elevator-item-active .elevator-tab {
+  width: 20px;
+  height: calc(var(--tab-height, 9px) + 2px);
+  background: var(--accent);
+  box-shadow: none;
+}
+
+html[data-ui='nocturne'] .elevator-export-mark {
+  flex: 0 0 auto;
+  width: 4px;
+  height: 4px;
+  border: 1px solid var(--amber);
+  background: transparent;
+}
+
+/* ---- Skeletons ----------------------------------------------------------- */
+
+html[data-ui='nocturne'] .chat-skeleton {
+  width: min(900px, calc(100% - 88px));
+  margin: 0 auto;
+}
+
+html[data-ui='nocturne'] .chat-skeleton-hint {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+}
+
+html[data-ui='nocturne'] .chat-skeleton-spinner {
+  border-color: var(--rule-strong);
+  border-top-color: var(--accent);
+}
+
+html[data-ui='nocturne'] .chat-skeleton-leaf {
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--accent-signal);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+  box-shadow: none;
+}
+
+html[data-ui='nocturne'] .chat-skeleton-tab {
+  background: var(--accent-mid);
+  border-radius: var(--radius);
+}
+
+html[data-ui='nocturne'] .chat-skeleton-line {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  border-radius: var(--radius);
+}
+
+html[data-ui='nocturne'] .chat-skeleton-line-title {
+  background: color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+/* ---- Modals -------------------------------------------------------------- */
+
+html[data-ui='nocturne'] .modal-backdrop {
+  background: rgba(2, 7, 10, 0.74);
+  backdrop-filter: none;
+}
+
+html[data-ui='nocturne'][data-theme='light'] .modal-backdrop {
+  background: rgba(13, 34, 32, 0.4);
+}
+
+html[data-ui='nocturne'] .modal-card {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+  color: var(--ink);
+  box-shadow: var(--shadow-lift);
+}
+
+html[data-ui='nocturne'] .modal-tab {
+  border: 1px solid var(--rule-strong);
+  border-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--paper-soft) !important;
+  color: var(--accent) !important;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+
+html[data-ui='nocturne'] .modal-header {
+  border-bottom: 1px solid var(--rule);
+}
+
+html[data-ui='nocturne'] .modal-header h2 {
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 21px;
+  font-weight: 660;
+  letter-spacing: -0.025em;
+}
+
+html[data-ui='nocturne'] .modal-header p {
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+html[data-ui='nocturne'] .modal-footer {
+  border-top: 1px solid var(--rule);
+}
+
+html[data-ui='nocturne'] .primary-button {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+html[data-ui='nocturne'] .primary-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 80%, white);
+  background: color-mix(in srgb, var(--accent) 88%, white);
+}
+
+html[data-ui='nocturne'] .ghost-button {
+  border-color: var(--rule-strong);
+  background: transparent;
+  color: var(--ink);
+}
+
+html[data-ui='nocturne'] .ghost-button:hover:not(:disabled) {
+  background: var(--paper-deep);
+}
+
+html[data-ui='nocturne'] .danger-button {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--on-danger);
+}
+
+html[data-ui='nocturne'] .danger-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 82%, black);
+  background: color-mix(in srgb, var(--danger) 82%, black);
+}
+
+html[data-ui='nocturne'] .primary-button:disabled {
+  border-color: var(--rule);
+  background: var(--paper-deep);
+  color: var(--ink-faint);
+}
+
+/* ---- Motion -------------------------------------------------------------- */
+
+@keyframes nocturne-led {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes nocturne-sweep {
+  0% {
+    top: 6%;
+    opacity: 0;
+  }
+
+  12% {
+    opacity: 0.3;
+  }
+
+  88% {
+    opacity: 0.3;
+  }
+
+  100% {
+    top: 94%;
+    opacity: 0;
+  }
+}
+
+@keyframes nocturne-fold {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+html[data-ui='nocturne'] .new-session-button,
+html[data-ui='nocturne'] .session-item-main,
+html[data-ui='nocturne'] .icon-button,
+html[data-ui='nocturne'] .message-actions,
+html[data-ui='nocturne'] .tool-card-chevron {
+  transition-duration: 110ms;
+}
+
+
+/* ---- Telemetry legibility floor ----------------------------------------- */
+
+html[data-ui='nocturne'] .brand-sub,
+html[data-ui='nocturne'] .session-list-heading,
+html[data-ui='nocturne'] .session-item-meta,
+html[data-ui='nocturne'] .account-kind,
+html[data-ui='nocturne'] .account-plan,
+html[data-ui='nocturne'] .panel-status-row,
+html[data-ui='nocturne'] .logout-button,
+html[data-ui='nocturne'] .stage-subline,
+html[data-ui='nocturne'] .run-stamp,
+html[data-ui='nocturne'] .appearance-trigger,
+html[data-ui='nocturne'] .message-history-loader,
+html[data-ui='nocturne'] .message-meta,
+html[data-ui='nocturne'] .message-role-stamp,
+html[data-ui='nocturne'] .stream-stamp,
+html[data-ui='nocturne'] .tool-chip,
+html[data-ui='nocturne'] .tool-status,
+html[data-ui='nocturne'] .tool-card-name,
+html[data-ui='nocturne'] .tool-card-label,
+html[data-ui='nocturne'] .tool-pending,
+html[data-ui='nocturne'] .empty-tab,
+html[data-ui='nocturne'] .empty-start,
+html[data-ui='nocturne'] .composer-label,
+html[data-ui='nocturne'] .composer-hint,
+html[data-ui='nocturne'] .composer-metrics {
+  font-size: 11px;
+}
+
+html[data-ui='nocturne'] .code-block-language,
+html[data-ui='nocturne'] .code-block-copy-button {
+  font-size: 10.5px;
+}
+
+html[data-ui='nocturne'] .composer textarea::placeholder {
+  font-size: 12.5px;
+}
+
+/* ---- Responsive ---------------------------------------------------------- */
+
+@media (max-width: 1180px) and (min-width: 901px) {
+  html[data-ui='nocturne'] .app-shell {
+    grid-template-columns: minmax(0, 1fr) 268px;
+  }
+
+  html[data-ui='nocturne'] .message-list,
+  html[data-ui='nocturne'] .empty-state,
+  html[data-ui='nocturne'] .chat-skeleton {
+    width: min(900px, calc(100% - 56px));
+  }
+
+  html[data-ui='nocturne'] .conversation-scroll.has-elevator {
+    padding-right: 0;
+  }
+
+  html[data-ui='nocturne'] .composer-shell {
+    width: min(900px, calc(100% - 56px));
+  }
+
+  html[data-ui='nocturne'] .stage-bar {
+    padding-right: 28px;
+    padding-left: 28px;
+  }
+}
+
+@media (max-width: 900px) {
+  html[data-ui='nocturne'] body,
+  html[data-ui='nocturne'] #root {
+    overflow: auto;
+  }
+
+  html[data-ui='nocturne'] .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+    background: var(--paper);
+  }
+
+  html[data-ui='nocturne'] .chat-stage {
+    grid-column: auto;
+    grid-row: auto;
+    height: 100vh;
+    min-height: 100vh;
+  }
+
+  /* The same rail, now a right-hand drawer. */
+  html[data-ui='nocturne'] .index-board {
+    grid-column: auto;
+    grid-row: auto;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: auto;
+    z-index: 50;
+    width: min(320px, 86vw);
+    height: 100%;
+    border-right: 0;
+    border-left: 1px solid var(--case-line);
+    transform: translateX(102%);
+    transition: transform 150ms cubic-bezier(0.2, 0.7, 0.2, 1);
+    box-shadow: -24px 0 54px rgba(0, 0, 0, 0.42);
+  }
+
+  html[data-ui='nocturne'][data-theme='light'] .index-board {
+    box-shadow: -24px 0 54px rgba(13, 34, 32, 0.18);
+  }
+
+  html[data-ui='nocturne'] .app-shell.sidebar-open .index-board {
+    transform: translateX(0);
+  }
+
+  html[data-ui='nocturne'] .session-panel {
+    height: 100%;
+    padding: 14px 14px 12px;
+  }
+
+  html[data-ui='nocturne'] .panel-close-button {
+    display: grid;
+  }
+
+  html[data-ui='nocturne'] .drawer-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    padding: 0;
+    border: 0;
+    background: rgba(2, 7, 10, 0.66);
+    backdrop-filter: none;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease;
+  }
+
+  html[data-ui='nocturne'][data-theme='light'] .drawer-scrim {
+    background: rgba(13, 34, 32, 0.36);
+  }
+
+  html[data-ui='nocturne'] .app-shell.sidebar-open .drawer-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  html[data-ui='nocturne'] .mobile-menu-button {
+    display: grid;
+  }
+
+  html[data-ui='nocturne'] .stage-bar {
+    gap: 10px;
+    min-height: 54px;
+    padding: 9px 12px;
+  }
+
+  html[data-ui='nocturne'] .stage-title {
+    font-size: 14px;
+  }
+
+  html[data-ui='nocturne'] .stage-subline {
+    display: none;
+  }
+
+  html[data-ui='nocturne'] .stage-stamps {
+    display: none;
+  }
+
+  html[data-ui='nocturne'] .stage-identity {
+    gap: 2px;
+  }
+
+  html[data-ui='nocturne'] .appearance-trigger {
+    height: 30px;
+  }
+
+  html[data-ui='nocturne'] .conversation-scroll {
+    padding: 20px 0 224px;
+  }
+
+  html[data-ui='nocturne'] .conversation-scroll.has-elevator {
+    padding-right: 0;
+  }
+
+  html[data-ui='nocturne'] .message-list,
+  html[data-ui='nocturne'] .empty-state,
+  html[data-ui='nocturne'] .chat-skeleton {
+    width: calc(100% - 28px);
+  }
+
+  html[data-ui='nocturne'] .message-list {
+    gap: 24px;
+  }
+
+  html[data-ui='nocturne'] .message-assistant {
+    padding: 20px 16px 20px 26px;
+  }
+
+  html[data-ui='nocturne'] .message-section-tab {
+    left: 14px;
+  }
+
+  html[data-ui='nocturne'] .punch-hole {
+    left: 7px;
+  }
+
+  html[data-ui='nocturne'] .message-user {
+    max-width: 92%;
+  }
+
+  html[data-ui='nocturne'] .empty-sheet {
+    padding: 32px 22px 22px 38px;
+  }
+
+  html[data-ui='nocturne'] .empty-heading h2 {
+    max-width: 22ch;
+    font-size: 26px;
+  }
+
+  html[data-ui='nocturne'] .empty-punch {
+    left: 15px;
+  }
+
+  html[data-ui='nocturne'] .empty-tab {
+    left: 20px;
+  }
+
+  html[data-ui='nocturne'] .composer {
+    padding: 12px 0 10px;
+  }
+
+  html[data-ui='nocturne'] .composer-shell {
+    width: calc(100% - 20px);
+    padding: 11px 13px 9px;
+  }
+
+  html[data-ui='nocturne'] .composer-shell::before {
+    left: 12px;
+  }
+
+  html[data-ui='nocturne'] .composer-shell::after {
+    right: 12px;
+  }
+
+  html[data-ui='nocturne'] .composer-footer {
+    align-items: flex-end;
+  }
+
+  html[data-ui='nocturne'] .composer-metrics {
+    gap: 4px 8px;
+  }
+
+  html[data-ui='nocturne'] .cache-metrics {
+    display: none;
+  }
+
+  html[data-ui='nocturne'] .elevator-nav {
+    display: none;
+  }
+
+  html[data-ui='nocturne'] .modal-backdrop {
+    place-items: start center;
+    padding: 34px 12px 12px;
+  }
+
+  html[data-ui='nocturne'] .modal-card {
+    padding: 24px 20px 20px;
+  }
+
+  html[data-ui='nocturne'] .profile-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  html[data-ui='nocturne'] .stage-title {
+    font-size: 13px;
+  }
+
+  html[data-ui='nocturne'] .stage-section-tab {
+    min-width: 30px;
+    height: 18px;
+    font-size: 8.5px;
+  }
+
+  html[data-ui='nocturne'] .appearance-trigger {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  html[data-ui='nocturne'] .message-assistant {
+    padding: 18px 13px 18px 24px;
+  }
+
+  html[data-ui='nocturne'] .message-section-tab {
+    left: 12px;
+    min-width: 32px;
+    height: 18px;
+    padding: 0 6px;
+    font-size: 8.5px;
+  }
+
+  html[data-ui='nocturne'] .message-actions {
+    top: 8px;
+    right: 8px;
+    opacity: 1;
+  }
+
+  html[data-ui='nocturne'] .message-copy-button {
+    width: 25px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  html[data-ui='nocturne'] .message-export-button {
+    padding: 0 6px;
+  }
+
+  html[data-ui='nocturne'] .markdown-body {
+    font-size: 15px;
+    line-height: 1.78;
+  }
+
+  html[data-ui='nocturne'] .markdown-body h2 {
+    font-size: 1.16rem;
+  }
+
+  html[data-ui='nocturne'] .markdown-body h3 {
+    font-size: 1rem;
+  }
+
+  html[data-ui='nocturne'] .empty-sheet {
+    padding: 28px 16px 20px 30px;
+  }
+
+  html[data-ui='nocturne'] .empty-heading h2 {
+    font-size: 23px;
+  }
+
+  html[data-ui='nocturne'] .empty-heading p {
+    font-size: 13.5px;
+  }
+
+  html[data-ui='nocturne'] .empty-index-row {
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 12px;
+    padding: 10px 0;
+  }
+
+  html[data-ui='nocturne'] .empty-index-tab {
+    width: 26px;
+    height: 26px;
+  }
+
+  html[data-ui='nocturne'] .empty-punch {
+    left: 11px;
+  }
+
+  html[data-ui='nocturne'] .empty-tab {
+    left: 16px;
+  }
+
+  html[data-ui='nocturne'] .composer-label {
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 16px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 0;
+    letter-spacing: 0;
+  }
+
+  html[data-ui='nocturne'] .composer-label::before {
+    content: '>';
+    color: var(--amber);
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  html[data-ui='nocturne'] .composer-hint {
+    font-size: 9px;
+  }
+
+  html[data-ui='nocturne'] .modal-header h2 {
+    font-size: 19px;
+  }
+}
+
+/* ---- Reduced motion ------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui='nocturne'] .stage-health-online .status-dot,
+  html[data-ui='nocturne'] .stage-health-checking .status-dot,
+  html[data-ui='nocturne'] .health-online,
+  html[data-ui='nocturne'] .health-checking,
+  html[data-ui='nocturne'] .punch-hole,
+  html[data-ui='nocturne'] .empty-punch,
+  html[data-ui='nocturne'] .live-square,
+  html[data-ui='nocturne'] .run-stamp-live::before {
+    animation: none;
+    opacity: 1;
+  }
+
+  html[data-ui='nocturne'] .empty-sheet::after {
+    display: none;
+    animation: none;
+  }
+
+  html[data-ui='nocturne'] .tool-card-content {
+    animation: none;
+  }
+
+  html[data-ui='nocturne'] .index-board,
+  html[data-ui='nocturne'] .drawer-scrim {
+    transition: none;
+  }
 }

@@ -1,18 +1,2295 @@
 /* ==========================================================================
    Design: Schematic Works  (html[data-ui='schematic'])
    --------------------------------------------------------------------------
-   OWNERSHIP: the Schematic agent owns this file. Do not edit other files.
-   CONTRACT:
-   - Every selector must be scoped under html[data-ui='schematic'] (directly or
-     via a descendant), so the design cannot leak into other worlds.
-   - Style BOTH html[data-ui='schematic'][data-theme='light'] and
-     html[data-ui='schematic'][data-theme='dark'].
-   - The shell DOM is fixed. Re-flow it with grid/flex/order/position; you may
-     use pseudo-elements for decoration.
-   - Keep .appearance-control (the switcher) usable and visible in both modes.
+   A drafting table: drawing index on the left, a title-block stage bar, and
+   sheets on a very faint blueprint grid. Orange is reserved for redline
+   annotations (user notes, callout numbers, the live stamp); blue carries
+   construction lines and links. Square corners; no resting shadows.
    ========================================================================== */
 
 html[data-ui='schematic'] {
-  --paper: #eef1f4;
-  --ink: #12263a;
+  /* light */
+  --paper: #e8edf1;
+  --paper-soft: #f8fafb;
+  --paper-deep: #dfe8ee;
+  --acetate: rgba(248, 250, 251, 0.97);
+  --case: #f1f5f8;
+  --case-raised: #f8fafb;
+  --case-line: rgba(16, 42, 60, 0.16);
+  --case-ink: #102a3c;
+  --case-soft: #486274;
+  --case-faint: #6c8292;
+  --ink: #102a3c;
+  --ink-soft: #486274;
+  --ink-faint: #6c8292;
+  --rule: rgba(16, 42, 60, 0.2);
+  --rule-strong: rgba(16, 42, 60, 0.42);
+  --accent: #d9662b;
+  --on-accent: #fdf7f2;
+  --blue: #1d6a96;
+  --orange: #d9662b;
+  --green: #3c7a58;
+  --section-oxide: #d9662b;
+  --on-oxide: #fdf7f2;
+  --section-chrome: #1d6a96;
+  --on-chrome: #f4fafd;
+  --section-grass: #3c7a58;
+  --on-grass: #f4fbf7;
+  --section-teal: #1d6a96;
+  --on-teal: #f4fafd;
+  --section-ultramarine: #1d6a96;
+  --on-ultramarine: #f4fafd;
+  --section-violet: #1d6a96;
+  --on-violet: #f4fafd;
+  --section-sienna: #b85a2b;
+  --on-sienna: #fdf7f2;
+  --vermilion: #b4462b;
+  --on-vermilion: #fdf3ef;
+  --grid-fine: rgba(16, 42, 60, 0.055);
+  --grid-major: rgba(16, 42, 60, 0.1);
+  --corner: rgba(29, 106, 150, 0.55);
+  --detail-bg: #102a3c;
+  --detail-bar: rgba(255, 255, 255, 0.045);
+  --detail-rule: rgba(216, 232, 240, 0.2);
+  --detail-ink: #d8e8f0;
+  --detail-soft: #8fa8b5;
+  --radius: 0px;
+  --shadow-leaf: none;
+  --shadow-lift: 0 24px 48px -32px rgba(16, 42, 60, 0.45);
+  --measure: 74ch;
+  --font-ui: 'Archivo', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --font-serif: 'Archivo', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --font-mono: 'Azeret Mono', 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  --preview-paper: #f8fafb;
+  --preview-board: #dbe5ec;
+  --preview-accent: #d9662b;
+}
+
+html[data-ui='schematic'][data-theme='dark'] {
+  --paper: #09141d;
+  --paper-soft: #0f1e29;
+  --paper-deep: #142735;
+  --acetate: rgba(15, 30, 41, 0.97);
+  --case: #0c1a24;
+  --case-raised: #12232e;
+  --case-line: rgba(216, 232, 240, 0.16);
+  --case-ink: #d8e8f0;
+  --case-soft: #8fa8b5;
+  --case-faint: #647d8b;
+  --ink: #d8e8f0;
+  --ink-soft: #8fa8b5;
+  --ink-faint: #647d8b;
+  --rule: rgba(216, 232, 240, 0.18);
+  --rule-strong: rgba(216, 232, 240, 0.38);
+  --accent: #f08a4b;
+  --on-accent: #1a0d05;
+  --blue: #63b3d9;
+  --orange: #f08a4b;
+  --green: #6fb98d;
+  --section-oxide: #f08a4b;
+  --on-oxide: #1a0d05;
+  --section-chrome: #63b3d9;
+  --on-chrome: #06141d;
+  --section-grass: #6fb98d;
+  --on-grass: #07140c;
+  --section-teal: #63b3d9;
+  --on-teal: #06141d;
+  --section-ultramarine: #63b3d9;
+  --on-ultramarine: #06141d;
+  --section-violet: #63b3d9;
+  --on-violet: #06141d;
+  --section-sienna: #e09a63;
+  --on-sienna: #1a0d05;
+  --vermilion: #e2735c;
+  --on-vermilion: #1a0d05;
+  --grid-fine: rgba(216, 232, 240, 0.05);
+  --grid-major: rgba(216, 232, 240, 0.09);
+  --corner: rgba(99, 179, 217, 0.5);
+  --detail-bg: #07121a;
+  --detail-bar: rgba(255, 255, 255, 0.04);
+  --detail-rule: rgba(216, 232, 240, 0.16);
+  --detail-ink: #d8e8f0;
+  --detail-soft: #8fa8b5;
+  --shadow-leaf: none;
+  --shadow-lift: 0 24px 48px -30px rgba(0, 0, 0, 0.7);
+  --preview-paper: #0f1e29;
+  --preview-board: #09141d;
+  --preview-accent: #f08a4b;
+}
+
+/* ---- Base surfaces ------------------------------------------------------- */
+
+html[data-ui='schematic'] body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] ::selection {
+  background: color-mix(in srgb, var(--orange) 26%, transparent);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .app-shell {
+  grid-template-columns: 264px minmax(0, 1fr);
+  background: var(--paper);
+}
+
+html[data-ui='schematic'] .chat-stage {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid-fine) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-fine) 1px, transparent 1px),
+    linear-gradient(var(--grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
+}
+
+html[data-ui='schematic'] .index-board {
+  background-color: var(--case);
+  background-image:
+    linear-gradient(var(--grid-fine) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-fine) 1px, transparent 1px),
+    linear-gradient(var(--grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px);
+  background-size: 12px 12px, 12px 12px, 60px 60px, 60px 60px;
+  border-right: 1px solid var(--rule-strong);
+  color: var(--case-ink);
+}
+
+html[data-ui='schematic'] .conversation-scroll,
+html[data-ui='schematic'] .session-list {
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
+html[data-ui='schematic'] .conversation-scroll::-webkit-scrollbar-thumb,
+html[data-ui='schematic'] .session-list::-webkit-scrollbar-thumb {
+  background: var(--rule-strong);
+  border-radius: 0;
+}
+
+html[data-ui='schematic'] .index-board ::-webkit-scrollbar-thumb {
+  background: var(--rule-strong);
+  border-radius: 0;
+}
+
+html[data-ui='schematic'] :focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* ---- Drawing index (sidebar) -------------------------------------------- */
+
+html[data-ui='schematic'] .session-panel {
+  gap: 0;
+  padding: 0;
+}
+
+html[data-ui='schematic'] .brand-block {
+  gap: 11px;
+  padding: 17px 16px 14px;
+  border-top: 3px solid var(--ink);
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+html[data-ui='schematic'] .brand-mark {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  padding: 8px;
+  border: 1px solid var(--ink);
+  background: var(--paper-soft);
+}
+
+html[data-ui='schematic'] .brand-mark::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1px solid var(--rule);
+  pointer-events: none;
+}
+
+html[data-ui='schematic'] .brand-mark-line {
+  width: 2px;
+  background: var(--blue);
+}
+
+html[data-ui='schematic'] .brand-mark-line:nth-child(2) {
+  height: 88%;
+  background: var(--orange);
+}
+
+html[data-ui='schematic'] .brand-name {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+}
+
+html[data-ui='schematic'] .brand-sub {
+  color: var(--ink-soft);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+html[data-ui='schematic'] .panel-close-button {
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  color: var(--ink-soft);
+}
+
+html[data-ui='schematic'] .panel-close-button:hover {
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .new-session-button {
+  width: auto;
+  margin: 14px 16px 0;
+  padding: 10px 11px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper-soft);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  box-shadow: none;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+html[data-ui='schematic'] .new-session-button:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper-soft);
+  transform: none;
+}
+
+html[data-ui='schematic'] .new-session-icon {
+  width: 22px;
+  height: 22px;
+  border: 1px solid currentColor;
+  border-radius: 0;
+  color: inherit;
+}
+
+html[data-ui='schematic'] .panel-error {
+  margin: 10px 16px 0;
+  border: 1px solid color-mix(in srgb, var(--vermilion) 55%, transparent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--vermilion) 9%, transparent);
+  color: var(--vermilion);
+  font-size: 10px;
+}
+
+html[data-ui='schematic'] .share-notice {
+  margin: 10px 16px 0;
+  border: 1px solid color-mix(in srgb, var(--blue) 45%, transparent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--blue) 7%, transparent);
+  color: var(--blue);
+  font-size: 10px;
+}
+
+html[data-ui='schematic'] .session-list-section {
+  margin-top: 12px;
+  gap: 0;
+}
+
+html[data-ui='schematic'] .session-list-section::before {
+  content: 'DRAWING INDEX';
+  display: block;
+  padding: 12px 16px 5px;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  line-height: 1;
+}
+
+html[data-ui='schematic'] .session-list-heading {
+  padding: 0 16px 7px;
+  color: var(--ink-soft);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+html[data-ui='schematic'] .session-count {
+  min-width: 22px;
+  padding: 2px 5px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  color: var(--ink);
+  font-size: 8.5px;
+  text-align: center;
+}
+
+html[data-ui='schematic'] .session-list {
+  counter-reset: sheet;
+  gap: 0;
+  padding: 0 10px 0 8px;
+}
+
+html[data-ui='schematic'] .session-item {
+  counter-increment: sheet;
+  border-bottom: 1px solid var(--rule);
+}
+
+html[data-ui='schematic'] .session-item-main {
+  gap: 9px;
+  padding: 9px 8px 9px 2px;
+  border: 0;
+  border-radius: 0;
+  color: var(--ink);
+  transition: background 100ms ease;
+}
+
+html[data-ui='schematic'] .session-item-main::before {
+  content: counter(sheet, decimal-leading-zero);
+  flex: 0 0 auto;
+  width: 18px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+}
+
+html[data-ui='schematic'] .session-item-main:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border-color: transparent;
+}
+
+html[data-ui='schematic'] .session-item:hover .session-item-main,
+html[data-ui='schematic'] .session-item:focus-within .session-item-main,
+html[data-ui='schematic'] .session-item-active .session-item-main {
+  padding-right: 58px;
+}
+
+html[data-ui='schematic'] .session-item-active .session-item-main {
+  background: var(--paper-soft);
+  border-color: transparent;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+html[data-ui='schematic'] .session-item-active .session-item-main::before {
+  color: var(--accent);
+}
+
+html[data-ui='schematic'] .session-swatch {
+  width: 2px;
+  min-height: 22px;
+  border-radius: 0;
+  background: var(--rule-strong) !important;
+}
+
+html[data-ui='schematic'] .session-item-active .session-swatch {
+  background: var(--accent) !important;
+}
+
+html[data-ui='schematic'] .session-title-line {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+html[data-ui='schematic'] .session-item-meta {
+  color: var(--ink-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+}
+
+html[data-ui='schematic'] .session-item-active .session-item-meta {
+  color: var(--ink-soft);
+}
+
+html[data-ui='schematic'] .session-item-actions {
+  right: 4px;
+  padding: 2px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: var(--case-raised);
+}
+
+html[data-ui='schematic'] .session-item-active .session-item-actions {
+  border-color: var(--rule-strong);
+  background: var(--paper-soft);
+}
+
+html[data-ui='schematic'] .session-icon-button {
+  width: 23px;
+  height: 23px;
+  border: 0;
+  border-radius: 0;
+  color: var(--ink-soft);
+}
+
+html[data-ui='schematic'] .session-icon-button:hover:not(:disabled) {
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .session-delete-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--vermilion) 14%, transparent);
+  color: var(--vermilion);
+}
+
+html[data-ui='schematic'] .session-item-active .session-icon-button {
+  color: var(--ink-soft);
+}
+
+html[data-ui='schematic'] .session-item-active .session-icon-button:hover:not(:disabled) {
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .empty-session {
+  padding: 10px 4px;
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+html[data-ui='schematic'] .session-list-loader {
+  color: var(--ink-faint);
+  font-size: 9px;
+}
+
+html[data-ui='schematic'] .panel-footer {
+  gap: 8px;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--rule-strong);
+}
+
+html[data-ui='schematic'] .profile-entry-button {
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 11.5px;
+}
+
+html[data-ui='schematic'] .profile-entry-button:hover {
+  background: var(--case-raised);
+  border-color: var(--ink);
+}
+
+html[data-ui='schematic'] .account-card {
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--case-raised);
+}
+
+html[data-ui='schematic'] .account-kind {
+  color: var(--accent);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+}
+
+html[data-ui='schematic'] .account-id {
+  color: var(--ink);
+  font-size: 10px;
+}
+
+html[data-ui='schematic'] .account-plan {
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  color: var(--ink);
+  font-size: 8.5px;
+}
+
+html[data-ui='schematic'] .panel-status-row {
+  color: var(--ink-soft);
+  font-size: 9px;
+}
+
+html[data-ui='schematic'] .health {
+  width: 7px;
+  height: 7px;
+  border: 0;
+  border-radius: 0;
+  background: var(--ink-faint);
+}
+
+html[data-ui='schematic'] .health-online {
+  background: var(--green);
+}
+
+html[data-ui='schematic'] .health-offline {
+  background: var(--vermilion);
+}
+
+html[data-ui='schematic'] .health-checking {
+  background: var(--ink-faint);
+}
+
+html[data-ui='schematic'] .logout-button {
+  color: var(--ink-soft);
+  font-size: 9px;
+}
+
+html[data-ui='schematic'] .logout-button:hover {
+  color: var(--ink);
+}
+
+/* ---- Stage bar: drawing title block -------------------------------------- */
+
+html[data-ui='schematic'] .stage-bar {
+  z-index: 40;
+  gap: 14px;
+  min-height: 70px;
+  padding: 0 22px;
+  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  background: var(--paper-soft);
+  background-image:
+    linear-gradient(var(--grid-fine) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-fine) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px;
+}
+
+html[data-ui='schematic'] .mobile-menu-button {
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .mobile-menu-button:hover {
+  background: var(--paper-deep);
+}
+
+html[data-ui='schematic'] .stage-identity {
+  gap: 5px;
+  padding: 12px 0 11px 16px;
+  border-left: 1px solid var(--rule);
+}
+
+html[data-ui='schematic'] .stage-title-row {
+  gap: 10px;
+}
+
+html[data-ui='schematic'] .stage-section-tab {
+  min-width: 38px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 0;
+  background: var(--ink) !important;
+  color: var(--paper-soft) !important;
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+}
+
+html[data-ui='schematic'] .stage-title {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 750;
+  letter-spacing: -0.015em;
+}
+
+html[data-ui='schematic'] .stage-subline {
+  gap: 4px 12px;
+  color: var(--ink-soft);
+  font-size: 8.5px;
+  letter-spacing: 0.09em;
+}
+
+html[data-ui='schematic'] .stage-health {
+  gap: 6px;
+}
+
+html[data-ui='schematic'] .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 0;
+  background: var(--ink-faint);
+}
+
+html[data-ui='schematic'] .stage-health-online .status-dot {
+  background: var(--green);
+}
+
+html[data-ui='schematic'] .stage-health-offline .status-dot {
+  background: var(--vermilion);
+}
+
+html[data-ui='schematic'] .stage-health-checking .status-dot {
+  background: var(--ink-faint);
+}
+
+html[data-ui='schematic'] .stage-meta-item {
+  border-left: 1px solid var(--rule);
+  padding-left: 12px;
+}
+
+html[data-ui='schematic'] .stage-stamps {
+  align-self: stretch;
+  gap: 9px;
+  padding-left: 16px;
+  border-left: 1px solid var(--rule);
+}
+
+html[data-ui='schematic'] .stage-stamps::before {
+  content: 'SHEET 01 · REV A';
+  align-self: center;
+  padding-right: 12px;
+  border-right: 1px solid var(--rule);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+html[data-ui='schematic'] .run-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid currentColor;
+  border-radius: 0;
+  background: transparent;
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+}
+
+html[data-ui='schematic'] .run-stamp::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+}
+
+html[data-ui='schematic'] .run-stamp-ready {
+  color: var(--green);
+}
+
+html[data-ui='schematic'] .run-stamp-live {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
+
+/* ---- Appearance switcher (still part of the title block) ----------------- */
+
+html[data-ui='schematic'] .appearance-control {
+  align-self: center;
+  padding-left: 16px;
+  border-left: 1px solid var(--rule);
+}
+
+html[data-ui='schematic'] .appearance-trigger {
+  height: 30px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+}
+
+html[data-ui='schematic'] .appearance-trigger:hover,
+html[data-ui='schematic'] .appearance-trigger.is-open {
+  border-color: var(--ink);
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .appearance-trigger-chip {
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper-deep);
+  background-image: none;
+  opacity: 1;
+}
+
+html[data-ui='schematic'] .appearance-popover {
+  gap: 14px;
+  padding: 15px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper-soft);
+  color: var(--ink);
+  box-shadow: var(--shadow-lift);
+}
+
+html[data-ui='schematic'] .appearance-popover-head {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+html[data-ui='schematic'] .appearance-kicker,
+html[data-ui='schematic'] .appearance-section-label {
+  color: var(--ink-faint);
+  font-size: 8px;
+  letter-spacing: 0.16em;
+}
+
+html[data-ui='schematic'] .appearance-title {
+  font-size: 16px;
+  font-weight: 750;
+}
+
+html[data-ui='schematic'] .appearance-close {
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  color: var(--ink-soft);
+}
+
+html[data-ui='schematic'] .appearance-close:hover {
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .appearance-design {
+  border: 1px solid var(--rule);
+  border-radius: 0;
+}
+
+html[data-ui='schematic'] .appearance-design:hover {
+  border-color: var(--rule-strong);
+  background: var(--paper-deep);
+}
+
+html[data-ui='schematic'] .appearance-design.is-selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+html[data-ui='schematic'] .appearance-selected-mark {
+  border-radius: 0;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+html[data-ui='schematic'] .appearance-design-name {
+  font-size: 12px;
+}
+
+html[data-ui='schematic'] .appearance-design-en {
+  font-size: 7px;
+  letter-spacing: 0.1em;
+}
+
+html[data-ui='schematic'] .appearance-design-desc {
+  color: var(--ink-soft);
+  font-size: 10px;
+}
+
+html[data-ui='schematic'] .appearance-preview {
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+}
+
+html[data-ui='schematic'] .appearance-preview-composer {
+  border-radius: 0;
+}
+
+html[data-ui='schematic'] .appearance-theme {
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  color: var(--ink-soft);
+}
+
+html[data-ui='schematic'] .appearance-theme:hover {
+  border-color: var(--rule-strong);
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .appearance-theme.is-selected {
+  border-color: var(--ink);
+  background: var(--paper-deep);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+html[data-ui='schematic'] .appearance-theme-hint {
+  font-size: 7.5px;
+  letter-spacing: 0.1em;
+}
+
+html[data-ui='schematic'] .appearance-note {
+  color: var(--ink-soft);
+  font-size: 10px;
+}
+
+/* ---- Reading field ------------------------------------------------------- */
+
+html[data-ui='schematic'] .conversation-scroll {
+  padding: 28px 0 224px;
+}
+
+html[data-ui='schematic'] .conversation-scroll.has-elevator {
+  padding-right: 56px;
+}
+
+html[data-ui='schematic'] .message-list {
+  gap: 22px;
+  width: min(980px, calc(100% - 88px));
+}
+
+html[data-ui='schematic'] .message-history-loader {
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--paper-soft);
+  color: var(--ink-soft);
+  font-size: 9px;
+}
+
+html[data-ui='schematic'] .chat-skeleton-hint {
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--paper-soft);
+  color: var(--ink-soft);
+  font-size: 9px;
+}
+
+html[data-ui='schematic'] .chat-skeleton-spinner {
+  border-radius: 0;
+  border-color: var(--rule-strong);
+  border-top-color: var(--accent);
+}
+
+html[data-ui='schematic'] .chat-skeleton-leaf {
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--paper-soft);
+  box-shadow: none;
+}
+
+html[data-ui='schematic'] .chat-skeleton-tab {
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-deep);
+}
+
+html[data-ui='schematic'] .chat-skeleton-line {
+  border-radius: 0;
+  background: var(--rule);
+}
+
+/* ---- Empty state: one drawing sheet -------------------------------------- */
+
+html[data-ui='schematic'] .empty-state {
+  width: min(980px, calc(100% - 88px));
+  padding: 22px 0 40px;
+}
+
+html[data-ui='schematic'] .empty-sheet {
+  max-width: 880px;
+  padding: 64px 46px 36px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background-color: var(--paper-soft);
+  background-image:
+    linear-gradient(var(--grid-fine) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-fine) 1px, transparent 1px),
+    linear-gradient(var(--grid-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-major) 1px, transparent 1px);
+  background-size: 10px 10px, 10px 10px, 50px 50px, 50px 50px;
+  box-shadow: none;
+}
+
+html[data-ui='schematic'] .empty-sheet::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 34px;
+  border-bottom: 1px solid var(--rule-strong);
+  background: var(--paper-deep);
+  pointer-events: none;
+}
+
+html[data-ui='schematic'] .empty-sheet::after {
+  content: 'SHEET 01 · REV 00 · SCALE 1:1';
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 34px;
+  padding: 0 12px;
+  border-left: 1px solid var(--rule-strong);
+  background: var(--paper-deep);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  line-height: 34px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+html[data-ui='schematic'] .empty-tab {
+  top: 0;
+  left: 0;
+  z-index: 2;
+  height: 34px;
+  padding: 0 12px;
+  transform: none;
+  border-right: 2px solid var(--accent);
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--paper-soft);
+  font-size: 8.5px;
+  letter-spacing: 0.18em;
+  line-height: 34px;
+}
+
+html[data-ui='schematic'] .empty-punch {
+  left: 18px;
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(var(--rule-strong), var(--rule-strong)) center / 12px 1px no-repeat,
+    linear-gradient(var(--rule-strong), var(--rule-strong)) center / 1px 12px no-repeat;
+  box-shadow: none;
+}
+
+html[data-ui='schematic'] .empty-punch-top {
+  top: 58px;
+}
+
+html[data-ui='schematic'] .empty-punch-bottom {
+  bottom: 30px;
+}
+
+html[data-ui='schematic'] .empty-heading h2 {
+  max-width: 20ch;
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: clamp(25px, 2.5vw, 33px);
+  font-weight: 750;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+
+html[data-ui='schematic'] .empty-heading h2::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 12px;
+  background: var(--accent);
+  vertical-align: 3px;
+}
+
+html[data-ui='schematic'] .empty-heading p {
+  max-width: 60ch;
+  margin: 0 0 28px;
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 14.5px;
+  line-height: 1.75;
+}
+
+html[data-ui='schematic'] .empty-index {
+  counter-reset: callout;
+  border-top: 1px solid var(--rule-strong);
+}
+
+html[data-ui='schematic'] .empty-index-row {
+  position: relative;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 18px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--rule);
+  counter-increment: callout;
+}
+
+html[data-ui='schematic'] .empty-index-row::before {
+  content: counter(callout, decimal-leading-zero);
+  position: absolute;
+  top: 21px;
+  left: 0;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+html[data-ui='schematic'] .empty-index-row::after {
+  content: '';
+  position: absolute;
+  top: 35px;
+  left: 46px;
+  width: 18px;
+  height: 1px;
+  background: var(--rule-strong);
+}
+
+html[data-ui='schematic'] .empty-index-tab {
+  width: 34px;
+  height: 34px;
+  margin-left: 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: var(--ink) !important;
+  color: var(--paper-soft) !important;
+}
+
+html[data-ui='schematic'] .empty-index-row:nth-child(2) .empty-index-tab {
+  background: var(--blue) !important;
+  color: var(--paper-soft) !important;
+}
+
+html[data-ui='schematic'] .empty-index-row:nth-child(3) .empty-index-tab {
+  background: var(--accent) !important;
+  color: var(--on-accent) !important;
+}
+
+html[data-ui='schematic'] .empty-index-row:hover .empty-index-tab {
+  border-color: var(--ink);
+}
+
+html[data-ui='schematic'] .empty-index-row:hover::after {
+  background: var(--accent);
+}
+
+html[data-ui='schematic'] .empty-index-copy h3 {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+html[data-ui='schematic'] .empty-index-copy p {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+html[data-ui='schematic'] .empty-start {
+  margin: 22px 0 0;
+  padding-top: 13px;
+  border-top: 1px solid var(--rule-strong);
+  color: var(--ink-soft);
+  font-size: 9px;
+  line-height: 1.9;
+  letter-spacing: 0.02em;
+}
+
+/* ---- Messages ------------------------------------------------------------ */
+
+html[data-ui='schematic'] .message {
+  border-radius: 0;
+}
+
+html[data-ui='schematic'] .message-meta {
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--ink-soft);
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+}
+
+html[data-ui='schematic'] .message-role-stamp {
+  padding: 3px 6px;
+  border: 1px solid currentColor;
+  border-radius: 0;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
+html[data-ui='schematic'] .message-role-assistant {
+  color: var(--blue);
+}
+
+html[data-ui='schematic'] .message-role-user {
+  color: var(--accent);
+}
+
+html[data-ui='schematic'] .stream-stamp {
+  border-radius: 0;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+html[data-ui='schematic'] .stream-stamp-live {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+html[data-ui='schematic'] .stream-stamp-error {
+  color: var(--vermilion);
+  background: color-mix(in srgb, var(--vermilion) 8%, transparent);
+}
+
+html[data-ui='schematic'] .live-square {
+  width: 5px;
+  height: 5px;
+  background: currentColor;
+}
+
+html[data-ui='schematic'] .tool-chip {
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  color: var(--ink-soft);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+}
+
+html[data-ui='schematic'] .trace-entry-button {
+  border-color: var(--rule-strong);
+}
+
+html[data-ui='schematic'] .trace-entry-button:hover {
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+/* Assistant sheet ---------------------------------------------------------- */
+
+html[data-ui='schematic'] .message-assistant {
+  padding: 42px 30px 26px 34px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background-color: var(--paper-soft);
+  background-image:
+    linear-gradient(var(--corner), var(--corner)),
+    linear-gradient(var(--corner), var(--corner)),
+    linear-gradient(var(--corner), var(--corner)),
+    linear-gradient(var(--corner), var(--corner)),
+    linear-gradient(var(--corner), var(--corner)),
+    linear-gradient(var(--corner), var(--corner)),
+    linear-gradient(var(--corner), var(--corner)),
+    linear-gradient(var(--corner), var(--corner));
+  background-position:
+    left 22px top 34px,
+    left 22px top 34px,
+    right 22px top 34px,
+    right 22px top 34px,
+    left 22px bottom 20px,
+    left 22px bottom 20px,
+    right 22px bottom 20px,
+    right 22px bottom 20px;
+  background-size:
+    10px 1px,
+    1px 10px,
+    10px 1px,
+    1px 10px,
+    10px 1px,
+    1px 10px,
+    10px 1px,
+    1px 10px;
+  background-repeat: no-repeat;
+  box-shadow: none;
+}
+
+html[data-ui='schematic'] .message-assistant::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 26px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper-deep);
+  pointer-events: none;
+}
+
+html[data-ui='schematic'] .message-assistant::after {
+  content: 'REV 00';
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 26px;
+  padding: 0 11px;
+  border-left: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.16em;
+  line-height: 26px;
+  pointer-events: none;
+}
+
+html[data-ui='schematic'] .message-section-tab {
+  top: -1px;
+  left: -1px;
+  z-index: 2;
+  min-width: 44px;
+  height: 26px;
+  padding: 0 9px;
+  transform: none;
+  border-right: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--ink) !important;
+  color: var(--paper-soft) !important;
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 26px;
+}
+
+html[data-ui='schematic'] .punch-hole {
+  display: none;
+}
+
+html[data-ui='schematic'] .assistant-timeline {
+  gap: 15px;
+}
+
+html[data-ui='schematic'] .timeline-thinking {
+  color: var(--ink-soft);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+html[data-ui='schematic'] .timeline-error {
+  border: 1px solid color-mix(in srgb, var(--vermilion) 45%, transparent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--vermilion) 7%, transparent);
+  color: var(--vermilion);
+  font-size: 10px;
+}
+
+/* User redline annotation -------------------------------------------------- */
+
+html[data-ui='schematic'] .message-user {
+  max-width: min(74%, 760px);
+  padding: 12px 16px 13px;
+  border: 1px dashed var(--accent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--accent) 5%, var(--paper-soft));
+  color: var(--ink);
+  box-shadow: none;
+}
+
+html[data-ui='schematic'] .message-user::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 3px;
+  background: var(--accent);
+}
+
+html[data-ui='schematic'] .message-user .message-content,
+html[data-ui='schematic'] .message-user .plain-text {
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .message-user .message-meta {
+  color: var(--ink-soft);
+  padding-right: 34px;
+}
+
+html[data-ui='schematic'] .message-user .tool-chip {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--ink-soft);
+}
+
+html[data-ui='schematic'] .message-user .message-copy-button {
+  border-color: var(--rule-strong);
+  background: var(--paper-soft);
+  color: var(--ink-soft);
+}
+
+html[data-ui='schematic'] .message-user .message-copy-button:hover {
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .plain-text {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.75;
+  letter-spacing: 0.005em;
+}
+
+/* Message actions ---------------------------------------------------------- */
+
+html[data-ui='schematic'] .message-actions {
+  top: 2px;
+  right: 62px;
+  z-index: 3;
+  gap: 4px;
+}
+
+html[data-ui='schematic'] .message-assistant .message-meta {
+  padding-right: 8px;
+}
+
+html[data-ui='schematic'] .message-user .message-actions {
+  top: 8px;
+  right: 8px;
+}
+
+html[data-ui='schematic'] .message-copy-button,
+html[data-ui='schematic'] .message-export-button {
+  height: 23px;
+  padding: 0 8px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--paper-soft);
+  color: var(--ink-soft);
+  font-size: 8.5px;
+  letter-spacing: 0.05em;
+}
+
+html[data-ui='schematic'] .message-copy-button:hover:not(:disabled),
+html[data-ui='schematic'] .message-export-button:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .message-export-button {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+html[data-ui='schematic'] .message-export-button:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
+
+/* ---- Markdown ------------------------------------------------------------ */
+
+html[data-ui='schematic'] .markdown-body {
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 15.5px;
+  line-height: 1.8;
+}
+
+html[data-ui='schematic'] .markdown-body p,
+html[data-ui='schematic'] .markdown-body ul,
+html[data-ui='schematic'] .markdown-body ol,
+html[data-ui='schematic'] .markdown-body blockquote,
+html[data-ui='schematic'] .markdown-body table,
+html[data-ui='schematic'] .markdown-body pre {
+  max-width: var(--measure);
+}
+
+html[data-ui='schematic'] .markdown-body h1,
+html[data-ui='schematic'] .markdown-body h2,
+html[data-ui='schematic'] .markdown-body h3,
+html[data-ui='schematic'] .markdown-body h4,
+html[data-ui='schematic'] .markdown-body h5,
+html[data-ui='schematic'] .markdown-body h6 {
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-weight: 700;
+}
+
+html[data-ui='schematic'] .markdown-body h1 {
+  margin: 1.5em 0 0.55em;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+html[data-ui='schematic'] .markdown-body h2 {
+  gap: 10px;
+  margin: 1.7em 0 0.6em;
+  padding-top: 0.42em;
+  border-top: 1px solid color-mix(in srgb, var(--blue) 42%, transparent);
+  font-size: 1.2rem;
+  letter-spacing: -0.015em;
+}
+
+html[data-ui='schematic'] .markdown-body h2::before {
+  width: 9px;
+  height: 9px;
+  background: var(--blue);
+}
+
+html[data-ui='schematic'] .markdown-body h3 {
+  gap: 8px;
+  margin: 1.35em 0 0.5em;
+  font-size: 1.05rem;
+}
+
+html[data-ui='schematic'] .markdown-body h3::before {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+}
+
+html[data-ui='schematic'] .markdown-body h4 {
+  margin: 1.15em 0 0.42em;
+  font-size: 1rem;
+}
+
+html[data-ui='schematic'] .markdown-body a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+html[data-ui='schematic'] .markdown-body a:hover {
+  color: var(--accent);
+}
+
+html[data-ui='schematic'] .markdown-body strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+html[data-ui='schematic'] .markdown-body li {
+  margin: 0.2rem 0;
+  line-height: 1.75;
+}
+
+html[data-ui='schematic'] .markdown-body li::marker {
+  color: var(--blue);
+}
+
+html[data-ui='schematic'] .markdown-body blockquote {
+  padding: 9px 14px;
+  border: 0;
+  border-left: 3px solid var(--accent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  color: var(--ink-soft);
+}
+
+html[data-ui='schematic'] .markdown-body hr {
+  height: 1px;
+  background: var(--rule);
+}
+
+html[data-ui='schematic'] .markdown-body :not(pre) > code {
+  padding: 0.08em 0.32em;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--paper-deep);
+  color: var(--ink);
+  font-size: 0.84em;
+}
+
+html[data-ui='schematic'] .markdown-body pre {
+  max-width: 100%;
+}
+
+/* Raw <pre> (no CodeBlock wrapper): still a detail window, not loose code. */
+html[data-ui='schematic'] .markdown-body > pre {
+  max-width: var(--measure);
+  padding: 12px 14px;
+  overflow: auto;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--detail-bg);
+  color: var(--detail-ink);
+}
+
+html[data-ui='schematic'] .markdown-body > pre code {
+  color: inherit;
+}
+
+html[data-ui='schematic'] .markdown-body pre code {
+  font-size: 0.84rem;
+  line-height: 1.7;
+}
+
+/* Table: a ruled schedule on the sheet */
+html[data-ui='schematic'] .markdown-table-wrapper {
+  border-radius: 0;
+}
+
+html[data-ui='schematic'] .markdown-body table {
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-soft);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+}
+
+html[data-ui='schematic'] .markdown-body thead {
+  background: var(--paper-deep);
+}
+
+html[data-ui='schematic'] .markdown-body th {
+  padding: 8px 11px;
+  border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule-strong);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+html[data-ui='schematic'] .markdown-body td {
+  border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+html[data-ui='schematic'] .markdown-table-download-button {
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: var(--paper-soft);
+  color: var(--ink-soft);
+  font-size: 8.5px;
+}
+
+html[data-ui='schematic'] .markdown-table-download-button:hover {
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+/* Code: a detail window, inked in both themes */
+html[data-ui='schematic'] .code-block-shell {
+  margin: 1rem 0 1.2rem;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--detail-bg);
+  box-shadow: none;
+}
+
+html[data-ui='schematic'] .code-block-bar {
+  gap: 10px;
+  padding: 7px 10px 7px 12px;
+  border-bottom: 1px solid var(--detail-rule);
+  background: var(--detail-bar);
+}
+
+html[data-ui='schematic'] .code-block-bar::before {
+  content: 'DETAIL';
+  margin-right: auto;
+  color: var(--detail-soft);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.16em;
+  line-height: 1;
+}
+
+html[data-ui='schematic'] .code-block-language {
+  color: var(--detail-soft);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+}
+
+html[data-ui='schematic'] .code-block-copy-button {
+  border: 1px solid var(--detail-rule);
+  border-radius: 0;
+  background: transparent;
+  color: var(--detail-ink);
+  font-size: 8px;
+}
+
+html[data-ui='schematic'] .code-block-copy-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+html[data-ui='schematic'] .code-block-shell code {
+  border-radius: 0;
+}
+
+html[data-ui='schematic'] .mermaid-fallback {
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--detail-bg);
+  color: var(--detail-ink);
+  font-size: 10px;
+}
+
+/* ---- Tool cards: revisioned detail notes --------------------------------- */
+
+html[data-ui='schematic'] .tool-card {
+  margin: 3px 0;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: var(--paper);
+}
+
+html[data-ui='schematic'] .tool-card[open],
+html[data-ui='schematic'] .tool-card.tool-card-open {
+  border-color: var(--rule-strong);
+  background: var(--paper-soft);
+  box-shadow: none;
+}
+
+html[data-ui='schematic'] .tool-card-header {
+  gap: 8px;
+  padding: 8px 11px;
+  border-bottom: 1px solid transparent;
+}
+
+html[data-ui='schematic'] .tool-card[open] .tool-card-header,
+html[data-ui='schematic'] .tool-card.tool-card-open .tool-card-header {
+  border-bottom: 1px dashed var(--rule);
+}
+
+html[data-ui='schematic'] .tool-card-header::before {
+  content: 'REV';
+  flex: 0 0 auto;
+  padding: 2px 4px;
+  border: 1px solid var(--rule);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.1em;
+  line-height: 1;
+}
+
+html[data-ui='schematic'] .tool-card-chevron {
+  color: var(--ink-soft);
+}
+
+html[data-ui='schematic'] .tool-card-name {
+  color: var(--ink);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+html[data-ui='schematic'] .tool-status {
+  gap: 4px;
+  padding: 2px 5px;
+  border: 1px solid currentColor;
+  border-radius: 0;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+html[data-ui='schematic'] .tool-status-calling {
+  color: var(--accent);
+}
+
+html[data-ui='schematic'] .tool-status-done {
+  color: var(--green);
+}
+
+html[data-ui='schematic'] .tool-card-content {
+  gap: 13px;
+  padding: 11px 11px 12px;
+}
+
+html[data-ui='schematic'] .tool-card-block {
+  gap: 6px;
+}
+
+html[data-ui='schematic'] .tool-card-label {
+  color: var(--ink-faint);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+}
+
+html[data-ui='schematic'] .tool-payload {
+  max-height: 260px;
+  padding: 10px 12px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--detail-bg);
+  color: var(--detail-ink);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+html[data-ui='schematic'] .tool-trace-result {
+  max-height: 360px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--paper);
+}
+
+html[data-ui='schematic'] .tool-trace-result.markdown-body {
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+html[data-ui='schematic'] .tool-pending {
+  color: var(--ink-soft);
+  font-size: 9.5px;
+}
+
+/* ---- Composer: annotation strip ------------------------------------------ */
+
+html[data-ui='schematic'] .composer {
+  padding: 12px 0 16px;
+  border-top: 1px solid var(--rule-strong);
+  background: var(--paper);
+}
+
+html[data-ui='schematic'] .composer-shell {
+  width: min(980px, calc(100% - 88px));
+  padding: 13px 18px 11px;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 0;
+  background: var(--paper-soft);
+  box-shadow: none;
+}
+
+html[data-ui='schematic'] .composer-shell::before,
+html[data-ui='schematic'] .composer-shell::after {
+  top: -4px;
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  background: var(--paper);
+  box-shadow: none;
+}
+
+html[data-ui='schematic'] .composer-shell::before {
+  left: 22px;
+}
+
+html[data-ui='schematic'] .composer-shell::after {
+  right: 22px;
+}
+
+html[data-ui='schematic'] .composer-shell:focus-within {
+  border-style: solid;
+  border-color: var(--blue);
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+
+html[data-ui='schematic'] .composer-topline {
+  margin-bottom: 4px;
+}
+
+html[data-ui='schematic'] .composer-label {
+  padding: 2px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  color: var(--accent);
+  font-size: 8px;
+  letter-spacing: 0.16em;
+}
+
+html[data-ui='schematic'] .composer-hint {
+  color: var(--ink-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.03em;
+}
+
+html[data-ui='schematic'] .composer textarea {
+  height: 54px;
+  min-height: 54px;
+  padding: 4px 2px;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14.5px;
+  line-height: 1.65;
+  caret-color: var(--accent);
+}
+
+html[data-ui='schematic'] .composer textarea::placeholder {
+  color: var(--ink-soft);
+  opacity: 0.7;
+}
+
+html[data-ui='schematic'] .composer-footer {
+  padding-top: 8px;
+  border-top: 1px dashed var(--rule);
+}
+
+html[data-ui='schematic'] .composer-metrics {
+  color: var(--ink-soft);
+  font-size: 8.5px;
+  letter-spacing: 0.03em;
+}
+
+html[data-ui='schematic'] .actions-right {
+  gap: 6px;
+}
+
+html[data-ui='schematic'] .icon-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .icon-button:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--paper-deep);
+}
+
+html[data-ui='schematic'] .send-button {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+html[data-ui='schematic'] .send-button:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper-soft);
+}
+
+html[data-ui='schematic'] .send-button:disabled {
+  border-color: var(--rule);
+  background: transparent;
+  color: var(--ink-faint);
+}
+
+html[data-ui='schematic'] .stop-button {
+  border-color: var(--vermilion);
+  background: var(--vermilion);
+  color: var(--on-vermilion);
+}
+
+html[data-ui='schematic'] .stop-button:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper-soft);
+}
+
+html[data-ui='schematic'] .composer-compact .composer-shell {
+  padding: 8px 12px;
+}
+
+/* ---- Fore-edge elevator rail --------------------------------------------- */
+
+html[data-ui='schematic'] .elevator-nav {
+  right: 12px;
+  gap: 3px;
+  padding: 6px 3px;
+}
+
+html[data-ui='schematic'] .elevator-nav::before {
+  background: var(--rule-strong);
+}
+
+html[data-ui='schematic'] .elevator-rule {
+  background: var(--rule-strong);
+}
+
+html[data-ui='schematic'] .elevator-tab {
+  width: 10px;
+  border-radius: 0;
+  background: var(--rule-strong);
+}
+
+html[data-ui='schematic'] .elevator-item:hover .elevator-tab {
+  width: 18px;
+  background: var(--ink-soft);
+}
+
+html[data-ui='schematic'] .elevator-item-active .elevator-tab {
+  width: 26px;
+  background: var(--accent);
+  box-shadow: none;
+}
+
+html[data-ui='schematic'] .elevator-export-mark {
+  border: 1px solid var(--ink);
+  background: var(--accent);
+}
+
+/* ---- Dialogs and profile ------------------------------------------------- */
+
+html[data-ui='schematic'] .modal-backdrop {
+  background: color-mix(in srgb, var(--paper) 62%, rgba(9, 20, 29, 0.82));
+}
+
+html[data-ui='schematic'] .modal-card {
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper-soft);
+  box-shadow: var(--shadow-lift);
+}
+
+html[data-ui='schematic'] .modal-header {
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+html[data-ui='schematic'] .modal-header h2 {
+  color: var(--ink);
+  font-size: 20px;
+  letter-spacing: -0.015em;
+}
+
+html[data-ui='schematic'] .modal-header p {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+html[data-ui='schematic'] .modal-tab {
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+}
+
+html[data-ui='schematic'] .modal-tab:hover {
+  border-color: var(--rule-strong);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .modal-tab.is-active {
+  border-color: var(--ink);
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .modal-footer {
+  border-top: 1px solid var(--rule);
+}
+
+html[data-ui='schematic'] .profile-form input,
+html[data-ui='schematic'] .profile-form textarea,
+html[data-ui='schematic'] .profile-form select {
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: var(--paper-soft);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .profile-progress-track {
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: transparent;
+}
+
+html[data-ui='schematic'] .profile-progress-track > span {
+  background: var(--blue);
+}
+
+html[data-ui='schematic'] .trace-modal {
+  border: 1px solid var(--ink);
+  background: var(--paper-soft);
+}
+
+html[data-ui='schematic'] .trace-modal-header {
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+html[data-ui='schematic'] .trace-modal-id {
+  color: var(--ink-faint);
+  font-size: 8.5px;
+}
+
+html[data-ui='schematic'] .trace-row {
+  border-bottom: 1px solid var(--rule);
+}
+
+html[data-ui='schematic'] .trace-index {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+}
+
+html[data-ui='schematic'] .trace-stage {
+  border-radius: 0;
+}
+
+html[data-ui='schematic'] .trace-detail {
+  border-radius: 0;
+  background: var(--paper-deep);
+}
+
+html[data-ui='schematic'] .trace-detail.copied {
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  color: var(--green);
+}
+
+html[data-ui='schematic'] .trace-elapsed {
+  color: var(--ink-faint);
+}
+
+/* ---- Responsive ---------------------------------------------------------- */
+
+@media (max-width: 1180px) {
+  html[data-ui='schematic'] .app-shell {
+    grid-template-columns: 236px minmax(0, 1fr);
+  }
+
+  html[data-ui='schematic'] .message-list,
+  html[data-ui='schematic'] .empty-state {
+    width: calc(100% - 64px);
+  }
+
+  html[data-ui='schematic'] .composer-shell {
+    width: calc(100% - 64px);
+  }
+
+  html[data-ui='schematic'] .stage-bar {
+    padding: 0 18px;
+  }
+
+  html[data-ui='schematic'] .stage-stamps::before {
+    display: none;
+  }
+
+  html[data-ui='schematic'] .conversation-scroll.has-elevator {
+    padding-right: 46px;
+  }
+}
+
+@media (max-width: 900px) {
+  html[data-ui='schematic'] .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+    height: 100vh;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  html[data-ui='schematic'] .index-board {
+    position: fixed;
+    top: 0;
+    right: auto;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    width: min(300px, 86vw);
+    transform: translateX(-100%);
+    border-right: 1px solid var(--rule-strong);
+    border-left: 0;
+    transition: transform 140ms ease;
+  }
+
+  html[data-ui='schematic'] .app-shell.sidebar-open .index-board {
+    transform: translateX(0);
+  }
+
+  html[data-ui='schematic'] .drawer-scrim {
+    background: rgba(9, 20, 29, 0.55);
+  }
+
+  html[data-ui='schematic'] .session-panel {
+    height: 100%;
+  }
+
+  html[data-ui='schematic'] .chat-stage {
+    height: 100vh;
+    min-height: 100vh;
+  }
+
+  html[data-ui='schematic'] .stage-bar {
+    gap: 10px;
+    min-height: 62px;
+    padding: 0 12px;
+  }
+
+  html[data-ui='schematic'] .stage-identity {
+    padding: 9px 0 8px 11px;
+  }
+
+  html[data-ui='schematic'] .stage-stamps {
+    gap: 7px;
+    padding-left: 11px;
+  }
+
+  html[data-ui='schematic'] .appearance-control {
+    padding-left: 10px;
+  }
+
+  html[data-ui='schematic'] .stage-title {
+    font-size: 14px;
+  }
+
+  html[data-ui='schematic'] .message-list,
+  html[data-ui='schematic'] .empty-state {
+    width: calc(100% - 48px);
+  }
+
+  html[data-ui='schematic'] .composer-shell {
+    width: calc(100% - 48px);
+  }
+
+  html[data-ui='schematic'] .conversation-scroll {
+    padding-bottom: 210px;
+  }
+}
+
+@media (max-width: 560px) {
+  html[data-ui='schematic'] .stage-bar {
+    gap: 8px;
+    min-height: 58px;
+    padding: 0 10px;
+  }
+
+  html[data-ui='schematic'] .stage-identity {
+    padding: 7px 0 6px 8px;
+  }
+
+  html[data-ui='schematic'] .stage-subline {
+    gap: 3px 8px;
+    font-size: 7.5px;
+    letter-spacing: 0.06em;
+  }
+
+  html[data-ui='schematic'] .stage-meta-item {
+    padding-left: 8px;
+  }
+
+  html[data-ui='schematic'] .stage-stamps {
+    padding-left: 8px;
+  }
+
+  html[data-ui='schematic'] .run-stamp {
+    height: 24px;
+    padding: 0 6px;
+    font-size: 7.5px;
+    letter-spacing: 0.12em;
+  }
+
+  html[data-ui='schematic'] .appearance-control {
+    padding-left: 6px;
+    border-left: 0;
+  }
+
+  html[data-ui='schematic'] .appearance-trigger {
+    width: 30px;
+    height: 28px;
+  }
+
+  html[data-ui='schematic'] .message-list,
+  html[data-ui='schematic'] .empty-state {
+    width: calc(100% - 28px);
+  }
+
+  html[data-ui='schematic'] .message-assistant {
+    padding: 40px 15px 20px 17px;
+    background-position:
+      left 14px top 32px,
+      left 14px top 32px,
+      right 14px top 32px,
+      right 14px top 32px,
+      left 14px bottom 14px,
+      left 14px bottom 14px,
+      right 14px bottom 14px,
+      right 14px bottom 14px;
+  }
+
+  html[data-ui='schematic'] .message-meta {
+    font-size: 8px;
+  }
+
+  html[data-ui='schematic'] .message-assistant .message-meta {
+    padding-right: 8px;
+  }
+
+  html[data-ui='schematic'] .message-actions {
+    top: 2px;
+    right: 58px;
+  }
+
+  html[data-ui='schematic'] .message-user {
+    max-width: 94%;
+    padding: 11px 13px;
+  }
+
+  html[data-ui='schematic'] .markdown-body {
+    font-size: 14.5px;
+    line-height: 1.78;
+  }
+
+  html[data-ui='schematic'] .plain-text {
+    font-size: 13.5px;
+  }
+
+  html[data-ui='schematic'] .empty-sheet {
+    padding: 50px 16px 20px;
+  }
+
+  html[data-ui='schematic'] .empty-sheet::after {
+    display: none;
+  }
+
+  html[data-ui='schematic'] .empty-heading h2 {
+    font-size: 24px;
+  }
+
+  html[data-ui='schematic'] .empty-heading p {
+    margin-bottom: 16px;
+    font-size: 13.5px;
+  }
+
+  html[data-ui='schematic'] .empty-index-row {
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px 0;
+  }
+
+  html[data-ui='schematic'] .empty-start {
+    margin-top: 14px;
+    padding-top: 10px;
+  }
+
+  html[data-ui='schematic'] .empty-index-row::before {
+    top: 18px;
+  }
+
+  html[data-ui='schematic'] .empty-index-row::after {
+    display: none;
+  }
+
+  html[data-ui='schematic'] .empty-index-tab {
+    width: 30px;
+    height: 30px;
+    margin-left: 6px;
+  }
+
+  html[data-ui='schematic'] .empty-index-copy p {
+    font-size: 12.5px;
+  }
+
+  html[data-ui='schematic'] .composer {
+    padding: 9px 0 10px;
+  }
+
+  html[data-ui='schematic'] .composer-shell {
+    width: calc(100% - 24px);
+    padding: 11px 12px 10px;
+  }
+
+  html[data-ui='schematic'] .composer textarea {
+    height: 48px;
+    min-height: 48px;
+    font-size: 14px;
+  }
+
+  html[data-ui='schematic'] .composer-metrics {
+    font-size: 8px;
+  }
+
+  html[data-ui='schematic'] .icon-button {
+    width: 30px;
+    height: 30px;
+  }
+
+  html[data-ui='schematic'] .conversation-scroll {
+    padding-bottom: 190px;
+  }
+
+  html[data-ui='schematic'] .code-block-bar::before {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-ui='schematic'] .index-board,
+  html[data-ui='schematic'] .drawer-scrim,
+  html[data-ui='schematic'] .session-item-main,
+  html[data-ui='schematic'] .appearance-design,
+  html[data-ui='schematic'] .appearance-theme {
+    transition: none;
+  }
 }

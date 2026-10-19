@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "src/theme/designs/nocturne.css"
+        ],
+        "createdAt": "2026-10-19T16:55:31.009Z",
+        "reason": "Nocturne design brief explicitly requires the assistant left signal line and the user right narrow color band; 2px conductors are this console world's status language, not decorative card accents"
+      }
+    ]
+  }
+}

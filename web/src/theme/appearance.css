@@ -190,9 +190,8 @@
 }
 
 .appearance-design-name {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
+  display: grid;
+  gap: 1px;
   font-family: var(--font-ui);
   font-size: 12.5px;
   font-weight: 700;
@@ -201,15 +200,13 @@
 }
 
 .appearance-design-en {
-  overflow: hidden;
   color: var(--ink-faint);
   font-family: var(--font-mono);
   font-size: 7.5px;
   font-weight: 400;
   letter-spacing: 0.04em;
-  text-overflow: ellipsis;
+  line-height: 1.3;
   text-transform: uppercase;
-  white-space: nowrap;
 }
 
 .appearance-design-desc {
@@ -420,6 +417,20 @@
     left: 10px;
     width: auto;
     max-height: calc(100vh - 78px);
+  }
+
+  /* The two-column cards get too narrow for the bilingual name; drop the
+     English kicker so the Chinese design name stays on one line. */
+  .appearance-design-en {
+    display: none;
+  }
+
+  .appearance-design-name {
+    font-size: 12px;
+  }
+
+  .appearance-design-desc {
+    font-size: 10px;
   }
 }
 

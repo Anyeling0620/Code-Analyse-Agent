@@ -252,13 +252,26 @@ npm test
 
 ## 部署
 
-CI（`.github/workflows/deploy.yml`）只在 push 到 `main` 时构建并发布 Release `deploy-latest`，产物为：
+CI（`.github/workflows/deploy.yml`）在 push 到 `main` 时构建一次，并同时发布两个 Release：
+
+- `release-latest`：滚动最新版，每次推送更新；
+- `release2.0`：当前 2.x 版本线，每次推送更新；升级大版本时修改 workflow 顶部的 `CURRENT_RELEASE_TAG`（例如改成 `release3.0`），旧版本线随之冻结。
+
+另有 `release1.0`：改造前旧版前端的冻结快照，只用于回滚，不随推送更新。每个 Release 的产物为：
 
 - `code-analyse-agent.gz`（Linux amd64 后端二进制）
 - `web-dist.tar.gz`（前端静态产物）
-- `version.json`（commit 与各产物 sha256）
+- `version.json`（commit、release tag 与各产物 sha256）
 
-服务器侧由 systemd timer 每分钟执行 `analyse-deploy.sh` 主动拉取 Release，用 `api.github.com` 的 ETag 条件请求判版本、按产物指纹判是否需要重启；下载走镜像链并校验 sha256，后端原子替换 + `/healthz` 健康检查 + 失败回滚。相关脚本在 `scripts/server/`，手动触发用 `scripts/deploy-now.ps1`。
+服务器侧由 systemd timer 每分钟执行 `analyse-deploy.sh` 主动拉取 Release，用 `api.github.com` 的 ETag 条件请求判版本、按产物指纹判是否需要重启；下载走镜像链并校验 sha256，后端原子替换 + `/healthz` 健康检查 + 失败回滚。部署哪个版本由 `/etc/analyse-deploy.conf` 的 `RELEASE_TAG` 决定：
+
+```bash
+RELEASE_TAG="release-latest"   # 最新推送
+# RELEASE_TAG="release2.0"     # 固定到 2.x 当前版本线
+# RELEASE_TAG="release1.0"     # 回滚到改造前版本
+```
+
+修改后下一次 timer 触发（最长约 1 分钟）即按新选择拉取部署。
 
 ## 安全说明
 

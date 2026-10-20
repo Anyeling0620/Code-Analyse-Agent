@@ -61,8 +61,6 @@ func appendMCPTools(groups *Groups, targetGroup []string, tools []tool.BaseTool)
 			groups.Analysis = append(groups.Analysis, tools...)
 		case "qa":
 			groups.QA = append(groups.QA, tools...)
-		case "report":
-			groups.Report = append(groups.Report, tools...)
 		}
 
 	}

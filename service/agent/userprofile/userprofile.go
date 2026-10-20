@@ -1,7 +1,7 @@
 // Package userprofile 负责把用户画像稳定地注入每一次模型调用。
 //
 // 只把画像拼进「第一轮输入消息」是不够的：
-//   - 子 Agent（repo_analyzer / db_report / project_qa 等）通过 AgentTool 调用，
+//   - 子 Agent（repo_analyzer / project_qa 等）通过 AgentTool 调用，
 //     Eino 在转发完整聊天历史时会丢弃全部 system 消息，画像随之丢失；
 //   - 审批恢复（resume）从 checkpoint 继续执行，不会重新构造初始消息，
 //     中断期间用户改过的画像也不会生效。

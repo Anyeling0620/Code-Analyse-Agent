@@ -1,4 +1,4 @@
-import { FileTextIcon, FolderIcon, TerminalIcon } from '../ui/icons';
+import { FolderIcon, TerminalIcon } from '../ui/icons';
 
 const capabilities = [
   {
@@ -14,13 +14,6 @@ const capabilities = [
     icon: TerminalIcon,
     hue: 'var(--section-teal)',
     onHue: 'var(--on-teal)',
-  },
-  {
-    title: '数据库报表',
-    body: '以只读方式连接业务库，执行 SELECT / SHOW / DESCRIBE，生成中文 Markdown 报表。',
-    icon: FileTextIcon,
-    hue: 'var(--section-ultramarine)',
-    onHue: 'var(--on-ultramarine)',
   },
 ];
 

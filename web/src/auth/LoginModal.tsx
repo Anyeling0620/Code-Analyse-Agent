@@ -17,7 +17,6 @@ type LoginModalProps = {
 const coverIndex = [
   '仓库分析',
   '项目问答',
-  '数据库报表',
   '语义索引',
   '执行证据',
   '断点续跑',
@@ -249,7 +248,7 @@ export function LoginModal({
             })}
           </div>
 
-          <p className="login-cover-foot">仓库分析 · 项目问答 · 数据库报表</p>
+          <p className="login-cover-foot">仓库分析 · 项目问答</p>
         </section>
 
         <section className="login-panel">

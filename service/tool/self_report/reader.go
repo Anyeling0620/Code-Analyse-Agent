@@ -1,4 +1,4 @@
-package db_report
+package self_report
 
 import (
 	"context"
@@ -23,7 +23,12 @@ const (
 
 var prohibitedSQLTokenRE = regexp.MustCompile(`(?i)\b(insert|update|delete|replace|alter|drop|create|truncate|grant|revoke|call|set|use|lock|unlock|load|outfile|dumpfile|procedure|function|trigger|event|index|analyze|optimize|repair|flush|reset|kill|handler|do)\b`)
 
-type DBReport struct {
+// Reader 是 self_report 的只读查询引擎，指向 agent_telemetry 运行指标库。
+//
+// 它只做三件事：列库表、看表结构、执行单条只读 SQL，并把结果转成
+// Markdown 表格。写操作由 forbidden 关键字校验 + 只读账号双重拦截，
+// 结果大小由 maxRows / maxCellRunes / queryTimeoutSec 限制。
+type Reader struct {
 	driver          string
 	dsn             string
 	defaultDatabase string
@@ -35,7 +40,11 @@ type DBReport struct {
 	db *sql.DB
 }
 
-func NewDBReport(conf config.DatabaseReport) (*DBReport, error) {
+// NewReader 按 self_report 配置构造只读查询引擎。
+//
+// dsn 为空直接报错；driver、max_rows、max_cell_runes、query_timeout_sec
+// 缺省时落到包内默认值，保证配置漏填也不会退化成无限制查询。
+func NewReader(conf config.SelfReport) (*Reader, error) {
 	if conf.DSN == "" {
 		return nil, errors.New("dsn is empty")
 	}
@@ -60,7 +69,7 @@ func NewDBReport(conf config.DatabaseReport) (*DBReport, error) {
 	if timeoutSec <= 0 {
 		timeoutSec = defaultMaxQueryTimeoutSec
 	}
-	return &DBReport{
+	return &Reader{
 		driver:          driver,
 		dsn:             dsn,
 		defaultDatabase: conf.Database,
@@ -71,7 +80,7 @@ func NewDBReport(conf config.DatabaseReport) (*DBReport, error) {
 	}, nil
 }
 
-func (r *DBReport) getDB() (*sql.DB, error) {
+func (r *Reader) getDB() (*sql.DB, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.db != nil {
@@ -88,7 +97,7 @@ func (r *DBReport) getDB() (*sql.DB, error) {
 	return db, nil
 }
 
-func (r *DBReport) Close() error {
+func (r *Reader) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	defer func() {
@@ -101,7 +110,7 @@ func (r *DBReport) Close() error {
 }
 
 // ListTables 1.获取有什么表
-func (r *DBReport) ListTables(ctx context.Context, input ListTablesInput) (string, error) {
+func (r *Reader) ListTables(ctx context.Context, input ListTablesInput) (string, error) {
 	database, err := r.resolveDatabase(ctx, input.Database)
 	if err != nil {
 		return err.Error(), nil
@@ -124,7 +133,7 @@ func (r *DBReport) ListTables(ctx context.Context, input ListTablesInput) (strin
 }
 
 // DescribeTable 2. 获取这些表有哪些字段，表示含义
-func (r *DBReport) DescribeTable(ctx context.Context, input DescribeTableInput) (string, error) {
+func (r *Reader) DescribeTable(ctx context.Context, input DescribeTableInput) (string, error) {
 	table := strings.TrimSpace(input.Table)
 	if table == "" {
 		return "table cannot be empty", nil
@@ -173,14 +182,14 @@ ORDER BY INDEX_NAME, SEQ_IN_INDEX`, database, table)
 }
 
 // ReadQuery 3. sql执行，返回执行结果
-func (r *DBReport) ReadQuery(ctx context.Context, input ReadQueryInput) (string, error) {
+func (r *Reader) ReadQuery(ctx context.Context, input ReadQueryInput) (string, error) {
 	if prohibitedSQLTokenRE.MatchString(input.Query) {
 		return "query contains non-read-only keyword, denied", nil
 	}
 	return r.readQuery(ctx, input.Query, "query")
 }
 
-func (r *DBReport) readQuery(ctx context.Context, query, label string) (string, error) {
+func (r *Reader) readQuery(ctx context.Context, query, label string) (string, error) {
 	db, err := r.getDB()
 	if err != nil {
 		return err.Error(), nil
@@ -208,7 +217,7 @@ func (r *DBReport) readQuery(ctx context.Context, query, label string) (string, 
 	return b.String(), nil
 }
 
-func (r *DBReport) resolveDatabase(ctx context.Context, inputDBName string) (string, error) {
+func (r *Reader) resolveDatabase(ctx context.Context, inputDBName string) (string, error) {
 	if inputDBName != "" {
 		return inputDBName, nil
 	}
@@ -230,7 +239,7 @@ type queryResult struct {
 	rows    [][]string
 }
 
-func (r *DBReport) queryRows(ctx context.Context, query string, args ...any) (queryResult, error) {
+func (r *Reader) queryRows(ctx context.Context, query string, args ...any) (queryResult, error) {
 	db, err := r.getDB()
 	if err != nil {
 		return queryResult{}, err

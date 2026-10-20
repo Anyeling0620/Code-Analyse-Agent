@@ -11,6 +11,7 @@ import (
 	"edu.agent.code/service/agent/compress"
 	"edu.agent.code/service/agent/runner"
 	"edu.agent.code/service/agent/skill"
+	"edu.agent.code/service/codeindex"
 	"edu.agent.code/service/cost"
 	"edu.agent.code/service/rag"
 	"edu.agent.code/service/tool/provider"
@@ -37,7 +38,6 @@ type conversationTools struct {
 	analysis   []tool.BaseTool
 	direct     []tool.BaseTool
 	qa         []tool.BaseTool
-	report     []tool.BaseTool
 	selfReport []tool.BaseTool
 }
 
@@ -57,7 +57,7 @@ type serviceDeps struct {
 	cost          *cost.Service
 }
 
-func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor, projectIndexer *rag.ProjectIndexer) (deps serviceDeps, err error) {
+func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor, projectIndexer *rag.ProjectIndexer, codeIndexer *codeindex.Indexer) (deps serviceDeps, err error) {
 	// TODO tools handlers ragTool
 	conf := a.GetConfig()
 	// 处理工具集
@@ -82,12 +82,11 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor, projectIndexer *r
 		analysis:   toolGroups.Analysis,
 		direct:     toolGroups.Direct,
 		qa:         toolGroups.QA,
-		report:     toolGroups.Report,
 		selfReport: toolGroups.SelfReport,
 	}
 	// repo_fetch：把 git URL / 本地路径统一解析成工作区内稳定的项目根目录。
 	// 它同时承担"仓库就绪后触发异步建索引 + 回写会话项目上下文"的职责。
-	repoFetchTool, err := repo_fetch.NewTool(repo_fetch.WithHooks(buildRepoFetchHooks(projectIndexer)))
+	repoFetchTool, err := repo_fetch.NewTool(repo_fetch.WithHooks(buildRepoFetchHooks(projectIndexer, codeIndexer)))
 	if err != nil {
 		logger.Error("buildServiceDeps repo_fetch.NewTool err", err)
 		return serviceDeps{}, err
@@ -116,8 +115,13 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor, projectIndexer *r
 		tools.analysis = append(tools.analysis, ragTool)
 		tools.qa = append(tools.qa, ragTool)
 	}
+	// 结构化索引工具（code_outline / code_find_symbol / code_file_deps / code_type_relations）
+	// 与 RAG 相互独立：rag 关闭时它们仍然可用，索引未启用时 Tools() 返回 nil。
+	codeTools := codeIndexer.Tools()
+	tools.analysis = append(tools.analysis, codeTools...)
+	tools.qa = append(tools.qa, codeTools...)
 	// 前端可见工具集
-	visibleToolSet := buildVisibleToolSet(ctx, []string{repo_fetch.ToolName}, tools.direct, tools.qa, tools.analysis, toolGroups.Report)
+	visibleToolSet := buildVisibleToolSet(ctx, []string{repo_fetch.ToolName}, tools.direct, tools.qa, tools.analysis)
 	// chatModel
 	chatModel, err := buildChatModel(ctx, a.GetConfig())
 	if err != nil {
@@ -210,7 +214,6 @@ func buildComposeRunner(chatModel model.ToolCallingChatModel,
 		WithAnalysisTool(tools.analysis).
 		WithQaTool(tools.qa).
 		WithDirectTool(tools.direct).
-		WithReportTool(tools.report).
 		WithSelfReportTool(tools.selfReport).
 		WithToolMiddleware([]compose.ToolMiddleware{
 			terminal.NewApprovalMiddleware(repo.approvals),
@@ -235,26 +238,35 @@ func buildIterationLimits(conf config.AgentMaxIterations) runner.IterationLimits
 		ProjectQA:            conf.ProjectQA,
 		RepoAnalyzer:         conf.RepoAnalyzer,
 		RepoAnalyzerSubAgent: conf.RepoAnalyzerSubAgent,
-		DBReport:             conf.DBReport,
 	}
 }
 
 // buildRepoFetchHooks 构造 repo_fetch 成功后的联动逻辑：
 //  1. 回写本轮会话上下文，保证同一轮结束时持久化的会话已经带上项目根目录，
 //     这样第二轮追问"刚才那个项目"时 project_qa / rag_retriever 才知道分析的是哪个项目；
-//  2. 异步触发项目级语义索引，不阻塞 repo_fetch 返回，也不占用分析主流程。
-func buildRepoFetchHooks(projectIndexer *rag.ProjectIndexer) repo_fetch.Hooks {
+//  2. 异步触发项目级语义索引，不阻塞 repo_fetch 返回，也不占用分析主流程；
+//  3. 同样异步触发结构化索引（符号表 + 依赖图）。它独立于 rag.enabled，
+//     因此放在 RAG 的 if 之外，RAG 关闭时结构化索引照样建。
+func buildRepoFetchHooks(projectIndexer *rag.ProjectIndexer, codeIndexer *codeindex.Indexer) repo_fetch.Hooks {
 	return repo_fetch.Hooks{
 		OnReady: func(ctx context.Context, r repo_fetch.Result) {
 			if session := turnSessionFromContext(ctx); session != nil && r.Root != "" {
 				session.CurrentProjectRoot = r.Root
 				session.CurrentProjectName = filepath.Base(r.Root)
 			}
-			if projectIndexer == nil || r.Root == "" {
+			if r.Root == "" {
 				return
 			}
 			// HTTP 请求结束后 ctx 会被取消，这里必须脱离取消信号，让索引在后台跑完。
 			indexCtx := context.WithoutCancel(ctx)
+			codeIndexer.EnsureIndexedAsync(indexCtx, codeindex.Ref{
+				ProjectID: r.ProjectID,
+				Root:      r.Root,
+				Commit:    r.Commit,
+			})
+			if projectIndexer == nil {
+				return
+			}
 			ref := rag.ProjectRef{ProjectID: r.ProjectID, Root: r.Root, Commit: r.Commit}
 			go func() {
 				if err := projectIndexer.EnsureIndexed(indexCtx, ref); err != nil {

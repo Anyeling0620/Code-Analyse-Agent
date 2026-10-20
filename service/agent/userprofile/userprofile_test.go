@@ -122,11 +122,11 @@ func TestMiddlewareUsesCurrentProfileFromContext(t *testing.T) {
 	}
 }
 
-// 子 Agent（db_report 等）通过 AgentTool 拿到的历史会丢掉 system 消息；
+// 子 Agent（self_report 等）通过 AgentTool 拿到的历史会丢掉 system 消息；
 // 中间件必须在空历史里补回画像。
 func TestMiddlewareInjectsIntoSubAgentWithoutProfile(t *testing.T) {
 	state := &adk.ChatModelAgentState{Messages: []*schema.Message{
-		schema.SystemMessage("db_report 指令"),
+		schema.SystemMessage("self_report 指令"),
 		schema.UserMessage("查一下今天的订单"),
 	}}
 	ctx := dto.WithProfile(context.Background(), &dto.Profile{UserType: "teacher", SkillLevel: "专家"})

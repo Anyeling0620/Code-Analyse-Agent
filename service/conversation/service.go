@@ -8,6 +8,7 @@ import (
 	"edu.agent.code/adaptor/repo/run"
 	"edu.agent.code/adaptor/repo/session"
 	"edu.agent.code/config"
+	"edu.agent.code/service/codeindex"
 	"edu.agent.code/service/cost"
 	"edu.agent.code/service/dto"
 	"edu.agent.code/service/rag"
@@ -49,15 +50,19 @@ type Service struct {
 	// projectIndexer 负责项目级代码语义索引：按 project_id 隔离集合，
 	// 供 repo_fetch 完成后异步建索引，并作为 rag_retriever 工具的检索后端。
 	projectIndexer *rag.ProjectIndexer
+	// codeIndexer 是项目级结构化索引（符号表 + 依赖图），与上面基于向量的 RAG 完全独立。
+	// 为 nil 表示未启用（code_index.enable=false 或初始化失败），所有调用点都要容忍 nil。
+	codeIndexer *codeindex.Indexer
 
 	// telemetry 把每轮 run 的聚合指标异步写到 agent_telemetry 库。
 	// 它为 nil 表示埋点关闭（未配置或初始化失败），所有调用点都必须容忍 nil。
 	telemetry *telemetry.Writer
 }
 
-func NewService(ctx context.Context, adaptor adaptor.IAdaptor, projectIndexer *rag.ProjectIndexer) (*Service, error) {
+func NewService(ctx context.Context, adaptor adaptor.IAdaptor, projectIndexer *rag.ProjectIndexer,
+	codeIndexer *codeindex.Indexer) (*Service, error) {
 	conf := adaptor.GetConfig()
-	deps, err := buildServiceDeps(ctx, adaptor, projectIndexer)
+	deps, err := buildServiceDeps(ctx, adaptor, projectIndexer, codeIndexer)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +85,7 @@ func NewService(ctx context.Context, adaptor adaptor.IAdaptor, projectIndexer *r
 		cost:           deps.cost,
 		rag:            nil,
 		projectIndexer: projectIndexer,
+		codeIndexer:    codeIndexer,
 		runs:           run.NewRun(adaptor),
 		broker:         newRunBroker(),
 		telemetry:      telemetryWriter,
@@ -105,6 +111,10 @@ func (s *Service) Close() error {
 	}
 	// 关埋点前先把队列里剩下的指标排空，避免正常关停丢掉最后几轮的数据。
 	if closeErr := s.telemetry.Close(); closeErr != nil {
+		err = errors.Join(err, closeErr)
+	}
+	// 结构化索引用的是自己的 SQLite 连接，关停时一并释放。
+	if closeErr := s.codeIndexer.Close(); closeErr != nil {
 		err = errors.Join(err, closeErr)
 	}
 	return err

@@ -3,11 +3,23 @@ package self_report
 import (
 	"context"
 	"edu.agent.code/common"
-	"edu.agent.code/service/tool/db_report"
 	"errors"
 	"github.com/cloudwego/eino/components/tool"
 	toolutils "github.com/cloudwego/eino/components/tool/utils"
 )
+
+type ListTablesInput struct {
+	Database string `json:"database,omitempty" jsonschema_description:"可选数据库名；为空时使用配置中的默认数据库或 DSN 当前库"`
+}
+
+type DescribeTableInput struct {
+	Database string `json:"database,omitempty" jsonschema_description:"可选数据库名；为空时使用配置中的默认数据库或 DSN 当前库"`
+	Table    string `json:"table" jsonschema:"required" jsonschema_description:"要查看结构、注释、字段业务含义和关联关系的表名"`
+}
+
+type ReadQueryInput struct {
+	Query string `json:"query" jsonschema:"required" jsonschema_description:"单条只读 SQL，只允许 SELECT、SHOW、DESCRIBE、DESC、EXPLAIN；禁止任何写入、DDL、权限和存储过程语句"`
+}
 
 // noPermissionMessage 是白名单外的用户调用自省工具时返回的结果。
 //
@@ -16,16 +28,15 @@ import (
 // 返回一句明确的拒绝说明，模型才知道该停止尝试并告知用户。
 const noPermissionMessage = "无权限：agent 运行指标（自省报表）只对白名单用户开放，请改用其他方式回答。"
 
-// NewTools 构造自省报表的三个只读工具。
+// NewTools 构造自省报表的三个只读工具，数据源指向 agent_telemetry 运行指标库。
 //
-// 与 db_report 的工具是两套独立实例，连接的是另一个库、另一个只读账号：
-//   - db_report 连业务库（共享只读账号，所有用户可用）；
-//   - self_report 连 agent_telemetry（独立只读账号 + 白名单，只给管理用户）。
+// 工具执行前先过用户白名单：只有 allowed_users 里的用户能查，
+// 空白名单等于谁都不放行。连接用的是独立的只读账号，权限边界在库侧再兜一层。
 //
 // 这里不做"注册时按用户过滤工具"——工具集是服务启动时全局构建一次的
 // （见 service/conversation/depends.go 的 buildComposeRunner），
 // 没有随用户变化的挂载点，所以门禁只能放在**工具执行时**按 ctx 里的用户判定。
-func NewTools(reporter *db_report.DBReport, allowedUsers []string) ([]tool.BaseTool, error) {
+func NewTools(reporter *Reader, allowedUsers []string) ([]tool.BaseTool, error) {
 	if reporter == nil {
 		return nil, errors.New("self report reporter is nil")
 	}
@@ -35,7 +46,7 @@ func NewTools(reporter *db_report.DBReport, allowedUsers []string) ([]tool.BaseT
 		"obs_list_tables",
 		"只读列出 agent 运行指标库（agent_telemetry）的表、表注释与估算行数。"+
 			"仅白名单用户可用；用于确认自省报表可查的数据表。",
-		func(ctx context.Context, input db_report.ListTablesInput) (string, error) {
+		func(ctx context.Context, input ListTablesInput) (string, error) {
 			if !allowed(ctx, allow) {
 				return noPermissionMessage, nil
 			}
@@ -50,7 +61,7 @@ func NewTools(reporter *db_report.DBReport, allowedUsers []string) ([]tool.BaseT
 		"obs_describe_table",
 		"只读查看 agent 运行指标库某张表的结构、字段注释与索引。"+
 			"仅白名单用户可用；写自省 SQL 前应先用它理解字段口径。",
-		func(ctx context.Context, input db_report.DescribeTableInput) (string, error) {
+		func(ctx context.Context, input DescribeTableInput) (string, error) {
 			if !allowed(ctx, allow) {
 				return noPermissionMessage, nil
 			}
@@ -65,7 +76,7 @@ func NewTools(reporter *db_report.DBReport, allowedUsers []string) ([]tool.BaseT
 		"obs_read_query",
 		"对 agent 运行指标库执行单条只读 SQL 并返回 Markdown 表格。"+
 			"仅白名单用户可用；只允许 SELECT/SHOW/DESCRIBE/DESC/EXPLAIN。",
-		func(ctx context.Context, input db_report.ReadQueryInput) (string, error) {
+		func(ctx context.Context, input ReadQueryInput) (string, error) {
 			if !allowed(ctx, allow) {
 				return noPermissionMessage, nil
 			}

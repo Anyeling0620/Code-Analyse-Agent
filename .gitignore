@@ -11,6 +11,7 @@ web/dist
 
 # 运行时数据与日志
 data/edu.agent.code.db
+data/code_index.db*
 logs/
 
 # 依赖与编辑器

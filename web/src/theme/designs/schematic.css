@@ -887,6 +887,9 @@ html[data-ui='schematic'] .empty-state {
 }
 
 html[data-ui='schematic'] .empty-sheet {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 176px;
+  column-gap: 40px;
   max-width: 880px;
   padding: 64px 46px 36px;
   border: 1px solid var(--rule-strong);
@@ -899,6 +902,18 @@ html[data-ui='schematic'] .empty-sheet {
     linear-gradient(90deg, var(--grid-major) 1px, transparent 1px);
   background-size: 10px 10px, 10px 10px, 50px 50px, 50px 50px;
   box-shadow: none;
+}
+
+html[data-ui='schematic'] .empty-heading {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+html[data-ui='schematic'] .empty-index {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
 }
 
 html[data-ui='schematic'] .empty-sheet::before {
@@ -1078,14 +1093,275 @@ html[data-ui='schematic'] .empty-index-copy p {
   line-height: 1.7;
 }
 
-html[data-ui='schematic'] .empty-start {
-  margin: 22px 0 0;
-  padding-top: 13px;
+html[data-ui='schematic'] .empty-margin {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding-left: 20px;
+  border-left: 1px solid var(--rule-strong);
+  color: var(--ink-soft);
+}
+
+html[data-ui='schematic'] .empty-margin-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule-strong);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+html[data-ui='schematic'] .empty-margin-head span:first-child {
+  color: var(--accent);
+}
+
+html[data-ui='schematic'] .empty-plate {
+  position: relative;
+  margin: 0;
+  padding: 22px 6px 5px;
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-soft);
+}
+
+html[data-ui='schematic'] .empty-plate::before {
+  content: 'DETAIL A';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 13px;
+  padding: 0 5px;
+  border-right: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
+  background: var(--paper-deep);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.1em;
+  line-height: 13px;
+}
+
+html[data-ui='schematic'] .empty-plate-figure {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+html[data-ui='schematic'] .empty-plate-ghost rect {
+  fill: none;
+  stroke: var(--rule-strong);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+html[data-ui='schematic'] .empty-plate-sheet {
+  fill: var(--paper-soft);
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+
+html[data-ui='schematic'] .empty-plate-tab {
+  fill: var(--accent);
+}
+
+html[data-ui='schematic'] .empty-plate-punch {
+  fill: var(--paper-soft);
+  stroke: var(--ink);
+  stroke-width: 0.9;
+}
+
+html[data-ui='schematic'] .empty-plate-title {
+  stroke: var(--ink);
+  stroke-width: 1.8;
+}
+
+html[data-ui='schematic'] .empty-plate-title-soft {
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+html[data-ui='schematic'] .empty-plate-chart line {
+  stroke: var(--rule-strong);
+  stroke-width: 0.9;
+}
+
+html[data-ui='schematic'] .empty-plate-chart polyline {
+  stroke: var(--blue);
+  stroke-width: 1.4;
+}
+
+html[data-ui='schematic'] .empty-plate-dot {
+  fill: var(--blue);
+}
+
+html[data-ui='schematic'] .empty-plate-line {
+  stroke: var(--rule-strong);
+  stroke-width: 0.9;
+}
+
+html[data-ui='schematic'] .empty-plate-rail rect {
+  fill: transparent;
+  stroke: var(--rule-strong);
+  stroke-width: 0.9;
+}
+
+html[data-ui='schematic'] .empty-plate-rail-active {
+  fill: var(--blue);
+  stroke: var(--blue);
+}
+
+html[data-ui='schematic'] .empty-plate-dims {
+  display: block;
+  fill: var(--blue);
+  stroke: var(--blue);
+  stroke-width: 0.9;
+}
+
+html[data-ui='schematic'] .empty-plate-callouts path {
+  fill: none;
+  stroke: var(--blue);
+  stroke-width: 0.8;
+  stroke-dasharray: 2 2;
+}
+
+html[data-ui='schematic'] .empty-plate-callouts text {
+  fill: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
+html[data-ui='schematic'] .empty-plate-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 7px;
+  margin-top: 6px;
+  padding: 5px 2px 0;
   border-top: 1px solid var(--rule-strong);
   color: var(--ink-soft);
-  font-size: 9px;
-  line-height: 1.9;
-  letter-spacing: 0.02em;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+}
+
+html[data-ui='schematic'] .empty-plate-fig {
+  flex: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+}
+
+html[data-ui='schematic'] .empty-plate-key {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+html[data-ui='schematic'] .empty-plate-key li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+html[data-ui='schematic'] .empty-key-mark {
+  flex: none;
+  width: 11px;
+  height: 7px;
+  border: 1px solid var(--rule-strong);
+}
+
+html[data-ui='schematic'] .empty-key-mark-tab {
+  border-color: transparent;
+  background: var(--accent);
+}
+
+html[data-ui='schematic'] .empty-key-mark-punch {
+  width: 7px;
+  height: 7px;
+  border-color: var(--ink);
+  border-radius: 50%;
+  background: transparent;
+}
+
+html[data-ui='schematic'] .empty-key-mark-rail {
+  border-color: transparent;
+  background: var(--blue);
+}
+
+html[data-ui='schematic'] .empty-margin-foot {
+  display: flex;
+  justify-content: stretch;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+html[data-ui='schematic'] .empty-stamp {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .empty-stamp::before {
+  display: none;
+}
+
+html[data-ui='schematic'] .empty-stamp::after {
+  content: 'REV 00 · SCALE 1:1';
+  display: block;
+  padding: 4px 7px;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 6.5px;
+  letter-spacing: 0.08em;
+  line-height: 1.3;
+}
+
+html[data-ui='schematic'] .empty-stamp-title {
+  display: block;
+  padding: 6px 7px 5px;
+  border-bottom: 1px solid var(--rule-strong);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+html[data-ui='schematic'] .empty-stamp-sub {
+  display: block;
+  padding: 5px 7px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 /* ---- Messages ------------------------------------------------------------ */
@@ -2043,6 +2319,23 @@ html[data-ui='schematic'] .trace-elapsed {
   html[data-ui='schematic'] .conversation-scroll.has-elevator {
     padding-right: 46px;
   }
+
+  html[data-ui='schematic'] .empty-sheet {
+    grid-template-columns: minmax(0, 1fr) 150px;
+    column-gap: 28px;
+  }
+}
+
+/* 1024 级宽度：压缩图框上下留白，避免图框探入输入区 */
+@media (min-width: 901px) and (max-width: 1180px) {
+  html[data-ui='schematic'] .empty-state {
+    padding-top: 12px;
+  }
+
+  html[data-ui='schematic'] .empty-sheet {
+    padding-top: 56px;
+    padding-bottom: 32px;
+  }
 }
 
 @media (max-width: 900px) {
@@ -2118,6 +2411,60 @@ html[data-ui='schematic'] .trace-elapsed {
 
   html[data-ui='schematic'] .conversation-scroll {
     padding-bottom: 210px;
+  }
+
+  html[data-ui='schematic'] .empty-sheet {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html[data-ui='schematic'] .empty-heading,
+  html[data-ui='schematic'] .empty-index {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  html[data-ui='schematic'] .empty-margin {
+    grid-column: 1;
+    grid-row: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    margin-top: 6px;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--rule-strong);
+    border-left: 0;
+  }
+
+  html[data-ui='schematic'] .empty-margin-head,
+  html[data-ui='schematic'] .empty-plate-key {
+    display: none;
+  }
+
+  html[data-ui='schematic'] .empty-plate {
+    flex: 0 0 96px;
+    padding: 20px 4px 3px;
+  }
+
+  html[data-ui='schematic'] .empty-plate-caption {
+    display: none;
+  }
+
+  html[data-ui='schematic'] .empty-margin-foot {
+    margin-top: 0;
+    margin-left: auto;
+    padding-top: 0;
+  }
+
+  html[data-ui='schematic'] .empty-stamp {
+    width: auto;
+  }
+
+  html[data-ui='schematic'] .empty-stamp-title {
+    font-size: 7.5px;
+  }
+
+  html[data-ui='schematic'] .empty-stamp-sub {
+    font-size: 6.5px;
   }
 }
 
@@ -2231,9 +2578,15 @@ html[data-ui='schematic'] .trace-elapsed {
     padding: 12px 0;
   }
 
-  html[data-ui='schematic'] .empty-start {
-    margin-top: 14px;
-    padding-top: 10px;
+  html[data-ui='schematic'] .empty-plate {
+    display: block;
+    flex-basis: 78px;
+    padding: 18px 3px 2px;
+  }
+
+  html[data-ui='schematic'] .empty-stamp-title {
+    font-size: 7px;
+    letter-spacing: 0.08em;
   }
 
   html[data-ui='schematic'] .empty-index-row::before {

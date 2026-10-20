@@ -1987,6 +1987,9 @@ html[data-ui='nocturne'] .empty-state {
 
 html[data-ui='nocturne'] .empty-sheet {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 152px;
+  column-gap: 32px;
   max-width: 780px;
   margin: 0 auto;
   padding: 36px 46px 24px 52px;
@@ -2031,9 +2034,21 @@ html[data-ui='nocturne'] .empty-sheet::after {
 
 html[data-ui='nocturne'] .empty-heading,
 html[data-ui='nocturne'] .empty-index,
-html[data-ui='nocturne'] .empty-start {
+html[data-ui='nocturne'] .empty-margin {
   position: relative;
   z-index: 1;
+}
+
+html[data-ui='nocturne'] .empty-heading {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+html[data-ui='nocturne'] .empty-index {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
 }
 
 html[data-ui='nocturne'] .empty-tab {
@@ -2143,15 +2158,248 @@ html[data-ui='nocturne'] .empty-index-copy p {
   line-height: 1.75;
 }
 
-html[data-ui='nocturne'] .empty-start {
-  margin: 14px 0 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--rule);
+html[data-ui='nocturne'] .empty-margin {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  min-width: 0;
+  padding-left: 20px;
+  border-left: 1px dashed var(--rule-strong);
+  color: var(--ink-soft);
+}
+
+html[data-ui='nocturne'] .empty-margin-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--rule);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+html[data-ui='nocturne'] .empty-plate {
+  position: relative;
+  margin: 0;
+  padding: 2px 0 0;
+}
+
+html[data-ui='nocturne'] .empty-plate::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-signal), transparent);
+  opacity: 0.5;
+  pointer-events: none;
+  animation: empty-plate-scan 7.5s linear infinite;
+}
+
+html[data-ui='nocturne'] .empty-plate-figure {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+html[data-ui='nocturne'] .empty-plate-ghost rect {
+  fill: none;
+  stroke: var(--accent-mid);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+html[data-ui='nocturne'] .empty-plate-sheet {
+  fill: var(--ink);
+  fill-opacity: 0.02;
+  stroke: var(--accent-signal);
+  stroke-width: 1;
+}
+
+html[data-ui='nocturne'] .empty-plate-tab {
+  fill: var(--amber);
+}
+
+html[data-ui='nocturne'] .empty-plate-punch {
+  fill: var(--paper-soft);
+  stroke: var(--accent);
+  stroke-width: 0.9;
+}
+
+html[data-ui='nocturne'] .empty-plate-title {
+  stroke: var(--accent);
+  stroke-width: 1.7;
+}
+
+html[data-ui='nocturne'] .empty-plate-title-soft {
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+html[data-ui='nocturne'] .empty-plate-chart line {
+  stroke: var(--rule-strong);
+  stroke-width: 0.9;
+}
+
+html[data-ui='nocturne'] .empty-plate-chart polyline {
+  stroke: var(--accent);
+  stroke-width: 1.4;
+}
+
+html[data-ui='nocturne'] .empty-plate-dot {
+  fill: var(--accent);
+  filter: drop-shadow(0 0 3px var(--accent));
+}
+
+html[data-ui='nocturne'] .empty-plate-line {
+  stroke: var(--accent-mid);
+  stroke-width: 0.9;
+}
+
+html[data-ui='nocturne'] .empty-plate-rail rect {
+  fill: transparent;
+  stroke: var(--accent-signal);
+  stroke-width: 0.9;
+}
+
+html[data-ui='nocturne'] .empty-plate-rail-active {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
+html[data-ui='nocturne'] .empty-plate-dims {
+  display: none;
+}
+
+html[data-ui='nocturne'] .empty-plate-callouts path {
+  fill: none;
+  stroke: var(--accent-mid);
+  stroke-width: 0.8;
+  stroke-dasharray: 2 2;
+}
+
+html[data-ui='nocturne'] .empty-plate-callouts text {
+  fill: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
+html[data-ui='nocturne'] .empty-plate-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 7px;
+  margin-top: 5px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--rule);
+  color: var(--ink-soft);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+html[data-ui='nocturne'] .empty-plate-fig {
+  flex: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.1em;
+}
+
+html[data-ui='nocturne'] .empty-plate-key {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
   color: var(--ink-faint);
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.03em;
-  line-height: 1.7;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+html[data-ui='nocturne'] .empty-plate-key li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+html[data-ui='nocturne'] .empty-key-mark {
+  flex: none;
+  width: 11px;
+  height: 7px;
+  border: 1px solid var(--rule-strong);
+}
+
+html[data-ui='nocturne'] .empty-key-mark-tab {
+  border-color: transparent;
+  background: var(--amber);
+}
+
+html[data-ui='nocturne'] .empty-key-mark-punch {
+  width: 7px;
+  height: 7px;
+  border-color: var(--accent);
+  border-radius: 50%;
+  background: transparent;
+}
+
+html[data-ui='nocturne'] .empty-key-mark-rail {
+  border-color: transparent;
+  background: var(--accent);
+}
+
+html[data-ui='nocturne'] .empty-margin-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+html[data-ui='nocturne'] .empty-stamp {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 9px;
+  border: 1px solid var(--accent);
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+html[data-ui='nocturne'] .empty-stamp::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border: 1px solid var(--accent-mid);
+  pointer-events: none;
+}
+
+html[data-ui='nocturne'] .empty-stamp-title {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+html[data-ui='nocturne'] .empty-stamp-sub {
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 /* ---- Composer · instruction line ---------------------------------------- */
@@ -2665,6 +2913,26 @@ html[data-ui='nocturne'] .primary-button:disabled {
   }
 }
 
+@keyframes empty-plate-scan {
+  0% {
+    top: 4%;
+    opacity: 0;
+  }
+
+  15% {
+    opacity: 0.5;
+  }
+
+  85% {
+    opacity: 0.5;
+  }
+
+  100% {
+    top: 94%;
+    opacity: 0;
+  }
+}
+
 @keyframes nocturne-fold {
   from {
     opacity: 0;
@@ -2708,7 +2976,6 @@ html[data-ui='nocturne'] .tool-card-name,
 html[data-ui='nocturne'] .tool-card-label,
 html[data-ui='nocturne'] .tool-pending,
 html[data-ui='nocturne'] .empty-tab,
-html[data-ui='nocturne'] .empty-start,
 html[data-ui='nocturne'] .composer-label,
 html[data-ui='nocturne'] .composer-hint,
 html[data-ui='nocturne'] .composer-metrics {
@@ -2743,6 +3010,11 @@ html[data-ui='nocturne'] .composer textarea::placeholder {
 
   html[data-ui='nocturne'] .composer-shell {
     width: min(900px, calc(100% - 56px));
+  }
+
+  html[data-ui='nocturne'] .empty-sheet {
+    grid-template-columns: minmax(0, 1fr) 136px;
+    column-gap: 26px;
   }
 
   html[data-ui='nocturne'] .stage-bar {
@@ -2897,7 +3169,64 @@ html[data-ui='nocturne'] .composer textarea::placeholder {
   }
 
   html[data-ui='nocturne'] .empty-sheet {
+    grid-template-columns: minmax(0, 1fr);
     padding: 32px 22px 22px 38px;
+  }
+
+  html[data-ui='nocturne'] .empty-heading,
+  html[data-ui='nocturne'] .empty-index {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  html[data-ui='nocturne'] .empty-margin {
+    grid-column: 1;
+    grid-row: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    margin-top: 4px;
+    padding: 13px 0 0;
+    border-top: 1px dashed var(--rule-strong);
+    border-left: 0;
+  }
+
+  html[data-ui='nocturne'] .empty-margin-head,
+  html[data-ui='nocturne'] .empty-plate-key {
+    display: none;
+  }
+
+  html[data-ui='nocturne'] .empty-plate {
+    flex: 0 0 88px;
+    padding-top: 0;
+  }
+
+  html[data-ui='nocturne'] .empty-plate::after {
+    display: none;
+  }
+
+  html[data-ui='nocturne'] .empty-plate-caption {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    margin-top: 4px;
+    padding-top: 0;
+    border-top: 0;
+    font-size: 10px;
+  }
+
+  html[data-ui='nocturne'] .empty-plate-fig {
+    font-size: 7px;
+  }
+
+  html[data-ui='nocturne'] .empty-margin-foot {
+    margin-top: 0;
+    margin-left: auto;
+    padding-top: 0;
+  }
+
+  html[data-ui='nocturne'] .empty-stamp {
+    padding: 6px 8px;
   }
 
   html[data-ui='nocturne'] .empty-heading h2 {
@@ -2961,6 +3290,23 @@ html[data-ui='nocturne'] .composer textarea::placeholder {
 }
 
 @media (max-width: 560px) {
+  html[data-ui='nocturne'] .empty-plate {
+    display: none;
+  }
+
+  html[data-ui='nocturne'] .empty-margin {
+    gap: 10px;
+  }
+
+  html[data-ui='nocturne'] .empty-margin-head {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
   html[data-ui='nocturne'] .stage-title {
     font-size: 13px;
   }
@@ -3093,7 +3439,8 @@ html[data-ui='nocturne'] .composer textarea::placeholder {
     opacity: 1;
   }
 
-  html[data-ui='nocturne'] .empty-sheet::after {
+  html[data-ui='nocturne'] .empty-sheet::after,
+  html[data-ui='nocturne'] .empty-plate::after {
     display: none;
     animation: none;
   }

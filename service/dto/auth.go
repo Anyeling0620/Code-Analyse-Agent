@@ -34,3 +34,10 @@ type RegisterRequest struct {
 	Code     string `json:"code"`
 	Password string `json:"password"`
 }
+
+// ResetPasswordRequest 是邮箱验证码重设密码请求。
+type ResetPasswordRequest struct {
+	Email    string `json:"email"`
+	Code     string `json:"code"`
+	Password string `json:"password"`
+}

@@ -1,18 +1,17 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { SECTION_HUES } from '../ui/palette';
-import { ChevronRightIcon, UserIcon } from '../ui/icons';
 
 type LoginModalProps = {
   onSubmit: (username: string, password: string) => Promise<void>;
-  // 服务端开放游客登录时才展示入口；默认不显示，避免出现点了就报错的按钮。
-  guestEnabled?: boolean;
-  onGuestSubmit?: () => Promise<void>;
   // 服务端开放邮箱注册时才展示「登录 / 注册」切换与注册表单。
   emailRegisterEnabled?: boolean;
+  // 服务端 SMTP 可用时才展示「忘记密码」入口。
+  passwordResetEnabled?: boolean;
   onRegister?: (email: string, code: string, password: string) => Promise<void>;
+  onResetPassword?: (email: string, code: string, password: string) => Promise<void>;
   // 返回重发倒计时秒数；失败时抛错，由弹窗展示中文提示。
-  onSendCode?: (email: string) => Promise<number>;
+  onSendCode?: (email: string, purpose: 'register' | 'reset') => Promise<number>;
 };
 
 const coverIndex = [
@@ -51,31 +50,32 @@ function validatePassword(password: string): string {
   return '';
 }
 
+type Mode = 'login' | 'register' | 'reset';
+
 // 登录是进入应用的前置条件，因此该页面不提供关闭入口。
 export function LoginModal({
   onSubmit,
-  guestEnabled = false,
-  onGuestSubmit,
   emailRegisterEnabled = false,
+  passwordResetEnabled = false,
   onRegister,
+  onResetPassword,
   onSendCode,
 }: LoginModalProps) {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<Mode>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
-  const [registerPassword, setRegisterPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [countdown, setCountdown] = useState(0);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [guestSubmitting, setGuestSubmitting] = useState(false);
   const [codeSending, setCodeSending] = useState(false);
 
   // 发送成功后的重发倒计时。每次 countdown 变化重建一个 1 秒定时器，
-  // 归零时自然停止；切换到登录页再切回来也不会重置。
+  // 归零时自然停止；切换页面再切回来也不会重置。
   useEffect(() => {
     if (countdown <= 0) {
       return undefined;
@@ -84,19 +84,25 @@ export function LoginModal({
     return () => window.clearTimeout(timer);
   }, [countdown]);
 
-  function switchMode(next: 'login' | 'register') {
-    if (next === mode) {
-      return;
-    }
-    setMode(next);
+  function resetFeedback() {
     setError('');
     setNotice('');
   }
 
+  function switchMode(next: Mode) {
+    if (next === mode) {
+      return;
+    }
+    if (next === 'reset' && !email && username.includes('@')) {
+      setEmail(username.trim());
+    }
+    setMode(next);
+    resetFeedback();
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError('');
-    setNotice('');
+    resetFeedback();
     setSubmitting(true);
     try {
       await onSubmit(username.trim(), password);
@@ -107,7 +113,7 @@ export function LoginModal({
     }
   }
 
-  async function handleSendCode() {
+  async function handleSendCode(purpose: 'register' | 'reset') {
     if (!onSendCode) {
       return;
     }
@@ -120,7 +126,7 @@ export function LoginModal({
     setNotice('');
     setCodeSending(true);
     try {
-      const resendAfter = await onSendCode(email.trim());
+      const resendAfter = await onSendCode(email.trim(), purpose);
       setCountdown(resendAfter > 0 ? resendAfter : DEFAULT_RESEND_SECONDS);
       setNotice('验证码已发送，请查收邮箱（含垃圾邮件文件夹）');
     } catch (err) {
@@ -130,58 +136,83 @@ export function LoginModal({
     }
   }
 
+  function validateCodeAndPassword(): boolean {
+    const emailError = validateEmail(email.trim());
+    if (emailError) {
+      setError(emailError);
+      return false;
+    }
+    if (!/^\d{6}$/.test(code.trim())) {
+      setError('请输入 6 位数字验证码');
+      return false;
+    }
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      setError(passwordError);
+      return false;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('两次输入的密码不一致');
+      return false;
+    }
+    return true;
+  }
+
   async function handleRegisterSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!onRegister) {
       return;
     }
-    setError('');
-    setNotice('');
-    const emailError = validateEmail(email.trim());
-    if (emailError) {
-      setError(emailError);
-      return;
-    }
-    if (!/^\d{6}$/.test(code.trim())) {
-      setError('请输入 6 位数字验证码');
-      return;
-    }
-    const passwordError = validatePassword(registerPassword);
-    if (passwordError) {
-      setError(passwordError);
-      return;
-    }
-    if (registerPassword !== confirmPassword) {
-      setError('两次输入的密码不一致');
+    resetFeedback();
+    if (!validateCodeAndPassword()) {
       return;
     }
     setSubmitting(true);
     try {
-      await onRegister(email.trim(), code.trim(), registerPassword);
+      await onRegister(email.trim(), code.trim(), newPassword);
     } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : '注册失败，请重试');
+      setError(err instanceof Error ? err.message : '注册失败，请重试');
     } finally {
       setSubmitting(false);
     }
   }
 
-  async function handleGuestSubmit() {
-    if (!onGuestSubmit) {
+  async function handleResetSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!onResetPassword) {
       return;
     }
-    setError('');
-    setNotice('');
-    setGuestSubmitting(true);
+    resetFeedback();
+    if (!validateCodeAndPassword()) {
+      return;
+    }
+    const resetEmail = email.trim();
+    setSubmitting(true);
     try {
-      await onGuestSubmit();
+      await onResetPassword(resetEmail, code.trim(), newPassword);
+      // 重设后旧令牌已失效，回到登录页让用户用新密码重新登录。
+      setMode('login');
+      setUsername(resetEmail);
+      setPassword('');
+      setCode('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setNotice('密码已重设，请使用新密码登录。');
     } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : '游客登录失败，请重试');
+      setError(err instanceof Error ? err.message : '密码重设失败，请重试');
     } finally {
-      setGuestSubmitting(false);
+      setSubmitting(false);
     }
   }
 
   const registerMode = mode === 'register' && emailRegisterEnabled;
+  const resetMode = mode === 'reset' && passwordResetEnabled;
+  const heading = registerMode ? '注册' : resetMode ? '重设密码' : '登录';
+  const description = registerMode
+      ? '使用邮箱验证码创建账号，注册后直接进入工作台。'
+      : resetMode
+          ? '通过邮箱验证码设置新密码，重设后旧登录会话会失效。'
+          : '';
 
   return (
       <main className="login-page">
@@ -225,7 +256,7 @@ export function LoginModal({
           <div className="login-card">
             <span className="login-card-tab" aria-hidden="true">ACCESS</span>
 
-            {emailRegisterEnabled && (
+            {emailRegisterEnabled && !resetMode && (
                 <div className="login-mode-tabs" role="tablist" aria-label="登录或注册">
                   <button
                       type="button"
@@ -249,12 +280,8 @@ export function LoginModal({
             )}
 
             <header className="login-card-header">
-              <h2>{registerMode ? '注册' : '登录'}</h2>
-              <p>
-                {registerMode
-                    ? '使用邮箱验证码创建账号，注册后直接进入工作台。'
-                    : '使用邮箱/账号进入工作台，或以游客身份试用。'}
-              </p>
+              <h2>{heading}</h2>
+              {description && <p>{description}</p>}
             </header>
 
             {registerMode ? (
@@ -284,7 +311,7 @@ export function LoginModal({
                       <button
                           className="code-send-button"
                           type="button"
-                          onClick={handleSendCode}
+                          onClick={() => handleSendCode('register')}
                           disabled={codeSending || countdown > 0 || submitting}
                       >
                         {codeSending ? '发送中…' : countdown > 0 ? `${countdown}s 后重发` : '发送验证码'}
@@ -296,8 +323,8 @@ export function LoginModal({
                     <span className="field-label">密码</span>
                     <input
                         type="password"
-                        value={registerPassword}
-                        onChange={(event) => setRegisterPassword(event.target.value)}
+                        value={newPassword}
+                        onChange={(event) => setNewPassword(event.target.value)}
                         placeholder="至少 8 位，包含字母和数字"
                         autoComplete="new-password"
                     />
@@ -320,9 +347,81 @@ export function LoginModal({
                   <button
                       className="primary-button login-submit"
                       type="submit"
-                      disabled={submitting || !email || !code || !registerPassword || !confirmPassword}
+                      disabled={submitting || !email || !code || !newPassword || !confirmPassword}
                   >
                     {submitting ? '注册中…' : '注册并进入'}
+                  </button>
+                </form>
+            ) : resetMode ? (
+                <form className="login-form" onSubmit={handleResetSubmit}>
+                  <label className="field">
+                    <span className="field-label">邮箱</span>
+                    <input
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="you@example.com"
+                        autoComplete="email"
+                        autoFocus
+                    />
+                  </label>
+
+                  <div className="field">
+                    <span className="field-label">验证码</span>
+                    <div className="code-field-row">
+                      <input
+                          value={code}
+                          onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                          placeholder="6 位数字验证码"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                      />
+                      <button
+                          className="code-send-button"
+                          type="button"
+                          onClick={() => handleSendCode('reset')}
+                          disabled={codeSending || countdown > 0 || submitting}
+                      >
+                        {codeSending ? '发送中…' : countdown > 0 ? `${countdown}s 后重发` : '发送验证码'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <label className="field">
+                    <span className="field-label">新密码</span>
+                    <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(event) => setNewPassword(event.target.value)}
+                        placeholder="至少 8 位，包含字母和数字"
+                        autoComplete="new-password"
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span className="field-label">确认新密码</span>
+                    <input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(event) => setConfirmPassword(event.target.value)}
+                        placeholder="再次输入新密码"
+                        autoComplete="new-password"
+                    />
+                  </label>
+
+                  {notice && <p className="form-notice" role="status">{notice}</p>}
+                  {error && <p className="form-error" role="alert">{error}</p>}
+
+                  <button
+                      className="primary-button login-submit"
+                      type="submit"
+                      disabled={submitting || !email || !code || !newPassword || !confirmPassword}
+                  >
+                    {submitting ? '重设中…' : '重设密码'}
+                  </button>
+
+                  <button className="login-text-link" type="button" onClick={() => switchMode('login')}>
+                    返回登录
                   </button>
                 </form>
             ) : (
@@ -360,32 +459,17 @@ export function LoginModal({
                     {submitting ? '登录中…' : '登录'}
                   </button>
 
-                  {guestEnabled && (
-                      <div className="guest-login">
-                        <span className="guest-login-divider">
-                          <em>或</em>
-                        </span>
-                        <button
-                            className="guest-login-button"
-                            type="button"
-                            onClick={handleGuestSubmit}
-                            disabled={guestSubmitting || submitting}
-                        >
-                          <span className="guest-login-icon" aria-hidden="true">
-                            <UserIcon size={18} />
-                          </span>
-                          <span className="guest-login-copy">
-                            <strong>{guestSubmitting ? '正在进入…' : '游客登录'}</strong>
-                            <span>不创建账号，按浏览器身份试用</span>
-                          </span>
-                          <ChevronRightIcon size={18} />
-                        </button>
-                      </div>
+                  {passwordResetEnabled && onResetPassword && (
+                      <button
+                          className="login-text-link"
+                          type="button"
+                          onClick={() => switchMode('reset')}
+                      >
+                          忘记密码？
+                      </button>
                   )}
                 </form>
             )}
-
-            <p className="login-note">高危命令仍需逐条确认；长任务断线后会自动续传。</p>
           </div>
         </section>
       </main>

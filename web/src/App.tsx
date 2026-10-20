@@ -59,28 +59,20 @@ const MESSAGE_HYDRATE_TARGET = 30;
 const SESSION_CACHE_MAX = 10;
 // SHARE_NOTICE_TTL_MS 是「已复制分享链接」提示的停留时长。
 const SHARE_NOTICE_TTL_MS = 4000;
-// GUEST_ID_PREFIX 与后端 common.GuestUserPrefix 对齐，用于把游客身份和真实账号区分开显示。
-const GUEST_ID_PREFIX = 'guest_';
-
-// 设计验收用的开发模式入口：`?preview=1` 仅在 dev server 下自动以游客身份进入工作区，
-// 方便逐个设计截图；生产构建里 import.meta.env.DEV 为 false，不会生效。
-const isPreviewMode = import.meta.env.DEV
-    && typeof window !== 'undefined'
-    && new URLSearchParams(window.location.search).has('preview');
 
 export default function App() {
   const [authSession, setAuthSession] = useState(() => getSession());
-  const [guestEnabled, setGuestEnabled] = useState(false);
   // 邮箱注册需要服务端同时开启注册开关并配置好 SMTP；未开启时登录页保持原样。
   const [emailRegisterEnabled, setEmailRegisterEnabled] = useState(false);
-  const previewLoginStartedRef = useRef(false);
+  // 密码重设只依赖 SMTP，注册关闭时仍可对老用户开放。
+  const [passwordResetEnabled, setPasswordResetEnabled] = useState(false);
   // 只有「本标签页刚刚完成登录」才弹画像强引导；从 localStorage 恢复登录态
   // （刷新页面、新标签页直接打开）不弹，避免把已登录用户当成新用户反复拦一次。
   const [promptProfileOnLogin, setPromptProfileOnLogin] = useState(false);
 
   useEffect(() => subscribeSession(setAuthSession), []);
 
-  // 登录前只有 /api/version 可访问，用它确认服务端是否开放游客登录与邮箱注册：
+  // 登录前只有 /api/version 可访问，用它确认服务端是否开放邮箱注册与密码重设：
   // 没开就不显示入口，避免出现"点了才报错"的按钮。
   useEffect(() => {
     if (authSession) {
@@ -90,8 +82,8 @@ export default function App() {
     fetchJSON<VersionInfo>('/api/version', undefined, { handleUnauthorized: false })
       .then((version) => {
         if (!cancelled) {
-          setGuestEnabled(Boolean(version.guest_login));
           setEmailRegisterEnabled(Boolean(version.email_register));
+          setPasswordResetEnabled(Boolean(version.password_reset));
         }
       })
       .catch(() => {
@@ -133,40 +125,32 @@ export default function App() {
     saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
   }
 
-  // 发送注册验证码。返回服务端的重发间隔，登录弹窗据此启动倒计时。
-  async function handleSendCode(email: string): Promise<number> {
+  // 发送邮箱验证码。返回服务端的重发间隔，登录弹窗据此启动倒计时。
+  async function handleSendCode(email: string, purpose: 'register' | 'reset'): Promise<number> {
     const result = await fetchJSON<SendCodeResult>(
         '/api/auth/email/code',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json; charset=utf-8' },
-          body: JSON.stringify({ email, purpose: 'register' }),
+          body: JSON.stringify({ email, purpose }),
         },
         { handleUnauthorized: false },
     );
     return result.resend_after;
   }
 
-  // 游客登录不带任何凭据：后端按 IP + 浏览器标识派生身份，额度记在该身份上。
-  // preview 自动登录跳过画像强引导，直接露出工作区。
-  async function handleGuestLogin(auto = false) {
-    const result = await fetchJSON<LoginResult>(
-        '/api/auth/guest',
-        { method: 'POST' },
+  // 密码重设成功后旧令牌会被后端拒绝，因此不保存登录态，回到登录页重新登录。
+  async function handleResetPassword(email: string, code: string, password: string) {
+    await fetchJSON<null>(
+        '/api/auth/password/reset',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ email, code, password }),
+        },
         { handleUnauthorized: false },
     );
-    setPromptProfileOnLogin(!auto);
-    saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
   }
-
-  // 仅在 dev server + ?preview=1 时触发一次游客登录，供外观设计验收使用。
-  useEffect(() => {
-    if (!isPreviewMode || !guestEnabled || authSession || previewLoginStartedRef.current) {
-      return;
-    }
-    previewLoginStartedRef.current = true;
-    void handleGuestLogin(true);
-  }, [guestEnabled, authSession]);
 
 
   // 登出（或令牌失效）后清掉标记：之后即使别的标签页登录同步过来，
@@ -188,10 +172,10 @@ export default function App() {
     return (
         <LoginModal
             onSubmit={handleLogin}
-            guestEnabled={guestEnabled}
-            onGuestSubmit={handleGuestLogin}
             emailRegisterEnabled={emailRegisterEnabled}
+            passwordResetEnabled={passwordResetEnabled}
             onRegister={handleRegister}
+            onResetPassword={handleResetPassword}
             onSendCode={handleSendCode}
         />
     );
@@ -1412,7 +1396,6 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
               hasMoreSessions={hasMoreSessions}
               userId={authSession.user_id}
               plan={authSession.plan}
-              isGuest={authSession.user_id.startsWith(GUEST_ID_PREFIX)}
               onStartNewSession={() => {
                 setIsSidebarOpen(false);
                 startNewSession();

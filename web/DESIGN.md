@@ -233,7 +233,7 @@ Tabs are the recurring silhouette: a coloured rectangle seated on a sheet's top 
 
 **Acetate composer.** A milk-acetate strip with punch holes on its top edge, a hard-edged shadow, a small "指令" tab, standard textarea, and a primary send square. Metrics and cache figures sit in mono at the foot.
 
-**Login cover.** A dark case with a large Archivo wordmark, a two-line promise, and a stepped index of seven full-strength capability tabs. The form is a paper-soft card with an ACCESS tab; the guest entry is a standard secondary button.
+**Login cover.** A dark case with a large Archivo wordmark, a two-line promise, and a stepped index of seven full-strength capability tabs. The form is a paper-soft card with an ACCESS tab; registration and password reset are inline modes of the same card.
 
 ## Do's and Don'ts
 

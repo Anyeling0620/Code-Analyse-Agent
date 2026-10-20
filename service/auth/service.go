@@ -37,34 +37,31 @@ var ErrInvalidCredentials = errors.New("invalid credentials")
 // ErrUnauthorized 表示令牌缺失、已过期或已被吊销。
 var ErrUnauthorized = errors.New("unauthorized")
 
-// ErrGuestDisabled 表示服务端未开启游客登录。
-var ErrGuestDisabled = errors.New("guest login disabled")
-
-// 邮箱注册相关错误。
+// 邮箱注册与密码重设相关错误。
 var (
-	ErrRegisterDisabled = errors.New("email register disabled")
-	ErrInvalidEmail     = errors.New("invalid email")
-	ErrEmailRegistered  = errors.New("email already registered")
-	ErrSendTooFrequent  = errors.New("send too frequent")
-	ErrCodeExpired      = errors.New("verification code expired")
-	ErrCodeInvalid      = errors.New("verification code invalid")
-	ErrCodeTooMany      = errors.New("verification code attempts exceeded")
-	ErrCodeSendFailed   = errors.New("verification code send failed")
-	ErrPasswordTooShort = errors.New("password too short")
-	ErrPasswordTooLong  = errors.New("password too long")
-	ErrPasswordWeak     = errors.New("password has no letter or digit")
-	ErrLoginTooFrequent = errors.New("login too frequent")
-	ErrUnsupportedScope = errors.New("unsupported code purpose")
+	ErrRegisterDisabled      = errors.New("email register disabled")
+	ErrPasswordResetDisabled = errors.New("password reset disabled")
+	ErrInvalidEmail          = errors.New("invalid email")
+	ErrEmailRegistered       = errors.New("email already registered")
+	ErrSendTooFrequent       = errors.New("send too frequent")
+	ErrCodeExpired           = errors.New("verification code expired")
+	ErrCodeInvalid           = errors.New("verification code invalid")
+	ErrCodeTooMany           = errors.New("verification code attempts exceeded")
+	ErrCodeSendFailed        = errors.New("verification code send failed")
+	ErrPasswordTooShort      = errors.New("password too short")
+	ErrPasswordTooLong       = errors.New("password too long")
+	ErrPasswordWeak          = errors.New("password has no letter or digit")
+	ErrLoginTooFrequent      = errors.New("login too frequent")
+	ErrUnsupportedScope      = errors.New("unsupported code purpose")
 )
 
 const (
 	// defaultTokenTTLHours 是未配置 auth.token_ttl_hours 时的令牌有效期：7 天。
 	defaultTokenTTLHours = 168
-	// defaultGuestTokenTTLHours 是未配置 auth.guest.token_ttl_hours 时的游客令牌有效期：24 小时。
-	defaultGuestTokenTTLHours = 24
-	tokenKeyPrefix            = "auth:token:"
-	// guestIDHexLen 是游客身份哈希截取的字符数，用于体验限流时碰撞概率足够低。
-	guestIDHexLen = 16
+	tokenKeyPrefix       = "auth:token:"
+	// passwordChangedKeyPrefix 记录用户最近一次重设密码的时间（UnixNano），
+	// 校验令牌时用它拒绝重设前签发的旧令牌。
+	passwordChangedKeyPrefix = "auth:password_changed:"
 
 	// 验证码相关 Redis key 前缀。
 	codeKeyPrefix     = "auth:email:code:"
@@ -92,17 +89,11 @@ type Service struct {
 	redis    *redis.Client
 	tokenTTL time.Duration
 	accounts map[string]account
-	guest    guestConf
 	users    user.IUser
 	mailer   *mailer.Mailer
 	register registerConf
-}
-
-// guestConf 是游客登录的运行时配置，取自 auth.guest。
-type guestConf struct {
-	enabled  bool
-	plan     common.Plan
-	tokenTTL time.Duration
+	// emailEnabled 表示 SMTP 配置可用；注册与密码重设都依赖它。
+	emailEnabled bool
 }
 
 // registerConf 是邮箱注册的运行时配置，来自 auth.register / auth.smtp。
@@ -130,13 +121,13 @@ func NewService(adaptor adaptor.IAdaptor) *Service {
 		})
 	}
 	return &Service{
-		redis:    adaptor.GetRedis(),
-		tokenTTL: tokenTTL(conf.TokenTTLHours),
-		accounts: buildAccounts(conf.Accounts),
-		guest:    buildGuest(conf),
-		users:    user.NewUser(adaptor),
-		mailer:   mail,
-		register: buildRegister(conf),
+		redis:        adaptor.GetRedis(),
+		tokenTTL:     tokenTTL(conf.TokenTTLHours),
+		accounts:     buildAccounts(conf.Accounts),
+		users:        user.NewUser(adaptor),
+		mailer:       mail,
+		register:     buildRegister(conf),
+		emailEnabled: conf.SMTP.Valid(),
 	}
 }
 
@@ -145,48 +136,35 @@ func (s *Service) RegisterEnabled() bool {
 	return s.register.enabled
 }
 
-// GuestLogin 签发游客令牌。身份由 IP 与浏览器指纹派生，因此"同一 IP + 同一浏览器"
-// 共用一个配额身份：换 IP 或换浏览器即换身份，同一身份重复进入则用量继续累加。
-func (s *Service) GuestLogin(ctx context.Context, ip, fingerprint string) (string, *common.UserInfo, error) {
-	if !s.guest.enabled {
-		return "", nil, ErrGuestDisabled
-	}
-	user := &common.UserInfo{
-		UserID: GuestIdentity(ip, fingerprint),
-		Plan:   s.guest.plan,
-	}
-	token, err := s.issueToken(ctx, user, s.guest.tokenTTL)
-	if err != nil {
-		return "", nil, err
-	}
-	logger.Info("auth: guest login, user=%s, plan=%s", user.UserID, user.Plan)
-	return token, user, nil
+// PasswordResetEnabled 报告密码重设是否可用：只要 SMTP 配置有效即可，
+// 不依赖注册开关，便于在关闭注册时仍允许老用户自助找回密码。
+func (s *Service) PasswordResetEnabled() bool {
+	return s.emailEnabled
 }
 
-// GuestIdentity 由 IP 与浏览器指纹派生稳定的游客身份 ID。
-// 指纹来自前端采集的浏览器特征哈希；指纹缺失时退化为只按 IP 识别。
-func GuestIdentity(ip, fingerprint string) string {
-	seed := strings.TrimSpace(ip) + "|" + strings.TrimSpace(fingerprint)
-	sum := sha256.Sum256([]byte(seed))
-	return common.GuestUserPrefix + hex.EncodeToString(sum[:])[:guestIDHexLen]
-}
-
-// SendRegisterCode 生成并发送注册验证码。
+// SendEmailCode 生成并发送邮箱验证码，purpose 支持 register / reset。
 //
 // 返回验证码有效期与重发冷却时间，供前端展示倒计时。验证码只把
 // SHA-256(email|purpose|code) 写进 Redis；发送失败时清理本次验证码与冷却，
 // 让用户可以立即重试。
-func (s *Service) SendRegisterCode(ctx context.Context, rawEmail, purpose, ip string) (time.Duration, time.Duration, error) {
-	if !s.register.enabled {
-		return 0, 0, ErrRegisterDisabled
-	}
+func (s *Service) SendEmailCode(ctx context.Context, rawEmail, purpose, ip string) (time.Duration, time.Duration, error) {
 	purpose = strings.ToLower(strings.TrimSpace(purpose))
 	if purpose == "" {
 		purpose = "register"
 	}
-	if purpose != "register" {
+	switch purpose {
+	case "register":
+		if !s.register.enabled {
+			return 0, 0, ErrRegisterDisabled
+		}
+	case "reset":
+		if !s.emailEnabled {
+			return 0, 0, ErrPasswordResetDisabled
+		}
+	default:
 		return 0, 0, ErrUnsupportedScope
 	}
+
 	address, err := NormalizeEmail(rawEmail)
 	if err != nil {
 		return 0, 0, err
@@ -196,8 +174,12 @@ func (s *Service) SendRegisterCode(ctx context.Context, rawEmail, purpose, ip st
 		logger.Error("auth: query user by email failed, err=%v", err)
 		return 0, 0, err
 	}
-	if existing != nil {
+	if purpose == "register" && existing != nil {
 		return 0, 0, ErrEmailRegistered
+	}
+	if purpose == "reset" && existing == nil {
+		// 不暴露邮箱是否已注册：未注册邮箱返回与成功一致的响应，但不发送邮件。
+		return s.register.codeTTL, s.register.resend, nil
 	}
 
 	if err := s.checkIPRate(ctx, purpose, ip); err != nil {
@@ -227,13 +209,13 @@ func (s *Service) SendRegisterCode(ctx context.Context, rawEmail, purpose, ip st
 	}
 	_ = s.redis.Del(ctx, attemptsKey).Err()
 
-	if err := s.sendRegisterCodeMail(ctx, address, code); err != nil {
+	if err := s.sendCodeMail(ctx, address, purpose, code); err != nil {
 		// 发送失败时回收本次验证码与冷却，避免用户被"发送失败"锁 60 秒。
 		_ = s.redis.Del(ctx, codeKey, attemptsKey, cooldownKey).Err()
-		logger.Error("auth: send register code failed, email=%s, err=%v", maskEmail(address), err)
+		logger.Error("auth: send %s code failed, email=%s, err=%v", purpose, maskEmail(address), err)
 		return 0, 0, ErrCodeSendFailed
 	}
-	logger.Info("auth: register code sent, email=%s", maskEmail(address))
+	logger.Info("auth: %s code sent, email=%s", purpose, maskEmail(address))
 	return s.register.codeTTL, s.register.resend, nil
 }
 
@@ -249,7 +231,7 @@ func (s *Service) Register(ctx context.Context, rawEmail, code, password string)
 	if err := ValidatePassword(password); err != nil {
 		return "", nil, err
 	}
-	if err := s.consumeRegisterCode(ctx, address, strings.TrimSpace(code)); err != nil {
+	if err := s.consumeCode(ctx, address, "register", strings.TrimSpace(code)); err != nil {
 		return "", nil, err
 	}
 
@@ -280,6 +262,48 @@ func (s *Service) Register(ctx context.Context, rawEmail, code, password string)
 	}
 	logger.Info("auth: user registered, user=%s, plan=%s", maskEmail(address), info.Plan)
 	return token, info, nil
+}
+
+// ResetPassword 校验邮箱验证码并更新密码。重设成功后记录一个时间戳，
+// Verify 会拒绝该时间之前签发的旧令牌，避免丢失的旧会话继续可用。
+func (s *Service) ResetPassword(ctx context.Context, rawEmail, code, password string) error {
+	if !s.emailEnabled {
+		return ErrPasswordResetDisabled
+	}
+	address, err := NormalizeEmail(rawEmail)
+	if err != nil {
+		return err
+	}
+	if err := ValidatePassword(password); err != nil {
+		return err
+	}
+	record, err := s.users.GetByEmail(ctx, address)
+	if err != nil {
+		logger.Error("auth: query user for password reset failed, err=%v", err)
+		return err
+	}
+	if record == nil {
+		// 不暴露邮箱是否存在：未注册邮箱与验证码过期返回同一种错误。
+		return ErrCodeExpired
+	}
+	if err := s.consumeCode(ctx, address, "reset", strings.TrimSpace(code)); err != nil {
+		return err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	if err != nil {
+		logger.Error("auth: bcrypt password failed, err=%v", err)
+		return err
+	}
+	if err := s.users.UpdatePassword(ctx, address, string(hash)); err != nil {
+		logger.Error("auth: update password failed, user=%s, err=%v", maskEmail(address), err)
+		return err
+	}
+	if err := s.redis.Set(ctx, passwordChangedKeyPrefix+address, time.Now().UnixNano(), s.tokenTTL).Err(); err != nil {
+		logger.Error("auth: save password changed time failed, user=%s, err=%v", maskEmail(address), err)
+		return err
+	}
+	logger.Info("auth: password reset, user=%s", maskEmail(address))
+	return nil
 }
 
 // Login 校验账号密码并签发令牌。保留原签名供现有调用方与测试使用；
@@ -345,10 +369,13 @@ func (s *Service) LoginWithIP(ctx context.Context, identifier, password, ip stri
 	return token, acc.user, nil
 }
 
-// issueToken 把用户信息与令牌的映射写入 Redis 并带有效期。游客、配置账号与邮箱用户
-// 共用同一条路径，因此三者在鉴权、配额、成本统计上完全等价，只是 UserID 来源不同。
+// issueToken 把用户信息与令牌的映射写入 Redis 并带有效期。配置账号与邮箱用户
+// 共用同一条路径，因此两者在鉴权、配额、成本统计上完全等价，只是 UserID 来源不同。
 func (s *Service) issueToken(ctx context.Context, user *common.UserInfo, ttl time.Duration) (string, error) {
-	payload, err := json.Marshal(user)
+	// 拷贝一份再写签发时间，避免并发登录同一配置账号时修改共享的 account.user。
+	issued := *user
+	issued.IssuedAt = time.Now().UnixNano()
+	payload, err := json.Marshal(&issued)
 	if err != nil {
 		return "", err
 	}
@@ -375,6 +402,20 @@ func (s *Service) Verify(ctx context.Context, token string) (*common.UserInfo, e
 		logger.Error("auth: decode token payload failed, err=%v", err)
 		return nil, err
 	}
+	// 游客登录已下线，历史游客令牌不再放行。
+	if common.IsGuestUser(user.UserID) {
+		return nil, ErrUnauthorized
+	}
+	// 密码重设会写入时间戳，早于该时间签发的令牌立即失效。
+	changedAt, err := s.redis.Get(ctx, passwordChangedKeyPrefix+user.UserID).Int64()
+	if err != nil {
+		if !errors.Is(err, redis.Nil) {
+			logger.Error("auth: read password changed time failed, user=%s, err=%v", user.UserID, err)
+			return nil, err
+		}
+	} else if user.IssuedAt < changedAt {
+		return nil, ErrUnauthorized
+	}
 	return &user, nil
 }
 
@@ -383,9 +424,9 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	return s.redis.Del(ctx, tokenKeyPrefix+token).Err()
 }
 
-// sendRegisterCodeMail 渲染验证码邮件并通过 SMTP 发送。
+// sendCodeMail 按用途渲染验证码邮件并通过 SMTP 发送。
 // 验证码只进入邮件正文，不出现在任何日志或错误信息里。
-func (s *Service) sendRegisterCodeMail(ctx context.Context, address, code string) error {
+func (s *Service) sendCodeMail(ctx context.Context, address, purpose, code string) error {
 	if s.mailer == nil {
 		return errors.New("smtp mailer is not configured")
 	}
@@ -394,29 +435,36 @@ func (s *Service) sendRegisterCodeMail(ctx context.Context, address, code string
 		minutes = 10
 	}
 	subject := "【代码仓库分析工作台】邮箱验证码"
+	textIntro := "你正在注册代码仓库分析工作台"
+	htmlIntro := "你正在注册账号"
+	if purpose == "reset" {
+		subject = "【代码仓库分析工作台】重置密码验证码"
+		textIntro = "你正在重置代码仓库分析工作台的密码"
+		htmlIntro = "你正在重置密码"
+	}
 	text := fmt.Sprintf(
-		"你好：\n\n你正在注册代码仓库分析工作台，本次验证码为：%s\n\n"+
+		"你好：\n\n%s，本次验证码为：%s\n\n"+
 			"验证码 %d 分钟内有效，仅可使用一次，请勿泄露给他人。\n"+
 			"如果这不是你的操作，请忽略本邮件。\n",
-		code, minutes,
+		textIntro, code, minutes,
 	)
 	html := fmt.Sprintf(`<!doctype html>
 <html lang="zh-CN"><body style="margin:0;padding:24px;background:#f4f1e6;color:#1b2024;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
 <div style="max-width:460px;margin:0 auto;padding:32px 28px;background:#f8f5ec;border:1px solid rgba(27,32,36,0.32);border-radius:2px;">
 <p style="margin:0 0 8px;font-size:16px;font-weight:700;">代码仓库分析工作台</p>
-<p style="margin:0 0 20px;color:#54584f;font-size:14px;line-height:1.6;">你正在注册账号，请在页面中输入以下验证码：</p>
+<p style="margin:0 0 20px;color:#54584f;font-size:14px;line-height:1.6;">%s，请在页面中输入以下验证码：</p>
 <p style="margin:0 0 20px;font-family:Menlo,Consolas,monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:#2a6e6a;">%s</p>
 <p style="margin:0;color:#63675c;font-size:12px;line-height:1.7;">验证码 %d 分钟内有效，仅可使用一次。<br>如果这不是你的操作，请忽略本邮件。</p>
 </div>
-</body></html>`, code, minutes)
+</body></html>`, htmlIntro, code, minutes)
 	return s.mailer.Send(ctx, address, subject, text, html)
 }
 
-// consumeRegisterCode 校验并一次性消费注册验证码。
+// consumeCode 校验并一次性消费指定用途的邮箱验证码。
 // 错误次数达到上限后立即删除验证码，必须重新获取。
-func (s *Service) consumeRegisterCode(ctx context.Context, address, code string) error {
-	codeKey := codeKeyPrefix + "register:" + address
-	attemptsKey := attemptsKeyPrefix + "register:" + address
+func (s *Service) consumeCode(ctx context.Context, address, purpose, code string) error {
+	codeKey := codeKeyPrefix + purpose + ":" + address
+	attemptsKey := attemptsKeyPrefix + purpose + ":" + address
 	expected, err := s.redis.Get(ctx, codeKey).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
@@ -426,7 +474,7 @@ func (s *Service) consumeRegisterCode(ctx context.Context, address, code string)
 		return err
 	}
 
-	actual := hashCode(address, "register", code)
+	actual := hashCode(address, purpose, code)
 	if subtle.ConstantTimeCompare([]byte(expected), []byte(actual)) != 1 {
 		attempts, incrErr := s.redis.Incr(ctx, attemptsKey).Result()
 		if incrErr != nil {
@@ -629,36 +677,6 @@ func buildRegister(conf config.Auth) registerConf {
 		resend:      conf.Register.EffectiveResendInterval(),
 		maxAttempts: conf.Register.EffectiveMaxAttempts(),
 	}
-}
-
-// buildGuest 解析 auth.guest：套餐为空或取值非法时按 plus 处理（游客默认 plus 计划）。
-func buildGuest(conf config.Auth) guestConf {
-	plan := common.Plan(strings.TrimSpace(conf.Guest.Plan))
-	if plan == "" {
-		plan = common.PlanPlus
-	}
-	if !isKnownPlan(plan) {
-		logger.Warn("auth: guest has unknown plan=%s, falls back to PlanPlus", conf.Guest.Plan)
-		plan = common.PlanPlus
-	}
-	return guestConf{
-		enabled:  conf.Guest.Enabled,
-		plan:     plan,
-		tokenTTL: guestTokenTTL(conf),
-	}
-}
-
-// guestTokenTTL 计算游客令牌有效期：默认 24 小时，且不长于账号令牌的有效期。
-func guestTokenTTL(conf config.Auth) time.Duration {
-	hours := conf.Guest.TokenTTLHours
-	if hours <= 0 {
-		hours = defaultGuestTokenTTLHours
-	}
-	ttl := time.Duration(hours) * time.Hour
-	if base := tokenTTL(conf.TokenTTLHours); ttl > base {
-		return base
-	}
-	return ttl
 }
 
 func isKnownPlan(plan common.Plan) bool {

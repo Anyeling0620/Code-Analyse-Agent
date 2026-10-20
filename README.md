@@ -17,7 +17,7 @@
 | 断连续传 | run 与 HTTP 请求解绑，客户端断线/刷新后按 `Last-Event-ID` 回放并继续跟随。 |
 | 审批中断恢复 | 高危终端命令需人工审批，审批后从 checkpoint 复用同一条 run 继续执行。 |
 | 崩溃续跑 | 进程重启时把遗留 `running` run 标记为 `interrupted`，前端可回放已落库内容。 |
-| 账号与配额 | 账号密码登录（Redis 不透明令牌）+ 邮箱验证码注册/登录 + 游客免密登录，按用户区分配额与成本。 |
+| 账号与配额 | 账号密码登录（Redis 不透明令牌）+ 邮箱验证码注册/登录 + 邮箱验证码重设密码，按用户区分配额与成本。 |
 | 用户画像 | 登录后强引导填写（用户类型/技能水平/目标类型/当前主题/当前阶段/描述），`PUT /api/profile` 保存即入库、`GET /api/profile` 登录后回读，随每轮对话注入模型。 |
 | 会话管理 | 会话列表/详情/删除、只读分享链接、调用链路查看。 |
 | 可观测 | OpenTelemetry tracing（OTLP / stdout 回退），结构化日志。 |
@@ -108,11 +108,8 @@ auth:
   token_ttl_hours: 168
   accounts:
     - { username: "admin", password: "<密码>", plan: "pro" }
-  guest:
-    enabled: true
-    plan: "plus"
-    daily_quota: 30
   # 邮箱验证码注册：enabled 为 true 且 SMTP 配置有效时才开放。
+  # 密码重设只需 SMTP 配置有效，不依赖注册开关。
   register:
     enabled: true
     plan: "free"                 # free / plus / pro
@@ -198,21 +195,21 @@ npm run build # 产物输出到 web/dist
 | `rag` | 是否启用、文档根、分片参数、embedding、Milvus、rerank、中文查询改写。 |
 | `skills` | 技能中间件目录（默认 `~/.claude/skills`）与工具名。 |
 | `mcp` / `mcp_server_self` | 外部 MCP 工具来源，以及对内暴露的 MCP Server。 |
-| `redis` / `auth` | 令牌存储、账号、邮箱验证码注册与游客登录配置；`auth.smtp.password` 建议只走环境变量。 |
+| `redis` / `auth` | 令牌存储、账号、邮箱验证码注册与密码重设配置；`auth.smtp.password` 建议只走环境变量。 |
 | `context_compact` | 上下文压缩：按窗口占比与消息条数触发，折叠较早对话为结构化摘要。 |
 
 ## API 概览
 
-除白名单外，所有接口都需要 `Authorization: Bearer <token>`。白名单：`/healthz`、`/api/version`、`/api/auth/login`、`/api/auth/guest`、`/api/auth/email/code`、`/api/auth/register`、`/api/sessions/shared/info`。
+除白名单外，所有接口都需要 `Authorization: Bearer <token>`。白名单：`/healthz`、`/api/version`、`/api/auth/login`、`/api/auth/email/code`、`/api/auth/register`、`/api/auth/password/reset`、`/api/sessions/shared/info`。
 
 | 方法 | 路径 | 说明 |
 | ---- | ---- | ---- |
 | GET | `/healthz` | 健康检查 |
-| GET | `/api/version` | 版本信息；`email_register` 表示邮箱注册是否开放 |
+| GET | `/api/version` | 版本信息；`email_register` / `password_reset` 表示对应入口是否开放 |
 | POST | `/api/auth/login` | 邮箱/账号密码登录，返回令牌（`email` 或 `username` + `password`） |
-| POST | `/api/auth/email/code` | 发送邮箱注册验证码（公开；`email` + `purpose=register`） |
+| POST | `/api/auth/email/code` | 发送邮箱验证码（公开；`email` + `purpose=register|reset`） |
 | POST | `/api/auth/register` | 邮箱验证码注册，成功直接返回令牌（公开） |
-| POST | `/api/auth/guest` | 游客免密登录（按 IP + 浏览器指纹派生身份） |
+| POST | `/api/auth/password/reset` | 邮箱验证码重设密码（公开；成功后旧令牌失效） |
 | POST | `/api/auth/logout` | 吊销当前令牌 |
 | GET | `/api/quota/today` | 当天调用量 |
 | GET | `/api/profile` | 读取当前登录用户的画像（登录后回填表单，没有记录时返回空画像） |
@@ -304,6 +301,7 @@ RELEASE_TAG="release-latest"   # 最新推送
 - 配置文件 `agent_code_local.yml` 含真实密钥，已在 `.gitignore` 中，切勿提交。
 - SMTP 授权码只通过 `SMTP_PASSWORD` 环境变量注入，不写入任何 tracked 文件。
 - 邮箱注册密码使用 bcrypt(cost 10) 哈希；验证码在 Redis 中只存 SHA-256 哈希，10 分钟过期、一次性消费、错误次数受限。
+- 密码重设成功后写入重设时间戳，服务端会拒绝该时间之前签发的旧令牌。
 - 数据库报表 Agent 只允许只读 SQL，禁止写库/改表/删表。
 - 终端工具对高危命令强制人工审批，并支持目录逃逸拦截（`workspace.enable_escaped`）。
 - 会话与 run 均做用户归属校验，跨账号读取会被拒绝。

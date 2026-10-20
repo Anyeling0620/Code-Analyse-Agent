@@ -204,13 +204,13 @@ export type LoginResult = {
 };
 
 // VersionInfo 是 /api/version 的返回。登录前唯一可访问的接口，
-// 这里带出的 guest_login / email_register 决定登录页展示哪些入口。
+// 这里带出的 email_register / password_reset 决定登录页展示哪些入口。
 export type VersionInfo = {
   app_name: string;
   version: string;
   go_version: string;
-  guest_login: boolean;
   email_register: boolean;
+  password_reset: boolean;
 };
 
 // SendCodeResult 是 /api/auth/email/code 的返回：验证码有效期与重发间隔（秒）。

@@ -3284,6 +3284,11 @@ html[data-ui='nocturne'] .composer textarea::placeholder {
     padding: 24px 20px 20px;
   }
 
+  /* 消耗明细自带 0 padding + 内边距，避免与通用弹窗叠加。 */
+  html[data-ui='nocturne'] .cost-modal {
+    padding: 0;
+  }
+
   html[data-ui='nocturne'] .profile-grid {
     grid-template-columns: 1fr;
   }
@@ -3459,4 +3464,215 @@ html[data-ui='nocturne'] .composer textarea::placeholder {
 /* 图标按钮描边原用 --rule（约 1.6:1）；深色下提升到可辨认的 3:1 级别。 */
 html[data-ui='nocturne'][data-theme='dark'] .icon-button {
   border-color: var(--rule-strong);
+}
+
+/* ---- Cost detail --------------------------------------------------------- */
+/* 遥测读数板：等宽数字、发光条形、方形分段控件。 */
+
+html[data-ui='nocturne'] .cost-modal {
+  border-color: var(--rule-strong);
+  background: var(--paper-soft);
+  box-shadow: var(--shadow-lift);
+}
+
+html[data-ui='nocturne'] .cost-modal .modal-header {
+  background: var(--paper-soft);
+  border-bottom: 1px solid var(--rule);
+}
+
+/* COST 标签不带 inline 背景；通用 .modal-tab 用了 !important（ProfileModal 走 inline），
+   这里必须同样加 !important 才能拿到分区色，否则会退回 paper-soft。 */
+
+html[data-ui='nocturne'] .cost-modal .modal-tab {
+  background: var(--section-violet) !important;
+  color: var(--on-violet) !important;
+}
+
+html[data-ui='nocturne'] .cost-subtitle {
+  color: var(--case-soft);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  line-height: 1.7;
+  text-transform: uppercase;
+}
+
+html[data-ui='nocturne'] .cost-range {
+  border-color: var(--rule-strong);
+}
+
+html[data-ui='nocturne'] .cost-range-btn {
+  border-left-color: var(--rule);
+  color: var(--case-soft);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+
+html[data-ui='nocturne'] .cost-range-btn:hover {
+  background: var(--accent-weak);
+  color: var(--ink);
+}
+
+html[data-ui='nocturne'] .cost-range-btn.is-active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+html[data-ui='nocturne'] .cost-range-btn:focus-visible,
+html[data-ui='nocturne'] .cost-tab:focus-visible {
+  outline-color: var(--accent);
+}
+
+html[data-ui='nocturne'] .cost-summary {
+  border-color: var(--rule-strong);
+  background: var(--rule);
+}
+
+html[data-ui='nocturne'] .cost-stat {
+  background: var(--inset);
+}
+
+html[data-ui='nocturne'] .cost-stat-value {
+  color: var(--ink);
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+html[data-ui='nocturne'] .cost-stat-label {
+  color: var(--case-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+}
+
+html[data-ui='nocturne'] .cost-tabs {
+  border-bottom-color: var(--rule);
+}
+
+html[data-ui='nocturne'] .cost-tab {
+  color: var(--case-faint);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+
+html[data-ui='nocturne'] .cost-tab:hover {
+  color: var(--ink);
+}
+
+html[data-ui='nocturne'] .cost-tab.is-active {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+html[data-ui='nocturne'] .cost-list {
+  margin-top: 4px;
+}
+
+html[data-ui='nocturne'] .cost-row {
+  border-bottom-color: var(--rule);
+}
+
+html[data-ui='nocturne'] .cost-row-head {
+  gap: 9px;
+}
+
+html[data-ui='nocturne'] .cost-row-label {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+html[data-ui='nocturne'] .cost-row-meta,
+html[data-ui='nocturne'] .cost-row-share {
+  color: var(--case-faint);
+}
+
+html[data-ui='nocturne'] .cost-row-cny {
+  color: var(--accent);
+  font-size: 11.5px;
+}
+
+html[data-ui='nocturne'] .cost-bar {
+  height: 5px;
+  background: var(--paper-deep);
+}
+
+html[data-ui='nocturne'] .cost-bar-fill {
+  background: var(--accent);
+  box-shadow: var(--led-glow);
+}
+
+html[data-ui='nocturne'] .cost-trend {
+  border-bottom-color: var(--rule-strong);
+}
+
+html[data-ui='nocturne'] .cost-trend-bar {
+  background: var(--accent);
+  opacity: 0.5;
+}
+
+html[data-ui='nocturne'] .cost-trend-col:hover .cost-trend-bar {
+  opacity: 1;
+  box-shadow: var(--led-glow);
+}
+
+html[data-ui='nocturne'] .cost-trend-axis {
+  color: var(--case-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+}
+
+html[data-ui='nocturne'] .cost-status {
+  color: var(--case-faint);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
+
+html[data-ui='nocturne'] .cost-error {
+  border-color: var(--danger-weak);
+  border-left: 2px solid var(--danger);
+  background: var(--danger-weak);
+  color: var(--danger);
+}
+
+/* 账号卡：由静态信息块改为按钮 */
+
+html[data-ui='nocturne'] .account-card {
+  border-color: var(--case-line);
+  background: transparent;
+  color: var(--ink);
+}
+
+html[data-ui='nocturne'] .account-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-weak);
+}
+
+html[data-ui='nocturne'] .account-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+html[data-ui='nocturne'] .account-cost-cue {
+  border-top-color: var(--case-line);
+  color: var(--amber);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+}
+
+/* ---- Dark legibility: cost detail ---------------------------------------- */
+/* 0.2 alpha 的细线在深色遥测面板里约 2:1，统一提到 --rule-strong。 */
+
+html[data-ui='nocturne'][data-theme='dark'] .cost-modal,
+html[data-ui='nocturne'][data-theme='dark'] .cost-range,
+html[data-ui='nocturne'][data-theme='dark'] .cost-summary,
+html[data-ui='nocturne'][data-theme='dark'] .account-card {
+  border-color: var(--rule-strong);
+}
+
+html[data-ui='nocturne'][data-theme='dark'] .cost-bar {
+  background: rgba(126, 240, 200, 0.1);
+}
+
+/* 上面的深色边界规则会盖掉 hover 的颜色变化，这里补回。 */
+html[data-ui='nocturne'][data-theme='dark'] .account-card:hover {
+  border-color: var(--accent);
 }

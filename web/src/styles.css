@@ -601,12 +601,42 @@ textarea {
 
 .account-card {
   display: grid;
+  width: 100%;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px 8px;
+  margin: 0;
   padding: 8px 10px;
   border: 1px solid var(--case-line);
   border-radius: var(--radius);
   background: var(--case-raised);
+  color: var(--case-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 90ms steps(2), background 90ms steps(2);
+}
+
+.account-card:hover {
+  border-color: var(--section-chrome);
+  background: var(--case-raised);
+}
+
+.account-card:focus-visible {
+  outline: 2px solid var(--section-chrome);
+  outline-offset: 2px;
+}
+
+.account-cost-cue {
+  grid-column: 1 / -1;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--case-line);
+  color: var(--section-chrome);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .account-kind {
@@ -2837,6 +2867,339 @@ textarea {
   line-height: 1.55;
 }
 
+/* ---- Cost detail --------------------------------------------------------- */
+
+/* 消耗明细沿用 .modal-card 外壳：720px，表头/汇总/页签固定，只有 .cost-list 纵向滚动
+   （卡片本身不能滚动，否则会裁掉卡片外侧的 .modal-tab）。
+   金额 / 占比统一等宽 + tabular-nums，纵向成列。 */
+
+.cost-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: 84vh;
+  padding: 0;
+}
+
+.cost-modal .modal-header {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 22px 26px 15px;
+}
+
+.cost-modal > :not(.modal-header) {
+  margin-right: 26px;
+  margin-left: 26px;
+}
+
+.cost-modal > :last-child {
+  margin-bottom: 22px;
+}
+
+/* 弹窗标签：CostModal 的 COST 标签不带 inline 背景，由样式补上分区色。 */
+
+.cost-modal .modal-tab {
+  background: var(--section-violet);
+  color: var(--on-violet);
+}
+
+/* header 现在是「标签 + 文案块 + 关闭按钮」，文案块需要可收缩。 */
+
+.cost-modal .modal-header > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cost-modal .cost-subtitle {
+  max-width: 58ch;
+  margin: 0;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  line-height: 1.55;
+}
+
+/* 区间切换：一段连续边框的分段按钮 */
+
+.cost-range {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin: 16px 0 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.cost-range-btn {
+  padding: 6px 11px;
+  border: 0;
+  border-left: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  transition: background 90ms steps(2), color 90ms steps(2);
+}
+
+.cost-range-btn:first-child {
+  border-left: 0;
+}
+
+.cost-range-btn:hover {
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+.cost-range-btn.is-active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.cost-range-btn:focus-visible,
+.cost-tab:focus-visible {
+  outline: 2px solid var(--section-teal);
+  outline-offset: -2px;
+}
+
+/* 汇总：窄屏两列、宽屏五列，格子之间用 1px 的 rule 分隔 */
+
+.cost-summary {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0 0 18px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--rule);
+  overflow: hidden;
+}
+
+.cost-stat {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px 11px;
+  background: var(--paper-soft);
+}
+
+.cost-stat-value {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 14.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.cost-stat-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+@media (min-width: 761px) {
+  .cost-summary {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* 分类页签：下划线，沿用 login-mode-tab 的语言 */
+
+.cost-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 2px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.cost-tab {
+  margin-bottom: -1px;
+  padding: 7px 10px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: color 90ms steps(2), border-color 90ms steps(2);
+}
+
+.cost-tab:hover {
+  color: var(--ink);
+}
+
+.cost-tab.is-active {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+}
+
+/* 行：label / meta / 金额 / 占比 四列对齐，下面压一条 6px 占比条 */
+
+.cost-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 2px;
+  overflow-y: auto;
+}
+
+.cost-row {
+  padding: 10px 0 11px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.cost-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 4px;
+}
+
+.cost-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.cost-row-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.cost-row-meta {
+  flex: 0 0 auto;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cost-row-cny {
+  flex: 0 0 auto;
+  min-width: 84px;
+  margin-left: auto;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cost-row-share {
+  min-width: 44px;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cost-bar {
+  height: 6px;
+  margin-top: 7px;
+  background: var(--paper-deep);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.cost-bar-fill {
+  height: 100%;
+  background: var(--section-teal);
+  transition: width 220ms ease;
+}
+
+/* 趋势：竖向柱 + 底部轴标 */
+
+.cost-trend {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  gap: 3px;
+  height: 104px;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.cost-trend-col {
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  min-width: 0;
+  height: 100%;
+}
+
+.cost-trend-bar {
+  width: 100%;
+  min-height: 1px;
+  background: var(--section-teal);
+  opacity: 0.82;
+}
+
+.cost-trend-col:hover .cost-trend-bar {
+  opacity: 1;
+}
+
+.cost-trend-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 状态行 */
+
+.cost-status {
+  flex: 0 0 auto;
+  padding: 20px 0 8px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.11em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.cost-error {
+  flex: 0 0 auto;
+  margin-top: 14px;
+  padding: 9px 11px;
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--vermilion);
+  border-radius: var(--radius);
+  background: var(--paper-deep);
+  color: var(--vermilion);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
 .modal-footer {
   display: flex;
   justify-content: flex-end;
@@ -4151,6 +4514,60 @@ textarea {
 
   .modal-tab {
     left: 16px;
+  }
+
+  /* 消耗明细：接近全屏，两列汇总，行头允许换行 */
+
+  .cost-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100vh - 48px);
+    padding: 0;
+  }
+
+  .cost-modal .modal-header {
+    padding: 16px 16px 12px;
+  }
+
+  .cost-modal > :not(.modal-header) {
+    margin-right: 16px;
+    margin-left: 16px;
+  }
+
+  .cost-modal .cost-subtitle {
+    font-size: 10px;
+  }
+
+  .cost-stat {
+    padding: 9px 10px 10px;
+  }
+
+  .cost-stat-value {
+    font-size: 13px;
+  }
+
+  .cost-row-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 3px 8px;
+  }
+
+  .cost-row-label {
+    flex: 1 1 100%;
+    white-space: normal;
+  }
+
+  /* 第二行 meta 过长时截断，避免把金额和占比挤出卡片。 */
+  .cost-row-meta {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cost-trend {
+    height: 78px;
   }
 
   .profile-grid {

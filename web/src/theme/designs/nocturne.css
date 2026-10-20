@@ -3592,7 +3592,9 @@ html[data-ui='nocturne'] .cost-row-cny {
 
 html[data-ui='nocturne'] .cost-bar {
   height: 5px;
-  background: var(--paper-deep);
+  /* --paper-deep 在 nocturne 浅色下是纯白，和弹窗底色几乎同色，轨道会看不见；
+     改用一层固定墨色半透明，深浅两套模式下都能显出"未填充"的底槽。 */
+  background: rgba(20, 32, 38, 0.12);
 }
 
 html[data-ui='nocturne'] .cost-bar-fill {

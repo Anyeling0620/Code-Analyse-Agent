@@ -54,10 +54,11 @@ type milvusStatusReporter interface {
 func (h *Handler) Version(c *gin.Context) {
 	conf := h.adaptor.GetConfig()
 	resp := dto.Version{
-		AppName:    conf.Server.AppName,
-		Version:    conf.Server.Version,
-		GoVersion:  "1.26.5",
-		GuestLogin: conf.Auth.Guest.Enabled,
+		AppName:       conf.Server.AppName,
+		Version:       conf.Server.Version,
+		GoVersion:     "1.26.5",
+		GuestLogin:    conf.Auth.Guest.Enabled,
+		EmailRegister: h.auth.RegisterEnabled(),
 	}
 	h.writeResp(c, resp, common.OK)
 }

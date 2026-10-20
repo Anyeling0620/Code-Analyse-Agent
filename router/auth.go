@@ -16,6 +16,10 @@ var authWhitelist = map[string]bool{
 	"/api/auth/login": true,
 	// 游客登录同样在登录前调用，必须放行。
 	"/api/auth/guest": true,
+	// 邮箱验证码发送与注册都在登录前调用，必须放行；
+	// 两个接口内部各自做邮箱校验、冷却与频率限制。
+	"/api/auth/email/code": true,
+	"/api/auth/register":   true,
 	// 只读分享是公开链接：拿到令牌即可查看，不要求登录。
 	"/api/sessions/shared/info": true,
 }

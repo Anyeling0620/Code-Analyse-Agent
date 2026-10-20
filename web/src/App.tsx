@@ -45,7 +45,7 @@ import { AppearanceProvider } from './theme/AppearanceContext';
 import { AppearanceSwitcher } from './theme/AppearanceSwitcher';
 import { MenuIcon } from './ui/icons';
 import { sectionHueAt, sectionLabel, shortId } from './ui/palette';
-import type { ChatMessage, ChatMessageRecord, ChatRunActiveResp, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent, VersionInfo } from './types/chat';
+import type { ChatMessage, ChatMessageRecord, ChatRunActiveResp, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SendCodeResult, SessionDetail, SessionListItem, StreamPayload, TraceEvent, VersionInfo } from './types/chat';
 
 // 会话列表项在后端已截断到 200 字，负载很小，保持 20 条一页。
 const SESSION_PAGE_LIMIT = 20;
@@ -71,6 +71,8 @@ const isPreviewMode = import.meta.env.DEV
 export default function App() {
   const [authSession, setAuthSession] = useState(() => getSession());
   const [guestEnabled, setGuestEnabled] = useState(false);
+  // 邮箱注册需要服务端同时开启注册开关并配置好 SMTP；未开启时登录页保持原样。
+  const [emailRegisterEnabled, setEmailRegisterEnabled] = useState(false);
   const previewLoginStartedRef = useRef(false);
   // 只有「本标签页刚刚完成登录」才弹画像强引导；从 localStorage 恢复登录态
   // （刷新页面、新标签页直接打开）不弹，避免把已登录用户当成新用户反复拦一次。
@@ -78,7 +80,7 @@ export default function App() {
 
   useEffect(() => subscribeSession(setAuthSession), []);
 
-  // 登录前只有 /api/version 可访问，用它确认服务端是否开放游客登录：
+  // 登录前只有 /api/version 可访问，用它确认服务端是否开放游客登录与邮箱注册：
   // 没开就不显示入口，避免出现"点了才报错"的按钮。
   useEffect(() => {
     if (authSession) {
@@ -89,6 +91,7 @@ export default function App() {
       .then((version) => {
         if (!cancelled) {
           setGuestEnabled(Boolean(version.guest_login));
+          setEmailRegisterEnabled(Boolean(version.email_register));
         }
       })
       .catch(() => {
@@ -113,6 +116,35 @@ export default function App() {
     // 这样即使两次状态更新没有批处理，ChatWorkspace 首次渲染也能拿到 true。
     setPromptProfileOnLogin(true);
     saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
+  }
+
+  // 邮箱注册成功时后端已签发令牌，因此和普通登录一样直接进入工作台。
+  async function handleRegister(email: string, code: string, password: string) {
+    const result = await fetchJSON<LoginResult>(
+        '/api/auth/register',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ email, code, password }),
+        },
+        { handleUnauthorized: false },
+    );
+    setPromptProfileOnLogin(true);
+    saveSession({ token: result.token, user_id: result.user_id, plan: result.plan });
+  }
+
+  // 发送注册验证码。返回服务端的重发间隔，登录弹窗据此启动倒计时。
+  async function handleSendCode(email: string): Promise<number> {
+    const result = await fetchJSON<SendCodeResult>(
+        '/api/auth/email/code',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify({ email, purpose: 'register' }),
+        },
+        { handleUnauthorized: false },
+    );
+    return result.resend_after;
   }
 
   // 游客登录不带任何凭据：后端按 IP + 浏览器标识派生身份，额度记在该身份上。
@@ -153,7 +185,16 @@ export default function App() {
   }
 
   if (!authSession) {
-    return <LoginModal onSubmit={handleLogin} guestEnabled={guestEnabled} onGuestSubmit={handleGuestLogin} />;
+    return (
+        <LoginModal
+            onSubmit={handleLogin}
+            guestEnabled={guestEnabled}
+            onGuestSubmit={handleGuestLogin}
+            emailRegisterEnabled={emailRegisterEnabled}
+            onRegister={handleRegister}
+            onSendCode={handleSendCode}
+        />
+    );
   }
   // 用 user_id 作 key：换账号时整棵工作区重新挂载，
   // 画像、会话、消息等本地状态不会残留到下一个账号。

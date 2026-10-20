@@ -98,6 +98,7 @@ func (a *Adaptor) openDB(path string) error {
 		return fmt.Errorf("use plugin: %v", err)
 	}
 	err = db.AutoMigrate(
+		&model.User{},
 		&model.Profile{},
 		&model.ProfileRevision{},
 		&model.Session{},

@@ -120,6 +120,8 @@ export type StreamPayload = {
 export type SessionListItem = {
   session_id: string;
   user_id: string;
+  // AI 根据首轮问答生成的标题；老会话没有该字段或为空时回退到用户消息/摘要。
+  title?: string;
   summary: string;
   last_user_message: string;
   last_assistant_msg: string;

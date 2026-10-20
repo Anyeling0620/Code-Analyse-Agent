@@ -330,9 +330,9 @@ npm test
 CI（`.github/workflows/deploy.yml`）在 push 到 `main` 时构建一次，并同时发布两个 Release：
 
 - `release-latest`：滚动最新版，每次推送更新；
-- `release-2.4`：当前 2.x 版本线，每次推送更新；升级大版本时修改 workflow 顶部的 `CURRENT_RELEASE_TAG`（例如改成 `release-3.0`），旧版本线随之冻结。
+- `release-2.5`：当前 2.x 版本线，每次推送更新；升级大版本时修改 workflow 顶部的 `CURRENT_RELEASE_TAG`（例如改成 `release-3.0`），旧版本线随之冻结。
 
-`release-2.2`、`release-2.1`、`release-2.0` 与 `release-1.0` 是已冻结的历史版本：前三个停在对应的 2.x 版本线，`release-1.0` 是改造前旧版前端的快照，只用于回滚，均不随推送更新。标签统一使用「`release-<版本号>`」形式。每个 Release 的产物为：
+`release-2.4`、`release-2.2`、`release-2.1`、`release-2.0` 与 `release-1.0` 是已冻结的历史版本：前四个停在对应的 2.x 版本线，`release-1.0` 是改造前旧版前端的快照，只用于回滚，均不随推送更新。标签统一使用「`release-<版本号>`」形式。每个 Release 的产物为：
 
 - `code-analyse-agent.gz`（Linux amd64 后端二进制）
 - `web-dist.tar.gz`（前端静态产物）
@@ -342,7 +342,7 @@ CI（`.github/workflows/deploy.yml`）在 push 到 `main` 时构建一次，并�
 
 ```bash
 RELEASE_TAG="release-latest"   # 最新推送
-# RELEASE_TAG="release-2.4"    # 固定到当前 2.x 版本线
+# RELEASE_TAG="release-2.5"    # 固定到当前 2.x 版本线
 # RELEASE_TAG="release-2.1"    # 回滚到上一版本线
 # RELEASE_TAG="release-1.0"    # 回滚到改造前版本
 ```

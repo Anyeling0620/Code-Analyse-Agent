@@ -181,14 +181,10 @@ function BreakdownList({ items, kind }: { items: CostBreakdownItem[]; kind: Excl
         return (
           <div className="cost-row" key={`${kind}-${item.key}`}>
             <div className="cost-row-head">
-              <div>
-                <span className="cost-row-label" title={item.key}>{rowLabel(item, kind)}</span>
-                <span className="cost-row-meta">{formatCount(item.calls)} 次调用 · {formatCount(item.tokens)} tokens</span>
-              </div>
-              <div>
-                <span className="cost-row-cny">¥{formatCny(item.cny)}</span>
-                <span className="cost-row-share">{formatPercent(item.share)}</span>
-              </div>
+              <span className="cost-row-label" title={item.key}>{rowLabel(item, kind)}</span>
+              <span className="cost-row-meta">{formatCount(item.calls)} 次调用 · {formatCount(item.tokens)} tokens</span>
+              <span className="cost-row-cny">¥{formatCny(item.cny)}</span>
+              <span className="cost-row-share">{formatPercent(item.share)}</span>
             </div>
             <div className="cost-bar" aria-hidden="true">
               <span className="cost-bar-fill" style={{ width }} />

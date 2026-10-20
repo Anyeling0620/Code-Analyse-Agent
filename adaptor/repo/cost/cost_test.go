@@ -22,7 +22,8 @@ func newTestCost(t *testing.T) *Cost {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&model.CostRecord{}); err != nil {
+	// Overview 会 LEFT JOIN sessions 取会话标题，测试库也要有这张表。
+	if err := db.AutoMigrate(&model.CostRecord{}, &model.Session{}); err != nil {
 		t.Fatalf("auto migrate: %v", err)
 	}
 	// Windows 下连接池不关闭会让 t.TempDir 清理失败（文件仍被占用），需显式 Close。
@@ -113,5 +114,72 @@ func TestDailyUsageExcludesOtherDays(t *testing.T) {
 	}
 	if got.PromptTokens != 100 || got.TotalCNY != 1.0 {
 		t.Fatalf("只应统计当天，实际 %+v", got)
+	}
+}
+
+// insertCostDetail 用于构造带会话 / 工具 / 模型维度的记录，Overview 的用例需要这些列。
+func insertCostDetail(t *testing.T, repo *Cost, userID, sessionID, toolName, modelName string,
+	prompt, cached, completion int64, cny float64, at time.Time) {
+	t.Helper()
+	if err := repo.Insert(context.Background(), &do.CostRecord{
+		UserID:           userID,
+		SessionID:        sessionID,
+		Model:            modelName,
+		ToolName:         toolName,
+		PromptTokens:     prompt,
+		CachedTokens:     cached,
+		CacheMissTokens:  prompt - cached,
+		CompletionTokens: completion,
+		EstimatedCNY:     cny,
+		CacheHitCNY:      cny / 2,
+		CacheMissCNY:     cny / 2,
+		OccurredAt:       at,
+	}); err != nil {
+		t.Fatalf("insert cost detail for %s: %v", userID, err)
+	}
+}
+
+// Overview 只取当前用户、区间 [from, to) 内的明细，并带出会话标题。
+// 区间外的记录、别人的记录都必须排除，否则总览会变成全站数据。
+func TestOverviewFiltersUserAndRange(t *testing.T) {
+	repo := newTestCost(t)
+	ctx := context.Background()
+	from := time.Date(2026, 9, 21, 0, 0, 0, 0, time.Local)
+	to := time.Date(2026, 10, 21, 0, 0, 0, 0, time.Local) // 开区间上界 = 10-20 的次日零点
+
+	if err := repo.db.Create(&model.Session{SessionID: "sess_a", UserID: "Anyeling", Title: "重构分析"}).Error; err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+
+	insertCostDetail(t, repo, "Anyeling", "sess_a", "repo_analyzer", "deepseek-flash", 100, 60, 20, 0.5,
+		time.Date(2026, 9, 21, 9, 0, 0, 0, time.Local))
+	// sess_b 没有对应会话行（可能已被删除），标题应回退为空串。
+	insertCostDetail(t, repo, "Anyeling", "sess_b", "", "gpt-4o", 10, 0, 5, 0.25,
+		time.Date(2026, 10, 20, 0, 30, 0, 0, time.Local))
+	insertCostDetail(t, repo, "Anyeling", "sess_a", "repo_analyzer", "deepseek-flash", 999, 0, 999, 9.9,
+		time.Date(2026, 9, 20, 23, 59, 0, 0, time.Local)) // 区间外
+	insertCostDetail(t, repo, "visitor", "sess_v", "chat", "gpt-4o", 7, 0, 3, 5,
+		time.Date(2026, 10, 1, 12, 0, 0, 0, time.Local)) // 他人
+
+	rows, err := repo.Overview(ctx, "Anyeling", from, to)
+	if err != nil {
+		t.Fatalf("Overview: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("应只有 2 条（当前用户 + 区间内），实际 %d 条：%+v", len(rows), rows)
+	}
+
+	bySession := map[string]do.CostOverviewRow{}
+	for _, row := range rows {
+		bySession[row.SessionID] = row
+	}
+	if got := bySession["sess_a"]; got.SessionTitle != "重构分析" {
+		t.Fatalf("sess_a 应带出会话标题，实际 %q", got.SessionTitle)
+	}
+	if got := bySession["sess_b"]; got.SessionTitle != "" {
+		t.Fatalf("会话行缺失时标题应为空串，实际 %q", got.SessionTitle)
+	}
+	if got := bySession["sess_b"]; got.PromptTokens != 10 || got.CompletionTokens != 5 || got.EstimatedCNY != 0.25 {
+		t.Fatalf("sess_b 记录投影不对：%+v", got)
 	}
 }

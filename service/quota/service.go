@@ -5,6 +5,7 @@ import (
 	"edu.agent.code/adaptor"
 	"edu.agent.code/adaptor/repo/quota"
 	"edu.agent.code/common"
+	"edu.agent.code/config"
 	"edu.agent.code/utils/limiter"
 	"edu.agent.code/utils/logger"
 )
@@ -15,10 +16,24 @@ type Service struct {
 }
 
 func NewService(adaptor adaptor.IAdaptor) *Service {
-	return &Service{
-		quota:   quota.NewQuota(adaptor),
-		limiter: limiter.NewLimiter(),
+	conf := adaptor.GetConfig()
+	var limitConf config.RateLimit
+	if conf != nil {
+		limitConf = conf.RateLimit
 	}
+	return &Service{
+		quota: quota.NewQuota(adaptor),
+		// 令牌桶放在 Redis 里：多实例共享同一份额度，进程重启也不会把额度重置。
+		limiter: limiter.New(adaptor.GetRedis(), limitConf),
+	}
+}
+
+// Limiter 暴露限流器给路由层做 IP 级限流，整个进程共用一份配置。
+func (s *Service) Limiter() *limiter.Limiter {
+	if s == nil {
+		return nil
+	}
+	return s.limiter
 }
 
 // DailyLimit 返回该身份的单日调用上限：按套餐额度。
@@ -48,8 +63,9 @@ func (s *Service) Increment(ctx context.Context, userID, day string) (int64, err
 	return count, nil
 }
 
-// 限流应使用redis限流，但是目前demo为了实现快速，使用了简单的令牌桶，但是这种方法在多节点时会导致double问题
-
-func (s *Service) IsAllow(userID string, burstPerMinute int) bool {
-	return s.limiter.Allow(userID, burstPerMinute)
+// IsAllow 按用户维度消耗一个令牌。capacity 取套餐的每分钟突发额度，
+// 桶本身在 Redis 中，多实例下放行量仍然是「一人一份」。
+func (s *Service) IsAllow(ctx context.Context, userID string, burstPerMinute int) limiter.Decision {
+	// key 前缀与入口的 user: 区分开：入口限流统计「所有接口」，这里统计「聊天额度」，两个桶。
+	return s.limiter.Allow(ctx, "chat:user:"+userID, burstPerMinute)
 }

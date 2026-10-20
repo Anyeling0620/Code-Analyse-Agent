@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"edu.agent.code/config"
+	"edu.agent.code/utils/circuitbreaker"
 	"edu.agent.code/utils/logger"
 	"github.com/cloudwego/eino/schema"
 )
@@ -104,7 +105,7 @@ func NewQueryRewriter(conf config.Rewrite, fallback config.DeepSeek) *QueryRewri
 		apiKey:  apiKey,
 		model:   model,
 		timeout: timeout,
-		client:  &http.Client{Timeout: timeout},
+		client:  circuitbreaker.NewHTTPClient("rewrite", timeout),
 	}
 }
 

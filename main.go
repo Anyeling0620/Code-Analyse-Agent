@@ -7,6 +7,7 @@ import (
 	"edu.agent.code/config"
 	"edu.agent.code/mcpserver"
 	"edu.agent.code/router"
+	"edu.agent.code/utils/circuitbreaker"
 	"edu.agent.code/utils/logger"
 	"edu.agent.code/utils/tracing"
 	"errors"
@@ -25,6 +26,14 @@ func main() {
 
 	conf := config.InitConfig()
 	logger.Init(conf.Server.LogLevel)
+	// 熔断策略必须在构造出站客户端之前注入：adaptor 与 agent 依赖构建时就会创建 HTTP client。
+	circuitbreaker.Configure(circuitbreaker.Options{
+		Enabled:             conf.CircuitBreaker.IsEnabled(),
+		FailureThreshold:    conf.CircuitBreaker.FailureThreshold,
+		OpenTimeout:         time.Duration(conf.CircuitBreaker.OpenTimeoutSeconds) * time.Second,
+		HalfOpenMaxRequests: conf.CircuitBreaker.HalfOpenMaxRequests,
+		SuccessThreshold:    conf.CircuitBreaker.SuccessThreshold,
+	})
 	//logger.Info("test a=%d, b=%s", 1, "hello")
 	shutdownFun, err := tracing.Init(ctx, tracing.Config{
 		ServerName:     conf.Server.AppName,

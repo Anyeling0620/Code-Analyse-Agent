@@ -5,6 +5,7 @@ import (
 	"edu.agent.code/adaptor"
 	"edu.agent.code/adaptor/repo/profile"
 	"edu.agent.code/common"
+	"edu.agent.code/config"
 	"edu.agent.code/service/auth"
 	"edu.agent.code/service/codeindex"
 	"edu.agent.code/service/conversation"
@@ -12,6 +13,7 @@ import (
 	"edu.agent.code/service/dto"
 	"edu.agent.code/service/quota"
 	"edu.agent.code/service/rag"
+	"edu.agent.code/utils/limiter"
 	"edu.agent.code/utils/logger"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/trace"
@@ -73,6 +75,22 @@ func (h *Handler) GetCostService() *cost.Service {
 
 func (h *Handler) GetAuthService() *auth.Service {
 	return h.auth
+}
+
+// GetConfig 暴露配置给路由层：限流豁免、IP 额度等策略都在配置里。
+func (h *Handler) GetConfig() *config.Config {
+	if h == nil || h.adaptor == nil {
+		return &config.Config{}
+	}
+	return h.adaptor.GetConfig()
+}
+
+// GetRateLimiter 返回进程内共享的限流器（IP 级限流与用户级配额共用）。
+func (h *Handler) GetRateLimiter() *limiter.Limiter {
+	if h == nil || h.quota == nil {
+		return nil
+	}
+	return h.quota.Limiter()
 }
 
 func (h *Handler) Close() error {

@@ -46,6 +46,8 @@ type Config struct {
 	MCPServerSelf  MCPServerSelf  `yaml:"mcp_server_self"`
 	Auth           Auth           `yaml:"auth"`
 	ContextCompact ContextCompact `yaml:"context_compact"`
+	RateLimit      RateLimit      `yaml:"rate_limit"`
+	CircuitBreaker CircuitBreaker `yaml:"circuitbreaker"`
 }
 
 // ContextCompact 是上下文压缩（compaction）配置。
@@ -446,6 +448,72 @@ type AgentMaxIterations struct {
 	ProjectQA            int `yaml:"project_qa"`
 	RepoAnalyzer         int `yaml:"repo_analyzer"`
 	RepoAnalyzerSubAgent int `yaml:"repo_analyzer_sub_agent"`
+}
+
+// RateLimit 是分布式令牌桶限流配置。
+//
+// 整个 section 缺省时按「开启 + 默认阈值」处理：限流属于安全兜底，不能因为部署端
+// 忘了加配置就静默失效。需要彻底关闭时显式写 enabled: false。
+type RateLimit struct {
+	// Enabled 为 nil 时视为开启。
+	Enabled *bool `yaml:"enabled"`
+	// KeyPrefix 是 Redis key 前缀，默认 analyse:ratelimit。
+	KeyPrefix string `yaml:"key_prefix"`
+	// WindowSeconds 是令牌桶装满一轮的窗口，默认 60 秒（与旧实现的「每分钟」对齐）。
+	WindowSeconds int `yaml:"window_seconds"`
+	// IPPerWindow 是单个调用方（登录用户按 user_id，未登录按 IP）每窗口允许的请求数，默认 300。
+	IPPerWindow int `yaml:"ip_per_window"`
+	// FailOpen 为 true（默认）时 Redis 故障降级为进程内令牌桶，false 则直接拒绝。
+	FailOpen *bool `yaml:"fail_open"`
+	// ExemptPaths 是额外豁免的路径；/healthz 与 /api/version 始终豁免。
+	ExemptPaths []string `yaml:"exempt_paths"`
+}
+
+func (r RateLimit) IsEnabled() bool {
+	return r.Enabled == nil || *r.Enabled
+}
+
+func (r RateLimit) IsFailOpen() bool {
+	return r.FailOpen == nil || *r.FailOpen
+}
+
+func (r RateLimit) Prefix() string {
+	if r.KeyPrefix == "" {
+		return "analyse:ratelimit"
+	}
+	return r.KeyPrefix
+}
+
+func (r RateLimit) Window() time.Duration {
+	if r.WindowSeconds <= 0 {
+		return time.Minute
+	}
+	return time.Duration(r.WindowSeconds) * time.Second
+}
+
+func (r RateLimit) IPCapacity() int {
+	if r.IPPerWindow <= 0 {
+		return 300
+	}
+	return r.IPPerWindow
+}
+
+// CircuitBreaker 是出站 HTTP 调用的熔断配置，缺省同样按开启处理。
+type CircuitBreaker struct {
+	// Enabled 为 nil 时视为开启。
+	Enabled *bool `yaml:"enabled"`
+	// FailureThreshold 是连续失败多少次后打开熔断，默认 5。
+	FailureThreshold int `yaml:"failure_threshold"`
+	// OpenTimeoutSeconds 是熔断打开后多久进入半开，默认 30 秒。
+	OpenTimeoutSeconds int `yaml:"open_timeout_seconds"`
+	// HalfOpenMaxRequests 是半开状态同时允许的试探请求数，默认 1。
+	HalfOpenMaxRequests int `yaml:"half_open_max_requests"`
+	// SuccessThreshold 是半开状态下连续成功多少次后恢复，默认 2。
+	SuccessThreshold int `yaml:"success_threshold"`
+}
+
+func (c CircuitBreaker) IsEnabled() bool {
+	return c.Enabled == nil || *c.Enabled
 }
 
 func init() {

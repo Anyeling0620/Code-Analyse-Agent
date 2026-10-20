@@ -22,8 +22,6 @@
 ## 预览与验收
 
 - `?ui=nocturne&theme=dark`：直接以指定布局/主题打开，适合截图与分享预览。
-- `?preview=1`：仅 dev server 生效，自动以游客身份进入工作区（跳过画像弹窗），
-  生产构建中 `import.meta.env.DEV` 为 false，不会启用。
 - 三套新设计在 `src/theme/designs/<id>.css`，由 `src/main.tsx` 按顺序引入；
   共享的切换器样式在 `src/theme/appearance.css`。
 

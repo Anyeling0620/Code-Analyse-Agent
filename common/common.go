@@ -11,12 +11,12 @@ const (
 	CtxKeyAuthUser = "auth_user"
 	// CtxKeyAuthToken 是 gin.Context 中当前请求所用登录令牌的 key，供登出时按令牌吊销。
 	CtxKeyAuthToken = "auth_token"
-	// GuestUserPrefix 是游客派生身份的 UserID 前缀。
-	// 游客不建账号，身份由 IP + 浏览器指纹派生，加前缀便于配额与成本统计区分游客。
+	// GuestUserPrefix 是旧版游客身份的 UserID 前缀。
+	// 游客登录已下线；保留该前缀只为在令牌校验时拒绝历史游客令牌。
 	GuestUserPrefix = "guest_"
 )
 
-// IsGuestUser 判断 UserID 是否为游客派生身份。
+// IsGuestUser 判断 UserID 是否为旧版游客派生身份。
 func IsGuestUser(userID string) bool {
 	return strings.HasPrefix(userID, GuestUserPrefix)
 }
@@ -32,6 +32,9 @@ const (
 type UserInfo struct {
 	UserID string `json:"user_id"`
 	Plan   Plan   `json:"plan"`
+	// IssuedAt 是令牌签发时间（UnixNano）。密码重设后用它拒绝旧令牌；
+	// 历史令牌没有该字段，值为 0，密码一旦重设就会被判为过期。
+	IssuedAt int64 `json:"issued_at,omitempty"`
 }
 
 func Ptr[T any](v T) *T {

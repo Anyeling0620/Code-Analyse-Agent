@@ -91,6 +91,25 @@ func TestDuplicateEmailIsUniqueViolation(t *testing.T) {
 	}
 }
 
+func TestUpdatePasswordNormalizesEmail(t *testing.T) {
+	repo := NewUserWithDB(newTestDB(t))
+	ctx := context.Background()
+	record := &do.User{Email: "reset@example.com", PasswordHash: "old", Plan: "free"}
+	if err := repo.Create(ctx, record); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := repo.UpdatePassword(ctx, "RESET@example.com ", "new-hash"); err != nil {
+		t.Fatalf("update password: %v", err)
+	}
+	got, err := repo.GetByEmail(ctx, "reset@example.com")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.PasswordHash != "new-hash" {
+		t.Fatalf("password hash = %q, want new-hash", got.PasswordHash)
+	}
+}
+
 func TestUpdateLastLogin(t *testing.T) {
 	repo := NewUserWithDB(newTestDB(t))
 	ctx := context.Background()

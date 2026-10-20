@@ -20,7 +20,6 @@ export const SessionPanel = memo(function SessionPanel({
   hasMoreSessions,
   userId,
   plan,
-  isGuest,
   onStartNewSession,
   onLoadSession,
   onLoadMoreSessions,
@@ -40,7 +39,6 @@ export const SessionPanel = memo(function SessionPanel({
   hasMoreSessions: boolean;
   userId: string;
   plan: string;
-  isGuest: boolean;
   onStartNewSession: () => void;
   onLoadSession: (sessionId: string) => void;
   onLoadMoreSessions: () => void;
@@ -168,7 +166,7 @@ export const SessionPanel = memo(function SessionPanel({
             <span>基础画像</span>
           </button>
           <div className="account-card">
-            <span className="account-kind">{isGuest ? 'GUEST' : 'ACCOUNT'}</span>
+            <span className="account-kind">ACCOUNT</span>
             <span className="account-id" title={userId}>{userId}</span>
             <span className="account-plan">{plan}</span>
           </div>

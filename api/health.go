@@ -57,8 +57,8 @@ func (h *Handler) Version(c *gin.Context) {
 		AppName:       conf.Server.AppName,
 		Version:       conf.Server.Version,
 		GoVersion:     "1.26.5",
-		GuestLogin:    conf.Auth.Guest.Enabled,
 		EmailRegister: h.auth.RegisterEnabled(),
+		PasswordReset: h.auth.PasswordResetEnabled(),
 	}
 	h.writeResp(c, resp, common.OK)
 }

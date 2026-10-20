@@ -20,6 +20,8 @@ type IUser interface {
 	Create(ctx context.Context, user *do.User) error
 	// UpdateLastLogin 更新最近登录时间；用户不存在时静默返回 nil。
 	UpdateLastLogin(ctx context.Context, email string, at time.Time) error
+	// UpdatePassword 更新密码哈希；用户不存在时静默返回 nil。
+	UpdatePassword(ctx context.Context, email, passwordHash string) error
 }
 
 // User 是 IUser 的 GORM 实现。
@@ -76,6 +78,13 @@ func (u *User) UpdateLastLogin(ctx context.Context, email string, at time.Time) 
 		Model(&model.User{}).
 		Where("email = ?", normalizeEmail(email)).
 		Update("last_login_at", at).Error
+}
+
+func (u *User) UpdatePassword(ctx context.Context, email, passwordHash string) error {
+	return u.db.WithContext(ctx).
+		Model(&model.User{}).
+		Where("email = ?", normalizeEmail(email)).
+		Update("password_hash", passwordHash).Error
 }
 
 // IsUniqueViolation 判断是否为邮箱唯一索引冲突。

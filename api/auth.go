@@ -53,7 +53,7 @@ func (h *Handler) SendEmailCode(ctx *gin.Context) {
 		return
 	}
 
-	expiresIn, resendAfter, err := h.auth.SendRegisterCode(
+	expiresIn, resendAfter, err := h.auth.SendEmailCode(
 		ctx.Request.Context(), req.Email, req.Purpose, ctx.ClientIP(),
 	)
 	if err != nil {
@@ -86,11 +86,28 @@ func (h *Handler) Register(ctx *gin.Context) {
 	}, common.OK)
 }
 
+// ResetPassword 用邮箱验证码重设密码。重设成功后服务端会拒绝旧令牌，
+// 因此这里不直接签发新令牌，由用户使用新密码重新登录。
+func (h *Handler) ResetPassword(ctx *gin.Context) {
+	var req dto.ResetPasswordRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		h.writeResp(ctx, nil, common.ParamError.WithError(err))
+		return
+	}
+	if err := h.auth.ResetPassword(ctx.Request.Context(), req.Email, req.Code, req.Password); err != nil {
+		h.writeResp(ctx, nil, registerErrno(err))
+		return
+	}
+	h.writeResp(ctx, nil, common.OK)
+}
+
 // emailCodeErrno 把服务层错误翻译成带中文提示的响应码。
 func emailCodeErrno(err error) common.Errno {
 	switch {
 	case errors.Is(err, auth.ErrRegisterDisabled):
 		return common.RegisterDisabled
+	case errors.Is(err, auth.ErrPasswordResetDisabled):
+		return common.PasswordResetDisabled
 	case errors.Is(err, auth.ErrInvalidEmail):
 		return common.InvalidEmail
 	case errors.Is(err, auth.ErrEmailRegistered):
@@ -111,6 +128,8 @@ func registerErrno(err error) common.Errno {
 	switch {
 	case errors.Is(err, auth.ErrRegisterDisabled):
 		return common.RegisterDisabled
+	case errors.Is(err, auth.ErrPasswordResetDisabled):
+		return common.PasswordResetDisabled
 	case errors.Is(err, auth.ErrInvalidEmail):
 		return common.InvalidEmail
 	case errors.Is(err, auth.ErrEmailRegistered):
@@ -143,33 +162,4 @@ func (h *Handler) Logout(ctx *gin.Context) {
 		}
 	}
 	h.writeResp(ctx, nil, common.OK)
-}
-
-// GuestLogin 免账号签发游客令牌，供他人进站体验。身份由服务端按
-// "IP + 浏览器指纹"派生（指纹从 X-Device-Fingerprint 请求头读取），
-// 因此不需要用户名密码，也不需要新建账号表。
-// 注意：IP 取自 gin 的 ClientIP，反代后面部署时要配置受信代理，否则该值可被伪造；
-// 这里只是体验用的成本控制，不承担防滥用职责。
-func (h *Handler) GuestLogin(ctx *gin.Context) {
-	ip := ctx.ClientIP()
-	fingerprint := ctx.GetHeader("X-Device-Fingerprint")
-	if ip == "" && fingerprint == "" {
-		h.writeResp(ctx, nil, common.ParamError.WithMsg("cannot identify guest"))
-		return
-	}
-
-	token, user, err := h.auth.GuestLogin(ctx.Request.Context(), ip, fingerprint)
-	if err != nil {
-		if errors.Is(err, auth.ErrGuestDisabled) {
-			h.writeResp(ctx, nil, common.PermissionDenied.WithMsg("游客登录未开启"))
-			return
-		}
-		h.writeResp(ctx, nil, common.ServerError.WithError(err))
-		return
-	}
-	h.writeResp(ctx, &dto.LoginResponse{
-		Token:  token,
-		UserID: user.UserID,
-		Plan:   string(user.Plan),
-	}, common.OK)
 }

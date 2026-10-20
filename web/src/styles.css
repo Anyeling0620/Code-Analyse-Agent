@@ -1337,6 +1337,9 @@ textarea {
 .message-content {
   position: relative;
   min-width: 0;
+  /* 正文与图表、表格共用同一内容宽度：正文不再停在 --measure 窄栏，
+     避免图表/表格占满卡片而段落右侧留白。仅作用于聊天消息正文。 */
+  --measure: 100%;
 }
 
 .assistant-timeline {

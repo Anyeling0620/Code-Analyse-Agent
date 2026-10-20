@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"edu.agent.code/service/agent/repo_analyzer"
@@ -145,6 +146,79 @@ func TestHandleMessageKeepsInternalSubAgentToolCalls(t *testing.T) {
 	}
 	if len(emitted) != 1 || emitted[0].Type != consts.SseEventTypeToolCall || emitted[0].ToolName != "read_files" {
 		t.Fatalf("emitted = %+v, want one tool_call for read_files", emitted)
+	}
+}
+
+// 达到迭代上限且没有强制收尾产出时，走的是兜底文案路径：
+// 已产出的正文必须保留（只追加提示），不能把半成品丢掉；
+// 同时返回 nil，让上层照常发 done 并落库。
+func TestHandleMaxIterationsExceededKeepsPartialAnswer(t *testing.T) {
+	svc := &Service{}
+	runState := &dto.ChatRunState{
+		Answer:      "## 一、项目概述\n\n这是一个 Go 项目",
+		ToolCallMap: map[string]dto.ToolCallState{},
+	}
+	var emitted []dto.ChatStreamEvent
+	emit := func(event dto.ChatStreamEvent) error {
+		emitted = append(emitted, event)
+		return nil
+	}
+	event := &adk.AgentEvent{AgentName: repo_analyzer.Name, Err: adk.ErrExceedMaxIterations}
+
+	if err := svc.handleMaxIterationsExceeded(context.Background(), event, runState, emit); err != nil {
+		t.Fatalf("handleMaxIterationsExceeded returned error: %v", err)
+	}
+	if !strings.Contains(runState.Answer, "这是一个 Go 项目") {
+		t.Fatalf("partial answer was dropped: %q", runState.Answer)
+	}
+	if !strings.Contains(runState.Answer, maxIterationsNoticeKey) {
+		t.Fatalf("fallback notice missing: %q", runState.Answer)
+	}
+	if !runState.Degraded || runState.DegradedReason != dto.DegradedReasonMaxIterations {
+		t.Fatalf("degraded=(%v,%q), want (true,%q)", runState.Degraded, runState.DegradedReason, dto.DegradedReasonMaxIterations)
+	}
+	if len(emitted) != 1 || emitted[0].Type != consts.SseEventTypeDelta {
+		t.Fatalf("emitted = %+v, want one delta carrying the notice", emitted)
+	}
+	if !strings.Contains(emitted[0].Delta, maxIterationsNoticeKey) {
+		t.Fatalf("emitted delta = %q, want the notice", emitted[0].Delta)
+	}
+}
+
+// 子 Agent 超限会向上冒泡，父 Agent 可能再收到同类错误：兜底只能追加一次。
+func TestHandleMaxIterationsExceededIsIdempotent(t *testing.T) {
+	svc := &Service{}
+	runState := &dto.ChatRunState{ToolCallMap: map[string]dto.ToolCallState{}}
+	count := 0
+	emit := func(dto.ChatStreamEvent) error {
+		count++
+		return nil
+	}
+	event := &adk.AgentEvent{Err: adk.ErrExceedMaxIterations}
+	for i := 0; i < 3; i++ {
+		if err := svc.handleMaxIterationsExceeded(context.Background(), event, runState, emit); err != nil {
+			t.Fatalf("call %d returned error: %v", i, err)
+		}
+	}
+	if got := strings.Count(runState.Answer, maxIterationsNoticeKey); got != 1 {
+		t.Fatalf("notice appears %d times, want 1", got)
+	}
+	if count != 1 {
+		t.Fatalf("emitted %d events, want 1", count)
+	}
+}
+
+// 正文为空（模型一直在调工具，没产出任何结论）时，提示要引导用户缩小范围。
+func TestHandleMaxIterationsExceededWithEmptyAnswer(t *testing.T) {
+	svc := &Service{}
+	runState := &dto.ChatRunState{ToolCallMap: map[string]dto.ToolCallState{}}
+
+	if err := svc.handleMaxIterationsExceeded(context.Background(),
+		&adk.AgentEvent{Err: adk.ErrExceedMaxIterations}, runState, nil); err != nil {
+		t.Fatalf("handleMaxIterationsExceeded returned error: %v", err)
+	}
+	if !strings.Contains(runState.Answer, "请缩小问题范围后重试") {
+		t.Fatalf("answer = %q, want the narrowing hint", runState.Answer)
 	}
 }
 

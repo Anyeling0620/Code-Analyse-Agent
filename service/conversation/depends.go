@@ -16,6 +16,7 @@ import (
 	"edu.agent.code/service/tool/provider"
 	"edu.agent.code/service/tool/repo_fetch"
 	"edu.agent.code/service/tool/terminal"
+	"edu.agent.code/utils/circuitbreaker"
 	"edu.agent.code/utils/dsml"
 	"edu.agent.code/utils/logger"
 	"fmt"
@@ -275,11 +276,13 @@ func buildChatModel(ctx context.Context, conf *config.Config) (model.ToolCalling
 
 // buildChatModelWithName 用同一个 DeepSeek 端点构造指定名称的对话模型。
 func buildChatModelWithName(ctx context.Context, conf *config.Config, modelName string) (model.ToolCallingChatModel, error) {
+	// 带上熔断：DeepSeek 端点整体不可用时直接快速失败，而不是每个请求都等满 5 分钟。
+	// 注意模型调用是流式，HTTPClient 覆盖的是「建连 + 拿到响应头」；流中途断开不计入熔断。
 	baseModel, err := einoopenai.NewChatModel(ctx, &einoopenai.ChatModelConfig{
-		APIKey:  conf.DeepSeek.APIKey,
-		Timeout: time.Minute * 5,
-		BaseURL: conf.DeepSeek.BaseURL,
-		Model:   modelName,
+		APIKey:     conf.DeepSeek.APIKey,
+		BaseURL:    conf.DeepSeek.BaseURL,
+		Model:      modelName,
+		HTTPClient: circuitbreaker.NewHTTPClient("llm:"+modelName, 5*time.Minute),
 	})
 	if err != nil {
 		logger.Error("buildChatModel NewChatModel err:%v model=%s", err, modelName)

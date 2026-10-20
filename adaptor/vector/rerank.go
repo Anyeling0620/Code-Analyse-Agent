@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"edu.agent.code/config"
+	"edu.agent.code/utils/circuitbreaker"
 	"edu.agent.code/utils/logger"
 	"github.com/cloudwego/eino/schema"
 	"github.com/gogf/gf/v2/util/gconv"
@@ -98,9 +99,8 @@ func NewHTTPReranker(provider string, conf config.Rerank) *HTTPReranker {
 		baseURL:  strings.TrimSpace(conf.BaseURL),
 		model:    strings.TrimSpace(conf.Model),
 		apiKey:   strings.TrimSpace(conf.APIKey),
-		client: &http.Client{
-			Timeout: time.Duration(timeoutSec) * time.Second,
-		},
+		// 重排失败在调用方是 fail-open（降级为不重排），这里只负责在服务持续不可用时快速失败。
+		client: circuitbreaker.NewHTTPClient("rerank", time.Duration(timeoutSec)*time.Second),
 	}
 }
 

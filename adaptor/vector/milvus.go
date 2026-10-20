@@ -4,6 +4,7 @@ import (
 	"context"
 	"edu.agent.code/adaptor"
 	"edu.agent.code/config"
+	"edu.agent.code/utils/circuitbreaker"
 	"edu.agent.code/utils/logger"
 	"errors"
 	"fmt"
@@ -110,11 +111,12 @@ func NewMilvus(ctx context.Context, adaptor adaptor.IAdaptor, opts ...NewOption)
 	timeout := time.Duration(conf.Embedding.TimeoutSec) * time.Second
 	dimensions := conf.Embedding.Dimensions
 	embedder, err := openaiembedding.NewEmbedder(ctx, &openaiembedding.EmbeddingConfig{
-		Timeout:    timeout,
 		APIKey:     conf.Embedding.APIKey,
 		BaseURL:    conf.Embedding.BaseUrl,
 		Model:      conf.Embedding.Model,
 		Dimensions: &dimensions,
+		// 嵌入服务挂掉时向量检索整体不可用，用熔断把失败挡在超时之前。
+		HTTPClient: circuitbreaker.NewHTTPClient("embedding", timeout),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("NewMilvus create embedder failed: %w", err)

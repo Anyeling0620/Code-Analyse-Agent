@@ -218,6 +218,8 @@ npm run build # 产物输出到 web/dist
 | `auth` | 令牌有效期、配置账号、邮箱验证码注册与 SMTP；`auth.smtp.password` 建议只走环境变量。 |
 | `otel` | OpenTelemetry OTLP endpoint、采样率与 stdout 回退。 |
 | `context_compact` | 上下文压缩：按窗口占比与消息条数触发，折叠较早对话为结构化摘要。 |
+| `rate_limit` | Redis 令牌桶限流：每个调用方（登录按用户、未登录按 IP）的每窗口请求数、桶窗口、故障时是否放行。 |
+| `circuitbreaker` | 出站 HTTP 熔断：连续失败阈值、打开时长、半开试探与恢复条件。 |
 
 ## API 概览
 
@@ -278,6 +280,12 @@ POST /api/chat/stream ─► StartChatRun（落 chat_runs）
 ### 项目级 RAG 隔离
 
 `repo_fetch` 成功后会回写会话的“当前项目”并异步触发建索引。项目 ID 由 git remote 优先派生，非 git 目录退回本地绝对路径；GitHub 镜像地址会先归一化，因此同一个仓库在不同目录或镜像写法下会复用同一套索引。每个项目使用独立 Milvus collection（`基础名_项目ID`），写入与召回都只针对该集合，检索侧再用元数据二次校验。切分优先按源码符号结构，失败时回退通用递归切分；查询改写、RRF 融合与重排均可按配置开关。
+
+### 限流与熔断
+
+限流在入口：所有 `/api/*` 先过 Redis 令牌桶（`/healthz`、`/api/version` 豁免），登录用户按 user_id 计数、未登录按 IP 计数，`/api/chat/*` 再按套餐做用户级令牌桶与单日额度；令牌桶用 Lua 在 Redis 中原子扣减，多实例共享同一份额度，Redis 故障时按配置降级为进程内桶。
+
+熔断在出口：主模型、embedding、rerank、查询改写四条出站 HTTP 都挂了 `http.RoundTripper` 熔断，连续失败后直接快速失败，半开试探恢复。只有网络错误、5xx、429 与 408 计入失败，4xx 和客户端主动取消不计入，避免一个坏参数把整条链路熔断。
 
 ### 上下文压缩
 

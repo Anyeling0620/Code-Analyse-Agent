@@ -8,7 +8,10 @@ import (
 func New(h *api.Handler) *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	app := gin.New()
-	app.Use(gin.Recovery(), gin.Logger(), Tracing(), Auth(h.GetAuthService()))
+	// 限流放在鉴权之后：已登录用户按 user_id 计数（校园网/办公网出口 IP 常常是同一个 NAT，
+	// 按 IP 计数会互相误伤），未登录请求才回落到 IP 维度。
+	app.Use(gin.Recovery(), gin.Logger(), Tracing(), Auth(h.GetAuthService()),
+		RateLimit(h.GetRateLimiter(), h.GetConfig().RateLimit))
 
 	routeRegister(app, h)
 	return app

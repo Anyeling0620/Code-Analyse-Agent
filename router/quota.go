@@ -29,8 +29,15 @@ func Quota(svc *quota.Service, whiteList map[string]bool) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		pass := svc.IsAllow(user.UserID, user.Plan.BurstPerMinute())
-		if !pass {
+		decision := svc.IsAllow(c.Request.Context(), user.UserID, user.Plan.BurstPerMinute())
+		c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", user.Plan.BurstPerMinute()))
+		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", decision.Remaining))
+		if !decision.Allowed {
+			retryAfter := decision.RetryAfter
+			if retryAfter < time.Second {
+				retryAfter = time.Second
+			}
+			c.Header("Retry-After", fmt.Sprintf("%d", int(retryAfter.Seconds()+0.5)))
 			c.JSON(http.StatusTooManyRequests, gin.H{
 				"code": http.StatusTooManyRequests,
 				"msg":  "Too Many Requests",

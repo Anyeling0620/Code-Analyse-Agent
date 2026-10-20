@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"edu.agent.code/service/agent"
+	"edu.agent.code/service/agent/force_answer"
 	"edu.agent.code/service/agent/project_qa"
 	"edu.agent.code/service/agent/repo_analyzer"
 	"edu.agent.code/service/agent/self_report"
@@ -165,16 +166,22 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 	}
 	agentTools = append(agentTools, c.directTool...)
 
-	// 主 Agent 不加"最后一轮强制出报告"的中间件：eino 的 chat-model 前置钩子在
-	// remaining <= 0 时会先返回 ErrExceedMaxIterations，中间件来不及改写提示词。
-	// 超过最大迭代次数的收尾统一由 conversation.consumeAgentEvents 的错误分支兜底
-	// （见 handleMaxIterationsExceeded：把已产出内容当部分报告下发，而不是报错）。
-
 	// 画像中间件必须挂在主 Agent 上：审批恢复时不会重新跑初始 GenModelInput，
 	// 只有每次模型调用前的 BeforeModelRewriteState 能保证用上当前画像。
-	mainHandlers := make([]adk.ChatModelAgentMiddleware, 0, len(c.agentHandler)+1)
+	//
+	// 强制收尾中间件也必须挂在这里。它读的是 ChatModel 节点的 RemainingIterations，
+	// 而该节点的 state pre-handler 是"先判断 <=0 才报错，否则减一"，钩子在减一之后才执行：
+	// 也就是最后一轮（remaining 从 1 减到 0）仍然会真正调用模型，此时清空工具并要求
+	// 模型直接出结论，所以是能生效的。早期版本误判为"remaining==0 时框架直接终止、
+	// 中间件来不及"，于是只留了会话层的一句兜底文案，用户始终拿不到最终结论。
+	mainHandlers := make([]adk.ChatModelAgentMiddleware, 0, len(c.agentHandler)+2)
 	mainHandlers = append(mainHandlers, c.agentHandler...)
 	mainHandlers = append(mainHandlers, userprofile.NewMiddleware())
+	mainHandlers = append(mainHandlers, force_answer.NewForceAnswerHandler(force_answer.Config{
+		MaxIterations: c.maxIterations.Compose,
+		ActiveKey:     mainForceAnswerActiveKey,
+		Instruction:   mainForceAnswerInstruction,
+	}))
 
 	mainAgent, err := adk.NewChatModelAgent(
 		c.ctx,

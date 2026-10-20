@@ -128,6 +128,14 @@ func newRepoAnalyzerSubAgent(
 			// 同样依赖中间件从 context 注入当前画像。
 			Handlers: []adk.ChatModelAgentMiddleware{
 				userprofile.NewMiddleware(),
+				// 子 Agent 的轮次上限先于父 Agent 耗尽，必须在这里也强制收尾：
+				// 否则 adk.ErrExceedMaxIterations 会经 AgentTool 冒泡成整条链路的硬失败，
+				// 父 Agent 的强制报告中间件根本没有机会执行（详见 prompt.go 注释）。
+				force_answer.NewForceAnswerHandler(force_answer.Config{
+					MaxIterations: maxIterations,
+					ActiveKey:     repoSubAgentForceReportActiveKey,
+					Instruction:   repoSubAgentForceReportInstruction,
+				}),
 			},
 		})
 		if err != nil {

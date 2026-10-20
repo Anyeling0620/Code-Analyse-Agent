@@ -10,6 +10,17 @@ import (
 const (
 	repoAnalyzerForceReportActiveKey   = "repo_analyzer_force_report_active"
 	repoAnalyzerForceReportInstruction = `系统已达到本轮仓库分析最大读取轮次。现在不要再调用任何工具，请基于已确认事实直接输出完整中文 Markdown 报告；证据不足的部分在对应章节标注“未确认”。`
+
+	// 二级子 Agent 的强制收尾。
+	//
+	// 二级子 Agent 的轮次上限（repo_analyzer_sub_agent）明显小于 repo_analyzer，
+	// 因此"先耗尽"的几乎总是它们。它们没有这个中间件时，耗尽会以
+	// adk.ErrExceedMaxIterations 从 AgentTool 冒泡，直接终止整条分析链路——
+	// 父 Agent 还没到自己的最后一轮，它的强制报告根本没机会跑。
+	// 这里的产出不作为用户正文（见 conversation.isInternalSubAgentText），
+	// 而是作为 task 工具结果回给 repo_analyzer 继续汇总，所以要求写成"阶段结论"。
+	repoSubAgentForceReportActiveKey   = "repo_sub_agent_force_report_active"
+	repoSubAgentForceReportInstruction = `系统已达到本子任务的最大读取轮次，接下来不能再调用任何工具。请立即基于已确认的事实输出中文 Markdown 阶段结论，包含三部分：1) 已确认结论（附关键文件路径或证据）；2) 未确认或仅能推断的部分；3) 建议主 Agent 继续核查的点。即使证据不完整也必须给出当前结论，不要只回复“无法完成”或请求补充信息。`
 )
 
 func repoAnalyzerTaskToolDescription(context.Context, []adk.Agent) (string, error) {

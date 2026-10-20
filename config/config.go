@@ -37,6 +37,7 @@ type Config struct {
 	MCP            MCP            `yaml:"mcpserver"`
 	Telemetry      Telemetry      `yaml:"telemetry"`
 	SelfReport     SelfReport     `yaml:"self_report"`
+	CodeIndex      CodeIndex      `yaml:"code_index"`
 	Agents         Agents         `yaml:"agents"`
 	ModelPrice     ModelPrice     `yaml:"model_price"`
 	WorkSpace      WorkSpace      `yaml:"workspace"`
@@ -280,6 +281,26 @@ type SelfReport struct {
 	AllowedUsers []string `yaml:"allowed_users"`
 	// MaxIterations 是自省报表 agent 的最大迭代轮次，<=0 时使用默认值。
 	MaxIterations int `yaml:"max_iterations"`
+}
+
+// CodeIndex 是项目级结构化索引（符号表 + 依赖图）的独立配置。
+//
+// 它与 rag 完全解耦：rag.enabled=false 时本索引仍然可用。Path 指向独立的
+// SQLite 文件，删掉文件即可整体重建，不与会话/成本等业务数据混在一起。
+type CodeIndex struct {
+	Enable bool   `yaml:"enable"`
+	Path   string `yaml:"path"`
+	// MaxFileBytes 是单文件索引上限，超出的文件跳过（生成物/压缩包通常很大）。
+	MaxFileBytes int64 `yaml:"max_file_bytes"`
+	// MaxFiles / MaxSymbols 是单个项目的规模上限，防止误索引巨型仓库拖垮进程。
+	MaxFiles   int `yaml:"max_files"`
+	MaxSymbols int `yaml:"max_symbols"`
+	// MaxResults 限制单次工具返回的条目数。
+	MaxResults int `yaml:"max_results"`
+	// SkipDirs 追加到内置跳过目录之上（内置：.git / node_modules / vendor 等）。
+	SkipDirs []string `yaml:"skip_dirs"`
+	// IncludeExts 为空时使用内置多语言扩展名表；非空则只索引这些扩展名。
+	IncludeExts []string `yaml:"include_exts"`
 }
 
 type MCP struct {

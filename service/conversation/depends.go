@@ -36,7 +36,6 @@ type conversationTools struct {
 	analysis   []tool.BaseTool
 	direct     []tool.BaseTool
 	qa         []tool.BaseTool
-	report     []tool.BaseTool
 	selfReport []tool.BaseTool
 }
 
@@ -81,7 +80,6 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor, projectIndexer *r
 		analysis:   toolGroups.Analysis,
 		direct:     toolGroups.Direct,
 		qa:         toolGroups.QA,
-		report:     toolGroups.Report,
 		selfReport: toolGroups.SelfReport,
 	}
 	// repo_fetch：把 git URL / 本地路径统一解析成工作区内稳定的项目根目录。
@@ -116,7 +114,7 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor, projectIndexer *r
 		tools.qa = append(tools.qa, ragTool)
 	}
 	// 前端可见工具集
-	visibleToolSet := buildVisibleToolSet(ctx, []string{repo_fetch.ToolName}, tools.direct, tools.qa, tools.analysis, toolGroups.Report)
+	visibleToolSet := buildVisibleToolSet(ctx, []string{repo_fetch.ToolName}, tools.direct, tools.qa, tools.analysis)
 	// chatModel
 	chatModel, err := buildChatModel(ctx, a.GetConfig())
 	if err != nil {
@@ -209,7 +207,6 @@ func buildComposeRunner(chatModel model.ToolCallingChatModel,
 		WithAnalysisTool(tools.analysis).
 		WithQaTool(tools.qa).
 		WithDirectTool(tools.direct).
-		WithReportTool(tools.report).
 		WithSelfReportTool(tools.selfReport).
 		WithToolMiddleware([]compose.ToolMiddleware{
 			terminal.NewApprovalMiddleware(repo.approvals),
@@ -234,7 +231,6 @@ func buildIterationLimits(conf config.AgentMaxIterations) runner.IterationLimits
 		ProjectQA:            conf.ProjectQA,
 		RepoAnalyzer:         conf.RepoAnalyzer,
 		RepoAnalyzerSubAgent: conf.RepoAnalyzerSubAgent,
-		DBReport:             conf.DBReport,
 	}
 }
 

@@ -16,7 +16,6 @@ type Groups struct {
 	Direct     []tool.BaseTool
 	Analysis   []tool.BaseTool
 	QA         []tool.BaseTool
-	Report     []tool.BaseTool
 	SelfReport []tool.BaseTool
 }
 
@@ -56,7 +55,6 @@ func (p *Provider) Load(ctx context.Context) (Groups, error) {
 		}
 		groups.Direct = append(groups.Direct, loaded.Direct...)
 		groups.Analysis = append(groups.Analysis, loaded.Analysis...)
-		groups.Report = append(groups.Report, loaded.Report...)
 		groups.QA = append(groups.QA, loaded.QA...)
 		groups.SelfReport = append(groups.SelfReport, loaded.SelfReport...)
 	}

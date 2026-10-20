@@ -21,10 +21,10 @@ type Options struct {
 
 // NewSelfReportAgentWithOptions 构造自省报表子 agent。
 //
-// 它与 db_report 是并列的两个子 agent，而不是同一个 agent 的两组工具：
-// 两者面向的问题完全不同（"业务经营数据怎么样" vs "agent 自己跑得怎么样"），
-// 混在一个 prompt 里会让模型在两边之间乱选库；拆开后各自的工具说明和
-// 输出口径都能写得更准。
+// 它单独占一个子 agent，而不是把自省工具直接挂到主 agent 上：
+// 自省问题（"agent 自己跑得怎么样"）与项目分析、问答的性质完全不同，
+// 单独拆开后工具说明和输出口径都能写得更准，也不会污染主 agent 的选路。
+// 自省工具只在 self_report.enable 时才被挂载，未启用时模型完全看不到。
 //
 // 能查到什么由工具层白名单决定（见 service/tool/self_report），
 // 这里不做权限判断——prompt 不是权限边界。

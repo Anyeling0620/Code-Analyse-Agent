@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 	"edu.agent.code/service/agent"
-	"edu.agent.code/service/agent/db_report"
 	"edu.agent.code/service/agent/project_qa"
 	"edu.agent.code/service/agent/repo_analyzer"
 	"edu.agent.code/service/agent/self_report"
@@ -26,7 +25,6 @@ type IterationLimits struct {
 	ProjectQA            int
 	RepoAnalyzer         int
 	RepoAnalyzerSubAgent int
-	DBReport             int
 	SelfReport           int
 }
 
@@ -36,7 +34,6 @@ type ComposeRunner struct {
 	directTool      []tool.BaseTool
 	analysisTool    []tool.BaseTool
 	qaTool          []tool.BaseTool
-	reportTool      []tool.BaseTool
 	selfReportTool  []tool.BaseTool
 	ragRegister     tool.BaseTool
 	checkPointStore adk.CheckPointStore
@@ -68,11 +65,6 @@ func (c *ComposeRunner) WithAnalysisTool(tools []tool.BaseTool) *ComposeRunner {
 
 func (c *ComposeRunner) WithQaTool(tools []tool.BaseTool) *ComposeRunner {
 	c.qaTool = tools
-	return c
-}
-
-func (c *ComposeRunner) WithReportTool(tools []tool.BaseTool) *ComposeRunner {
-	c.reportTool = tools
 	return c
 }
 
@@ -114,9 +106,6 @@ func (c *ComposeRunner) defaultMaxIterations() {
 	if c.maxIterations.ProjectQA <= 0 {
 		c.maxIterations.ProjectQA = consts.ProjectQAMaxIterations
 	}
-	if c.maxIterations.DBReport <= 0 {
-		c.maxIterations.DBReport = consts.DBReportMaxIterations
-	}
 	if c.maxIterations.SelfReport <= 0 {
 		c.maxIterations.SelfReport = consts.SelfReportMaxIterations
 	}
@@ -134,9 +123,6 @@ func (c *ComposeRunner) check() error {
 	}
 	if c.checkPointStore == nil {
 		return fmt.Errorf("checkPointStore is nil")
-	}
-	if c.reportTool == nil {
-		return fmt.Errorf("reportTool is nil")
 	}
 	if c.qaTool == nil {
 		return fmt.Errorf("qaTool is nil")
@@ -162,16 +148,10 @@ func (c *ComposeRunner) Build() (*adk.Runner, error) {
 	if err != nil {
 		return nil, err
 	}
-	dbReportTool, err := c.buildDBReportAgent()
-	if err != nil {
-		return nil, err
-	}
-
-	agentTools := []tool.BaseTool{c.ragRegister, repoAnalyzerTool, projectQaTool, dbReportTool}
+	agentTools := []tool.BaseTool{c.ragRegister, repoAnalyzerTool, projectQaTool}
 	returnDirectly := map[string]bool{
 		repo_analyzer.Name: true,
 		project_qa.Name:    true,
-		db_report.Name:     true,
 	}
 	// 自省报表工具只在 self_report.enable 时才存在。没启用就不挂这个子 agent，
 	// 保证模型看不到、也不会去调它，行为与改造前完全一致。
@@ -255,22 +235,6 @@ func (c *ComposeRunner) buildProjectQaAgent() (tool.BaseTool, error) {
 		return nil, err
 	}
 	return adk.NewAgentTool(c.ctx, projectQA, adk.WithFullChatHistoryAsInput()), nil
-}
-
-func (c *ComposeRunner) buildDBReportAgent() (tool.BaseTool, error) {
-	dbReport, err := db_report.NewDBReportAgentWithOptions(
-		c.ctx,
-		c.chatModel,
-		c.reportTool,
-		c.toolMiddleWare,
-		db_report.Options{
-			MaxIterations: c.maxIterations.DBReport,
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-	return adk.NewAgentTool(c.ctx, dbReport, adk.WithFullChatHistoryAsInput()), nil
 }
 
 func (c *ComposeRunner) buildSelfReportAgent() (tool.BaseTool, error) {

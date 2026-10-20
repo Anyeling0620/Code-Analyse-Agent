@@ -1,6 +1,6 @@
 # Code Analyse Agent
 
-面向代码仓库与数据库的 AI 分析应用：输入一个 Git 仓库地址或本机项目路径，系统会把它克隆/挂载到工作区、建立项目级语义索引，然后用一个会调用工具的多 Agent 链路，产出结构化的代码分析报告、项目问答与数据库报表。
+面向代码仓库的 AI 分析应用：输入一个 Git 仓库地址或本机项目路径，系统会把它克隆/挂载到工作区、建立项目级语义索引，然后用一个会调用工具的多 Agent 链路，产出结构化的代码分析报告与项目问答。
 
 后端 Go（Eino + Gin），前端 React + Vite，内置 SSE 流式输出、审批中断恢复、崩溃续跑、账号鉴权与成本/配额统计。
 
@@ -10,7 +10,6 @@
 | ---- | ---- |
 | 仓库分析 | 给出 Git URL 或本机路径，自动 fetch 到工作区并输出固定 8 节的 Markdown 报告（含 Mermaid 图）。 |
 | 项目问答 | 针对"当前项目"连续追问，例如某接口在哪实现、配置怎么加载、调用链怎么串。 |
-| 数据库报表 | 连接业务库，只读查询后产出中文 Markdown 报表（只允许 SELECT/SHOW/DESCRIBE 等只读语句）。 |
 | 项目级 RAG | 按项目隔离 Milvus collection，符号级切分 + 中文查询改写 + RRF 融合 + 重排，语义检索项目代码。 |
 | 工具调用 | 本机终端命令、HTTP 请求、项目扫描/搜索、文件读取、Git 仓库拉取、RAG 检索，以及 MCP 外部工具。 |
 | 流式对话 | SSE 逐事件下发（`delta`/`reason`/`tool_call`/`tool_result`/`done`），前端 Markdown + Mermaid 渲染。 |
@@ -53,7 +52,7 @@ flowchart TD
 ├── api/                    # HTTP handler：chat / session / auth / cost / quota / rag / sse
 ├── router/                 # 路由注册 + 鉴权、配额、tracing 中间件
 ├── service/
-│   ├── agent/              # 主 Agent 与子 Agent：repo_analyzer / project_qa / db_report
+│   ├── agent/              # 主 Agent 与子 Agent：repo_analyzer / project_qa
 │   ├── conversation/       # 对话编排、run 状态机、断连续传、审批恢复
 │   ├── rag/                # 全局与项目级索引、切分、查询改写、RRF 融合
 │   ├── tool/               # 工具实现：终端、HTTP、扫描、搜索、读文件、repo_fetch、RAG 检索
@@ -190,8 +189,7 @@ npm run build # 产物输出到 web/dist
 | `deepseek` | 主对话模型（OpenAI 兼容协议）。 |
 | `model_price` | 各模型单价，用于成本计算。 |
 | `workspace` | 仓库工作区根目录、克隆超时、仓库大小上限、目录逃逸开关。 |
-| `database_report` | 数据库报表 Agent 使用的只读业务库连接。 |
-| `agents` | 各 Agent 的最大迭代轮次（compose / project_qa / repo_analyzer / db_report）。 |
+| `agents` | 各 Agent 的最大迭代轮次（compose / project_qa / repo_analyzer）。 |
 | `rag` | 是否启用、文档根、分片参数、embedding、Milvus、rerank、中文查询改写。 |
 | `skills` | 技能中间件目录（默认 `~/.claude/skills`）与工具名。 |
 | `mcp` / `mcp_server_self` | 外部 MCP 工具来源，以及对内暴露的 MCP Server。 |
@@ -302,7 +300,6 @@ RELEASE_TAG="release-latest"   # 最新推送
 - SMTP 授权码只通过 `SMTP_PASSWORD` 环境变量注入，不写入任何 tracked 文件。
 - 邮箱注册密码使用 bcrypt(cost 10) 哈希；验证码在 Redis 中只存 SHA-256 哈希，10 分钟过期、一次性消费、错误次数受限。
 - 密码重设成功后写入重设时间戳，服务端会拒绝该时间之前签发的旧令牌。
-- 数据库报表 Agent 只允许只读 SQL，禁止写库/改表/删表。
 - 终端工具对高危命令强制人工审批，并支持目录逃逸拦截（`workspace.enable_escaped`）。
 - 会话与 run 均做用户归属校验，跨账号读取会被拒绝。
 

@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"edu.agent.code/config"
-	"edu.agent.code/service/tool/db_report"
 	"edu.agent.code/service/tool/http_request"
 	"edu.agent.code/service/tool/project_scan"
 	"edu.agent.code/service/tool/project_search"
@@ -16,9 +15,8 @@ import (
 )
 
 type LocalLoader struct {
-	conf        *config.Config
-	dbReporter  *db_report.DBReport
-	selfReport  *db_report.DBReport
+	conf       *config.Config
+	selfReport *self_report.Reader
 }
 
 func NewLocalLoader(conf *config.Config) *LocalLoader {
@@ -39,18 +37,6 @@ func (l *LocalLoader) Load(ctx context.Context) (Groups, error) {
 		return Groups{}, err
 	}
 
-	dbReportTools, dbReporter, err := newReportTools(l.conf)
-	if err != nil {
-		if dbReporter != nil {
-			closeErr := dbReporter.Close()
-			if closeErr != nil {
-				logger.Error("close LocalLoader failed", closeErr)
-			}
-		}
-		return Groups{}, err
-	}
-	l.dbReporter = dbReporter
-
 	selfTools, selfReporter, err := newSelfReportTools(l.conf)
 	if err != nil {
 		if selfReporter != nil {
@@ -67,19 +53,12 @@ func (l *LocalLoader) Load(ctx context.Context) (Groups, error) {
 		Direct:     directTools,
 		Analysis:   analysisTools,
 		QA:         qaTools,
-		Report:     dbReportTools,
 		SelfReport: selfTools,
 	}, nil
 }
 
 func (l *LocalLoader) Close() error {
 	var err error
-	if l.dbReporter != nil {
-		if closeErr := l.dbReporter.Close(); closeErr != nil {
-			logger.Error("close loader failed", closeErr)
-			err = errors.Join(err, closeErr)
-		}
-	}
 	if l.selfReport != nil {
 		if closeErr := l.selfReport.Close(); closeErr != nil {
 			logger.Error("close self report loader failed", closeErr)
@@ -133,35 +112,16 @@ func newDirectTools() ([]tool.BaseTool, error) {
 	return []tool.BaseTool{terminalTool, httpRequestTool}, nil
 }
 
-func newReportTools(conf *config.Config) ([]tool.BaseTool, *db_report.DBReport, error) {
-	if conf == nil || conf.DatabaseReport.Enable == false {
-		return []tool.BaseTool{}, nil, nil
-	}
-	reporter, err := db_report.NewDBReport(conf.DatabaseReport)
-	if err != nil {
-		return nil, nil, err
-	}
-	tools, err := db_report.NewTools(reporter)
-	if err != nil {
-		closeErr := reporter.Close()
-		if closeErr != nil {
-			logger.Error("close reporter failed", closeErr)
-		}
-		return nil, nil, errors.Join(err, closeErr)
-	}
-	return tools, reporter, nil
-}
-
 // newSelfReportTools 构造自省报表工具（连 agent_telemetry 的独立只读账号）。
 //
-// 与 newReportTools 是两套完全独立的实例：不同库、不同账号、不同工具名。
+// 工具集指向 agent_telemetry 库，访问控制由白名单门禁 + 独立只读账号共同保证。
 // 不启用（enable=false 或 dsn 为空）时返回空工具集而不是报错——
 // 自省能力是可选增强，缺配置不该让服务起不来。
-func newSelfReportTools(conf *config.Config) ([]tool.BaseTool, *db_report.DBReport, error) {
+func newSelfReportTools(conf *config.Config) ([]tool.BaseTool, *self_report.Reader, error) {
 	if conf == nil || !conf.SelfReport.Enable || conf.SelfReport.DSN == "" {
 		return []tool.BaseTool{}, nil, nil
 	}
-	reporter, err := db_report.NewDBReport(conf.SelfReport.AsDatabaseReport())
+	reporter, err := self_report.NewReader(conf.SelfReport)
 	if err != nil {
 		return nil, nil, err
 	}

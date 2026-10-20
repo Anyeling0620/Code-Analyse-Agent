@@ -1560,6 +1560,9 @@ html[data-ui='editorial'] .empty-state {
 }
 
 html[data-ui='editorial'] .empty-sheet {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 156px;
+  column-gap: 36px;
   max-width: 1000px;
   margin: 0;
   padding: 26px 0 0;
@@ -1568,6 +1571,18 @@ html[data-ui='editorial'] .empty-sheet {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+html[data-ui='editorial'] .empty-heading {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+html[data-ui='editorial'] .empty-index {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
 }
 
 html[data-ui='editorial'] .empty-tab {
@@ -1664,16 +1679,234 @@ html[data-ui='editorial'] .empty-index-copy p {
   line-height: 1.72;
 }
 
-html[data-ui='editorial'] .empty-start {
-  max-width: 72ch;
-  margin: 22px 0 0;
-  padding-top: 14px;
-  border-top: 3px double var(--rule-strong);
+html[data-ui='editorial'] .empty-margin {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding-left: 22px;
+  border-left: 1px solid var(--rule-strong);
   color: var(--ink-soft);
-  font-family: var(--font-ui);
-  font-size: 11.5px;
-  letter-spacing: 0.02em;
-  line-height: 1.7;
+}
+
+html[data-ui='editorial'] .empty-margin-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule-strong);
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+html[data-ui='editorial'] .empty-plate {
+  margin: 0;
+  padding-top: 2px;
+}
+
+html[data-ui='editorial'] .empty-plate-figure {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+html[data-ui='editorial'] .empty-plate-ghost rect {
+  fill: none;
+  stroke: var(--ink-faint);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.6;
+}
+
+html[data-ui='editorial'] .empty-plate-sheet {
+  fill: var(--paper-soft);
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+
+html[data-ui='editorial'] .empty-plate-tab {
+  fill: var(--accent);
+}
+
+html[data-ui='editorial'] .empty-plate-punch {
+  fill: var(--paper-soft);
+  stroke: var(--ink);
+  stroke-width: 0.9;
+}
+
+html[data-ui='editorial'] .empty-plate-title {
+  stroke: var(--ink);
+  stroke-width: 1.8;
+}
+
+html[data-ui='editorial'] .empty-plate-title-soft {
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+html[data-ui='editorial'] .empty-plate-chart line {
+  stroke: var(--rule-strong);
+  stroke-width: 0.9;
+}
+
+html[data-ui='editorial'] .empty-plate-chart polyline {
+  stroke: var(--secondary);
+  stroke-width: 1.4;
+}
+
+html[data-ui='editorial'] .empty-plate-dot {
+  fill: var(--secondary);
+}
+
+html[data-ui='editorial'] .empty-plate-line {
+  stroke: var(--rule-strong);
+  stroke-width: 0.9;
+}
+
+html[data-ui='editorial'] .empty-plate-rail rect {
+  fill: transparent;
+  stroke: var(--rule-strong);
+  stroke-width: 0.9;
+}
+
+html[data-ui='editorial'] .empty-plate-rail-active {
+  fill: var(--gold);
+  stroke: var(--gold);
+}
+
+html[data-ui='editorial'] .empty-plate-dims {
+  display: none;
+}
+
+html[data-ui='editorial'] .empty-plate-callouts path {
+  fill: none;
+  stroke: var(--rule-strong);
+  stroke-width: 0.8;
+  stroke-dasharray: 2 2;
+}
+
+html[data-ui='editorial'] .empty-plate-callouts text {
+  fill: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
+html[data-ui='editorial'] .empty-plate-caption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 7px;
+  margin-top: 5px;
+  padding-top: 7px;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-soft);
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+html[data-ui='editorial'] .empty-plate-fig {
+  flex: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.1em;
+}
+
+html[data-ui='editorial'] .empty-plate-key {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+html[data-ui='editorial'] .empty-plate-key li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+html[data-ui='editorial'] .empty-key-mark {
+  flex: none;
+  width: 11px;
+  height: 7px;
+  border: 1px solid var(--rule-strong);
+}
+
+html[data-ui='editorial'] .empty-key-mark-tab {
+  border-color: transparent;
+  background: var(--accent);
+}
+
+html[data-ui='editorial'] .empty-key-mark-punch {
+  width: 7px;
+  height: 7px;
+  border-color: var(--ink);
+  border-radius: 50%;
+  background: transparent;
+}
+
+html[data-ui='editorial'] .empty-key-mark-rail {
+  border-color: transparent;
+  background: var(--gold);
+}
+
+html[data-ui='editorial'] .empty-margin-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+html[data-ui='editorial'] .empty-stamp {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 9px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+html[data-ui='editorial'] .empty-stamp::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border: 1px solid currentColor;
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+html[data-ui='editorial'] .empty-stamp-title {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+html[data-ui='editorial'] .empty-stamp-sub {
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 /* ---- Elevator rail ------------------------------------------------------- */
@@ -1884,14 +2117,32 @@ html[data-ui='editorial'] .chat-skeleton-line-title {
 
 /* ---- Responsive ---------------------------------------------------------- */
 
-/* Desktop front page: the three numbered columns sit side by side, divided
-   by hairlines like a newspaper contents page. */
+/* Desktop front page: the numbered capabilities sit side by side, divided by
+   hairlines like a newspaper contents page. */
 @media (min-width: 901px) {
+  html[data-ui='editorial'] .empty-sheet {
+    grid-template-rows: auto auto auto;
+  }
+
+  html[data-ui='editorial'] .empty-tab {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  html[data-ui='editorial'] .empty-heading {
+    grid-row: 2;
+  }
+
   html[data-ui='editorial'] .empty-index {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-row: 3;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     max-width: 100%;
     border-bottom: 1px solid var(--rule-strong);
+  }
+
+  html[data-ui='editorial'] .empty-margin {
+    grid-row: 1 / span 3;
   }
 
   html[data-ui='editorial'] .empty-index-row {
@@ -1927,6 +2178,39 @@ html[data-ui='editorial'] .chat-skeleton-line-title {
   html[data-ui='editorial'] .empty-state,
   html[data-ui='editorial'] .composer-shell {
     width: calc(100% - 64px);
+  }
+
+  html[data-ui='editorial'] .empty-sheet {
+    grid-template-columns: minmax(0, 1fr) 136px;
+    column-gap: 28px;
+  }
+}
+
+/* 1024 级宽度：收紧纵向节奏，让整张空状态完整停在输入区上方 */
+@media (min-width: 901px) and (max-width: 1180px) {
+  html[data-ui='editorial'] .empty-state {
+    padding-top: 0;
+  }
+
+  html[data-ui='editorial'] .empty-sheet {
+    padding-top: 18px;
+  }
+
+  html[data-ui='editorial'] .empty-tab {
+    padding-bottom: 10px;
+  }
+
+  html[data-ui='editorial'] .empty-heading h2 {
+    margin-bottom: 12px;
+  }
+
+  html[data-ui='editorial'] .empty-heading p {
+    margin-bottom: 20px;
+  }
+
+  html[data-ui='editorial'] .empty-index-row {
+    padding-top: 14px;
+    padding-bottom: 16px;
   }
 }
 
@@ -2007,7 +2291,68 @@ html[data-ui='editorial'] .chat-skeleton-line-title {
   }
 
   html[data-ui='editorial'] .empty-sheet {
+    grid-template-columns: minmax(0, 1fr);
     padding-top: 26px;
+  }
+
+  html[data-ui='editorial'] .empty-heading,
+  html[data-ui='editorial'] .empty-index {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  html[data-ui='editorial'] .empty-margin {
+    grid-column: 1;
+    grid-row: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    margin-top: 6px;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--rule-strong);
+    border-left: 0;
+  }
+
+  html[data-ui='editorial'] .empty-margin-head,
+  html[data-ui='editorial'] .empty-plate-key {
+    display: none;
+  }
+
+  html[data-ui='editorial'] .empty-plate {
+    flex: 0 0 92px;
+    padding-top: 0;
+  }
+
+  html[data-ui='editorial'] .empty-plate-caption {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    margin-top: 4px;
+    padding-top: 0;
+    border-top: 0;
+    font-size: 11px;
+  }
+
+  html[data-ui='editorial'] .empty-plate-fig {
+    font-size: 7px;
+  }
+
+  html[data-ui='editorial'] .empty-margin-foot {
+    margin-top: 0;
+    margin-left: auto;
+    padding-top: 0;
+  }
+
+  html[data-ui='editorial'] .empty-stamp {
+    padding: 6px 8px;
+  }
+
+  html[data-ui='editorial'] .empty-stamp-title {
+    font-size: 7.5px;
+  }
+
+  html[data-ui='editorial'] .empty-stamp-sub {
+    font-size: 7px;
   }
 
   html[data-ui='editorial'] .empty-heading h2 {
@@ -2151,9 +2496,21 @@ html[data-ui='editorial'] .chat-skeleton-line-title {
     font-size: 14.5px;
   }
 
-  html[data-ui='editorial'] .empty-start {
-    margin-top: 22px;
-    font-size: 11px;
+  html[data-ui='editorial'] .empty-plate {
+    display: none;
+  }
+
+  html[data-ui='editorial'] .empty-margin {
+    gap: 10px;
+  }
+
+  html[data-ui='editorial'] .empty-margin-head {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding-bottom: 0;
+    border-bottom: 0;
   }
 
   html[data-ui='editorial'] .composer-shell {

@@ -58,6 +58,7 @@ type SessionContext struct {
 	SessionID          string    `json:"session_id"`
 	UserID             string    `json:"user_id"`
 	SessionOwner       string    `json:"session_owner"`
+	Title              string    `json:"title"` // AI 生成的会话标题；老会话为空时前端回退到 last_user_message/summary
 	Summary            string    `json:"summary"`
 	LastUserMessage    string    `json:"last_user_message"`
 	LastAssistantMsg   string    `json:"last_assistant_msg"`

@@ -57,6 +57,9 @@ type Service struct {
 	// telemetry 把每轮 run 的聚合指标异步写到 agent_telemetry 库。
 	// 它为 nil 表示埋点关闭（未配置或初始化失败），所有调用点都必须容忍 nil。
 	telemetry *telemetry.Writer
+
+	// titleGen 在首轮对话结束时生成会话标题；为 nil（例如单测最小构造）时直接跳过。
+	titleGen *titleGenerator
 }
 
 func NewService(ctx context.Context, adaptor adaptor.IAdaptor, projectIndexer *rag.ProjectIndexer,
@@ -89,6 +92,7 @@ func NewService(ctx context.Context, adaptor adaptor.IAdaptor, projectIndexer *r
 		runs:           run.NewRun(adaptor),
 		broker:         newRunBroker(),
 		telemetry:      telemetryWriter,
+		titleGen:       deps.titleGen,
 	}
 	// 启动扫描：上一次进程留下的 running 不可能再推进，统一标成 interrupted。
 	// 不这么做的话，那些 run 会永远显示"执行中"，前端也会一直等一个不会来的 done。

@@ -55,6 +55,8 @@ type serviceDeps struct {
 	composeRunner *adk.Runner
 	visibleTools  map[string]bool
 	cost          *cost.Service
+	// titleGen 复用主对话模型生成会话标题；模型失败时静默回退，不影响主链路。
+	titleGen *titleGenerator
 }
 
 func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor, projectIndexer *rag.ProjectIndexer, codeIndexer *codeindex.Indexer) (deps serviceDeps, err error) {
@@ -161,6 +163,7 @@ func buildServiceDeps(ctx context.Context, a adaptor.IAdaptor, projectIndexer *r
 		composeRunner: composeRunner,
 		visibleTools:  visibleToolSet,
 		cost:          cost.NewService(a),
+		titleGen:      newTitleGenerator(chatModel),
 	}, nil
 }
 

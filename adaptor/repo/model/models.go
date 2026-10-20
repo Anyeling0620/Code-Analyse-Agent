@@ -49,6 +49,7 @@ type Session struct {
 	SessionID          string `gorm:"primaryKey;size:128"`
 	UserID             string `gorm:"size:128;index"`
 	SessionOwner       string `gorm:"size:128;index"`
+	Title              string `gorm:"size:255"` // AI 根据首轮问答生成的标题；老会话为空，前端回退显示最后一条用户消息
 	Summary            string `gorm:"type:text"`
 	LastUserMessage    string `gorm:"type:text"`
 	LastAssistantMsg   string `gorm:"type:text"`

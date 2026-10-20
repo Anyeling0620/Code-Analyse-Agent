@@ -6,6 +6,7 @@ type SessionContext struct {
 	SessionID          string    `json:"session_id"`
 	UserID             string    `json:"user_id"`
 	SessionOwner       string    `json:"session_owner"` // TODO 用于会话分享
+	Title              string    `json:"title"`
 	Summary            string    `json:"summary"`
 	LastUserMessage    string    `json:"last_user_message"`
 	LastAssistantMsg   string    `json:"last_assistant_msg"`

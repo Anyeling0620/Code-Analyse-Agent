@@ -39,3 +39,19 @@ type CostByTool struct {
 	Tokens   int64
 	CNY      float64
 }
+
+// CostOverviewRow 是区间内一条成本记录的投影（附带会话标题），
+// 供 service 在 Go 内做多维度聚合——聚合不在 SQL 完成，原因见 service 层注释。
+type CostOverviewRow struct {
+	OccurredAt       time.Time
+	SessionID        string
+	SessionTitle     string
+	Model            string
+	ToolName         string
+	PromptTokens     int64
+	CachedTokens     int64
+	CompletionTokens int64
+	EstimatedCNY     float64
+	CacheHitCNY      float64
+	CacheMissCNY     float64
+}

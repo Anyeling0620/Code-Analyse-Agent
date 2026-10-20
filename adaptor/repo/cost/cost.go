@@ -15,6 +15,7 @@ type ICost interface {
 	DailyUsage(ctx context.Context, userID string, date time.Time) (do.CostDailyUsage, error)
 	GroupByUser(ctx context.Context, from, to time.Time) ([]do.CostByUser, error)
 	GroupByTool(ctx context.Context, from, to time.Time) ([]do.CostByTool, error)
+	Overview(ctx context.Context, userID string, from, to time.Time) ([]do.CostOverviewRow, error)
 }
 
 type Cost struct {
@@ -101,6 +102,31 @@ func (c *Cost) GroupByTool(ctx context.Context, from, to time.Time) ([]do.CostBy
 		Select(toolExpr + " AS tool_name, SUM(total_tokens) AS tokens, SUM(estimated_cny) AS cny").
 		Group(toolExpr).
 		Order("cny DESC").
+		Scan(&rows).Error
+	return rows, err
+}
+
+// Overview 取区间 [from, to) 内当前用户的全部成本明细，并带上会话标题。
+// 聚合留给 service 在 Go 内完成：occurred_at 以带时区的 ISO 文本落库，
+// SQLite 的 date() 只按字面值/UTC 切日，与 time.Local 的自然日口径不一致，
+// 会让凌晨 0-8 点（+08:00 存储）的记录错落到前一天。
+// 标题用 LEFT JOIN 一次取回：先取明细再按 session 逐个查标题会随会话数变成 N+1。
+func (c *Cost) Overview(ctx context.Context, userID string, from, to time.Time) ([]do.CostOverviewRow, error) {
+	rows := make([]do.CostOverviewRow, 0)
+	err := c.db.WithContext(ctx).Model(&model.CostRecord{}).
+		Joins("LEFT JOIN sessions ON sessions.session_id = cost_records.session_id").
+		Where("cost_records.user_id = ? AND cost_records.occurred_at >= ? AND cost_records.occurred_at < ?", userID, from, to).
+		Select("cost_records.occurred_at AS occurred_at, " +
+			"cost_records.session_id AS session_id, " +
+			"COALESCE(sessions.title, '') AS session_title, " +
+			"cost_records.model AS model, " +
+			"cost_records.tool_name AS tool_name, " +
+			"cost_records.prompt_tokens AS prompt_tokens, " +
+			"cost_records.cached_tokens AS cached_tokens, " +
+			"cost_records.completion_tokens AS completion_tokens, " +
+			"cost_records.estimated_cny AS estimated_cny, " +
+			"cost_records.cache_hit_cny AS cache_hit_cny, " +
+			"cost_records.cache_miss_cny AS cache_miss_cny").
 		Scan(&rows).Error
 	return rows, err
 }

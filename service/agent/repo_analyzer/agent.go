@@ -57,40 +57,59 @@ func NewAnalyzerWithOptions(
 	})
 }
 
+type subAgentSpec struct {
+	name        string
+	description string
+	instruction string
+}
+
+// repoAnalyzerSubAgents 是 repo_analyzer 的二级子 Agent 定义。
+//
+// 同一份列表既用于构造 Agent，也通过 SubAgentNames 暴露给会话层：
+// 这些 Agent 的 assistant 正文是内部中间结论，只回传给 repo_analyzer 汇总，
+// 不能作为用户可见的回答下发（否则一次分析会出现多份“总结”）。
+var repoAnalyzerSubAgents = []subAgentSpec{
+	{
+		name:        "repo_structure_mapper",
+		description: "专注确认仓库技术栈、目录分层、入口文件、构建脚本和关键依赖，适合先建立项目全景地图。",
+		instruction: repoStructureMapperInstruction,
+	},
+	{
+		name:        "repo_callchain_analyzer",
+		description: "专注分析后端路由、服务层、工具调用、Agent/Runner 调用链路和关键业务流程。",
+		instruction: repoCallchainAnalyzerInstruction,
+	},
+	{
+		name:        "repo_data_config_analyzer",
+		description: "专注分析配置、数据库模型、Repository、状态持久化、中间件和安全边界。",
+		instruction: repoDataConfigAnalyzerInstruction,
+	},
+	{
+		name:        "repo_frontend_analyzer",
+		description: "专注分析前端页面、SSE/HTTP 交互、用户操作流和前后端事件协议。",
+		instruction: repoFrontendAnalyzerInstruction,
+	},
+}
+
+// SubAgentNames 返回 repo_analyzer 的二级子 Agent 名称。
+//
+// 调用方据此区分“给 repo_analyzer 的证据”和“面向用户的最终报告”。
+func SubAgentNames() []string {
+	names := make([]string, 0, len(repoAnalyzerSubAgents))
+	for _, spec := range repoAnalyzerSubAgents {
+		names = append(names, spec.name)
+	}
+	return names
+}
+
 func newRepoAnalyzerSubAgent(
 	ctx context.Context,
 	chatModel model.ToolCallingChatModel,
 	analysisTools []tool.BaseTool,
 	maxIterations int,
 	toolMiddlewares []compose.ToolMiddleware) ([]adk.Agent, error) {
-	configs := []struct {
-		name        string
-		description string
-		instruction string
-	}{
-		{
-			name:        "repo_structure_mapper",
-			description: "专注确认仓库技术栈、目录分层、入口文件、构建脚本和关键依赖，适合先建立项目全景地图。",
-			instruction: repoStructureMapperInstruction,
-		},
-		{
-			name:        "repo_callchain_analyzer",
-			description: "专注分析后端路由、服务层、工具调用、Agent/Runner 调用链路和关键业务流程。",
-			instruction: repoCallchainAnalyzerInstruction,
-		},
-		{
-			name:        "repo_data_config_analyzer",
-			description: "专注分析配置、数据库模型、Repository、状态持久化、中间件和安全边界。",
-			instruction: repoDataConfigAnalyzerInstruction,
-		},
-		{
-			name:        "repo_frontend_analyzer",
-			description: "专注分析前端页面、SSE/HTTP 交互、用户操作流和前后端事件协议。",
-			instruction: repoFrontendAnalyzerInstruction,
-		},
-	}
-	subAgents := make([]adk.Agent, 0, len(configs))
-	for _, config := range configs {
+	subAgents := make([]adk.Agent, 0, len(repoAnalyzerSubAgents))
+	for _, config := range repoAnalyzerSubAgents {
 		agent, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 			Name:        config.name,
 			Description: config.description,

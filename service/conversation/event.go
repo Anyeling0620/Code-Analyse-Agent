@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"context"
+	"edu.agent.code/service/agent/repo_analyzer"
 	"edu.agent.code/service/consts"
 	"edu.agent.code/service/dto"
 	"edu.agent.code/service/tool/terminal"
@@ -179,6 +180,24 @@ func (s *Service) consumeMessageStream(
 	return nil
 }
 
+// internalSubAgentNames 是 repo_analyzer 二级子 Agent 的名称集合。
+//
+// 这些名称是“内部中间结果”的唯一判据：EmitInternalEvents 转发的事件里，
+// AgentName 会保留事件来源 Agent（与下发给前端的 stage 一致），
+// 因此可以准确地把子 Agent 的正文和主链路正文区分开。
+var internalSubAgentNames = func() map[string]bool {
+	names := make(map[string]bool)
+	for _, name := range repo_analyzer.SubAgentNames() {
+		names[name] = true
+	}
+	return names
+}()
+
+// isInternalSubAgentText 判断某条 assistant 正文是否来自 repo_analyzer 的二级子 Agent。
+func isInternalSubAgentText(agentName string) bool {
+	return internalSubAgentNames[agentName]
+}
+
 func (s *Service) handleMessage(
 	ctx context.Context,
 	msg *schema.Message,
@@ -205,6 +224,16 @@ func (s *Service) handleMessage(
 	// 如果只是流式输出 跳过
 	isAssistantText := msg.Role == schema.Assistant || (output.IsStreaming && msg.Role == "")
 	if !isAssistantText {
+		return nil
+	}
+	// repo_analyzer 的二级子 Agent（repo_structure_mapper 等）只把结论和证据
+	// 回传给 repo_analyzer，最终报告由 repo_analyzer 汇总。主 Agent 打开了
+	// EmitInternalEvents，这些子 Agent 的 assistant 正文会一并流到这里；
+	// 若照常写入 Answer 并下发 delta，一次仓库分析会把 4 份子报告和最终报告
+	// 拼在同一个气泡里，看起来像意外输出了多次总结。
+	// 用量已在上面的 trackUsage 记过，这里只丢弃正文；工具调用与结果仍按
+	// 上面的分支正常下发，用户依然能看到分析进度。
+	if isInternalSubAgentText(event.AgentName) {
 		return nil
 	}
 	if len(msg.Content) == 0 && len(msg.ReasoningContent) == 0 {
@@ -265,16 +294,20 @@ func (s *Service) handleToolCallResult(msg *schema.Message, runState *dto.ChatRu
 }
 
 func (s *Service) handleToolCall(emit ChatEmit, runState *dto.ChatRunState, event *adk.AgentEvent, msg *schema.Message) error {
-	err := emitMarkDownBlock(
-		emit,
-		runState,
-		consts.SseEventTypeProgress,
-		event.AgentName,
-		msg.Content)
-	if err != nil {
-		logger.Error("handleToolCall error", zap.Any("event", event), runStateBrief(runState), zap.Error(err))
+	// 二级子 Agent 在调用工具的同一帧里可能带出正文；它和流式 delta 一样
+	// 属于内部中间结果，不能作为 progress 文本展示。工具卡片照常下发。
+	if !isInternalSubAgentText(event.AgentName) {
+		err := emitMarkDownBlock(
+			emit,
+			runState,
+			consts.SseEventTypeProgress,
+			event.AgentName,
+			msg.Content)
+		if err != nil {
+			logger.Error("handleToolCall error", zap.Any("event", event), runStateBrief(runState), zap.Error(err))
 
-		return err
+			return err
+		}
 	}
 
 	// 调用工具

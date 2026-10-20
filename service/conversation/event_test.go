@@ -1,11 +1,14 @@
 package conversation
 
 import (
+	"context"
 	"testing"
 
+	"edu.agent.code/service/agent/repo_analyzer"
 	"edu.agent.code/service/consts"
 	"edu.agent.code/service/dto"
 
+	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -63,6 +66,85 @@ func TestHandleToolCallResultFallsBackToToolCallMapName(t *testing.T) {
 	}
 	if emitted[0].ToolName != "repo_fetch" {
 		t.Errorf("emitted tool name = %q, want fallback %q", emitted[0].ToolName, "repo_fetch")
+	}
+}
+
+// 回归：repo_analyzer 的二级子 Agent 只向 repo_analyzer 提供证据，
+// 它们的 assistant 正文不能写进用户答案，否则一次仓库分析会出现多份“总结”。
+func TestHandleMessageDropsInternalSubAgentText(t *testing.T) {
+	svc := &Service{}
+	runState := &dto.ChatRunState{ToolCallMap: map[string]dto.ToolCallState{}}
+	var emitted []dto.ChatStreamEvent
+	emit := func(event dto.ChatStreamEvent) error {
+		emitted = append(emitted, event)
+		return nil
+	}
+
+	msg := &schema.Message{Content: "子 Agent 的中间结论"}
+	output := &adk.TypedMessageVariant[*schema.Message]{IsStreaming: true}
+	event := &adk.AgentEvent{AgentName: "repo_callchain_analyzer"}
+
+	if err := svc.handleMessage(context.Background(), msg, output, event, runState, emit); err != nil {
+		t.Fatalf("handleMessage returned error: %v", err)
+	}
+	if runState.Answer != "" {
+		t.Errorf("answer = %q, want empty (sub agent text must stay internal)", runState.Answer)
+	}
+	if len(emitted) != 0 {
+		t.Fatalf("expected no emitted events, got %d", len(emitted))
+	}
+}
+
+// repo_analyzer 自己的正文（阶段进展 + 最终报告）仍必须进入答案并实时下发。
+func TestHandleMessageKeepsRepoAnalyzerText(t *testing.T) {
+	svc := &Service{}
+	runState := &dto.ChatRunState{ToolCallMap: map[string]dto.ToolCallState{}}
+	var emitted []dto.ChatStreamEvent
+	emit := func(event dto.ChatStreamEvent) error {
+		emitted = append(emitted, event)
+		return nil
+	}
+
+	msg := &schema.Message{Content: "## 一、项目概述"}
+	output := &adk.TypedMessageVariant[*schema.Message]{IsStreaming: true}
+	event := &adk.AgentEvent{AgentName: repo_analyzer.Name}
+
+	if err := svc.handleMessage(context.Background(), msg, output, event, runState, emit); err != nil {
+		t.Fatalf("handleMessage returned error: %v", err)
+	}
+	if runState.Answer != msg.Content {
+		t.Errorf("answer = %q, want %q", runState.Answer, msg.Content)
+	}
+	if len(emitted) != 1 || emitted[0].Type != consts.SseEventTypeDelta || emitted[0].Stage != repo_analyzer.Name {
+		t.Fatalf("emitted = %+v, want one delta staged %q", emitted, repo_analyzer.Name)
+	}
+}
+
+// 过滤只针对正文：二级子 Agent 的工具调用仍要下发，用户才能看到分析进度。
+func TestHandleMessageKeepsInternalSubAgentToolCalls(t *testing.T) {
+	svc := &Service{}
+	runState := &dto.ChatRunState{ToolCallMap: map[string]dto.ToolCallState{}}
+	var emitted []dto.ChatStreamEvent
+	emit := func(event dto.ChatStreamEvent) error {
+		emitted = append(emitted, event)
+		return nil
+	}
+
+	msg := &schema.Message{ToolCalls: []schema.ToolCall{{
+		ID:       "call-1",
+		Function: schema.FunctionCall{Name: "read_files", Arguments: `{"paths":["main.go"]}`},
+	}}}
+	output := &adk.TypedMessageVariant[*schema.Message]{IsStreaming: true}
+	event := &adk.AgentEvent{AgentName: "repo_callchain_analyzer"}
+
+	if err := svc.handleMessage(context.Background(), msg, output, event, runState, emit); err != nil {
+		t.Fatalf("handleMessage returned error: %v", err)
+	}
+	if runState.ToolCalls != 1 {
+		t.Errorf("tool calls = %d, want 1", runState.ToolCalls)
+	}
+	if len(emitted) != 1 || emitted[0].Type != consts.SseEventTypeToolCall || emitted[0].ToolName != "read_files" {
+		t.Fatalf("emitted = %+v, want one tool_call for read_files", emitted)
 	}
 }
 

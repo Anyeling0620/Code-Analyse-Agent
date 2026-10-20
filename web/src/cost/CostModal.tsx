@@ -53,7 +53,7 @@ export function CostModal({ onClose }: { onClose: () => void }) {
       })
       .catch((caught: unknown) => {
         if (!cancelled) {
-          setError(caught instanceof Error && caught.message ? caught.message : '消耗数据加载失败，请重试');
+          setError(caught instanceof Error && caught.message ? normalizeError(caught.message) : '消耗数据加载失败，请重试');
         }
       })
       .finally(() => {
@@ -250,6 +250,17 @@ function formatCny(value: number): string {
     return '0.00';
   }
   return value < 0.01 ? value.toFixed(4) : value.toFixed(2);
+}
+
+// normalizeError 去掉后端 Errno 拼出的 "ParamError:" 之类前缀，只给用户看中文原因。
+// 日期解析失败会带 time.Parse 的英文原文，那类统一换成人话。
+function normalizeError(message: string): string {
+  const raw = message.trim();
+  const withoutCode = /^[A-Za-z_][A-Za-z0-9_]*:/.test(raw) ? raw.slice(raw.indexOf(':') + 1).trim() : raw;
+  if (!withoutCode || withoutCode.includes('parsing time') || withoutCode.includes('time.Parse')) {
+    return '日期格式不正确，应为 YYYY-MM-DD';
+  }
+  return withoutCode;
 }
 
 function formatPercent(share: number): string {

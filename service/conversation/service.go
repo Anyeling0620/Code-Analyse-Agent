@@ -129,7 +129,7 @@ func (s *Service) trackUsage(
 	runState *dto.ChatRunState,
 	msg *schema.Message,
 	agentName string) error {
-	if s.modelName == "" || msg == nil || runState == nil || msg.ResponseMeta == nil || msg.ResponseMeta.Usage == nil {
+	if s.modelName == "" || s.cost == nil || msg == nil || runState == nil || msg.ResponseMeta == nil || msg.ResponseMeta.Usage == nil {
 		return nil
 	}
 	usage := msg.ResponseMeta.Usage

@@ -21,6 +21,9 @@ const (
 	// 拼给标题模型的问答各有长度上限：回答可能很长，没必要整段送进去。
 	sessionTitleQuestionMaxRunes = 800
 	sessionTitleAnswerMaxRunes   = 800
+	// sessionTitleCostAgentName 是标题调用在成本记录里的归属名，
+	// 便于按 tool_name 把「标题生成」与主对话、子 agent 的调用区分开。
+	sessionTitleCostAgentName = "session_title"
 )
 
 const sessionTitleSystemPrompt = `你是会话标题生成器。请根据用户的第一轮提问和助手回答，生成一个简短、概括性的中文标题。
@@ -56,15 +59,19 @@ func shouldGenerateSessionTitle(session *dto.SessionContext, question string) bo
 		strings.TrimSpace(question) != ""
 }
 
-// generate 同步生成标题。任何失败（模型报错、超时、空输出）都返回空字符串，
+// generate 同步生成标题。任何失败（模型报错、超时、空输出）都返回空标题，
 // 由调用方保留空标题并让前端回退显示最后一条用户消息，绝不影响主对话落库。
-func (g *titleGenerator) generate(ctx context.Context, question, answer string) string {
+//
+// 第二个返回值是模型原始响应：只要模型确实返回了消息（哪怕正文为空、标题
+// 清洗后为空），都要把它交给调用方记成本，否则这部分 token 会无声漏账。
+// 模型报错/超时没有可用的 usage，返回 nil。
+func (g *titleGenerator) generate(ctx context.Context, question, answer string) (string, *schema.Message) {
 	if g == nil || g.chatModel == nil {
-		return ""
+		return "", nil
 	}
 	question = strings.TrimSpace(question)
 	if question == "" {
-		return ""
+		return "", nil
 	}
 	timeout := g.timeout
 	if timeout <= 0 {
@@ -76,13 +83,13 @@ func (g *titleGenerator) generate(ctx context.Context, question, answer string) 
 	msg, err := g.chatModel.Generate(titleCtx, buildSessionTitleInput(question, answer), model.WithTemperature(0.2))
 	if err != nil {
 		logger.Warn("generate session title failed: %v", err)
-		return ""
+		return "", nil
 	}
 	if msg == nil {
-		return ""
+		return "", nil
 	}
 	// 只读取正文：DeepSeek 等模型的思考过程在 ReasoningContent 里，不参与标题清洗。
-	return sanitizeSessionTitle(msg.Content)
+	return sanitizeSessionTitle(msg.Content), msg
 }
 
 func buildSessionTitleInput(question, answer string) []*schema.Message {

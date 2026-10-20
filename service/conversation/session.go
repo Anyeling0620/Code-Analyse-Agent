@@ -155,8 +155,17 @@ func (s *Service) persistSession(ctx context.Context, session *dto.SessionContex
 	// 不会出现"刷新两次才看到标题"。失败/超时只记日志，主对话照常落库。
 	if needsTitle {
 		// 去掉请求取消信号：客户端断开不应让已经跑完的这轮丢掉标题；
-		// 生成器内部另有一次短超时兜底。
-		title := s.titleGen.generate(context.WithoutCancel(ctx), runState.Question, runState.Answer)
+		// 生成器内部另有一次短超时兜底。同样的 ctx 也用于记成本，
+		// 避免客户端断开时丢掉一条已实际发生的模型调用。
+		titleCtx := context.WithoutCancel(ctx)
+		title, usageMsg := s.titleGen.generate(titleCtx, runState.Question, runState.Answer)
+		// 标题生成是额外的一次真实模型调用：即使标题清洗后为空（模型返回空正文），
+		// 只要有 usage 就要计入本轮 runState 与 cost_records，避免这部分 token 漏账。
+		// titleGen 复用主对话模型（见 buildServiceDeps），因此 trackUsage 里的
+		// modelName 对这次调用同样成立。
+		if usageMsg != nil {
+			_ = s.trackUsage(titleCtx, runState, usageMsg, sessionTitleCostAgentName)
+		}
 		if title != "" {
 			session.Title = title
 		}

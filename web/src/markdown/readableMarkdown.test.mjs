@@ -43,7 +43,7 @@ await build({
       assert.equal(splitLongParagraphs(twoLine), twoLine, '未超过阈值的段落不应被改动');
 
       // 结构化内容一律原样保留，否则会写坏 Markdown。
-      const fenced = ['## 一、概览', '', '```go', 'func main() { // 这一段注释很长但属于代码块内容，必须原样保留', '}', '```'].join('\\n');
+      const fenced = ['## 一、概览', '', '\`\`\`go', 'func main() { // 这一段注释很长但属于代码块内容，必须原样保留', '}', '\`\`\`'].join('\\n');
       assert.equal(splitLongParagraphs(fenced), fenced, '代码块必须原样保留');
 
       const table = ['| 分类 | 技术 |', '| ---- | ---- |', '| 语言 | Go 1.26 |'].join('\\n');

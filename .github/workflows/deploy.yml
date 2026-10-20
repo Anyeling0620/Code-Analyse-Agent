@@ -2,7 +2,7 @@ name: Build and Release
 
 # 只负责「构建 + 发布产物」：每次 push 到 main 构建一次，发布两个 Release：
 #   release-latest  滚动最新（每次推送更新）
-#   release-2.1     当前 2.x 版本线（每次推送更新；升级到 3.0 时改 CURRENT_RELEASE_TAG）
+#   release-2.2     当前 2.x 版本线（每次推送更新；升级到 3.0 时改 CURRENT_RELEASE_TAG）
 # 服务器侧通过 RELEASE_TAG 选择要部署的 Release；release-1.0 是改造前版本的冻结快照。
 # 标签统一使用「release-<版本号>」形式（连字符分隔）。
 # 不再从 Runner 反向 SSH/SCP 推送到服务器；服务器侧定时拉取选定的 Release 完成部署。
@@ -22,7 +22,7 @@ permissions:
 # 当前版本线。升级大版本时改这里（例如 release-3.0）；
 # release-latest 始终滚动，versioned tag 在升级后自然冻结在上一次构建。
 env:
-  CURRENT_RELEASE_TAG: release-2.1
+  CURRENT_RELEASE_TAG: release-2.2
   ROLLING_RELEASE_TAG: release-latest
 
 jobs:

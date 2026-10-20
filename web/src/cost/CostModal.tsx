@@ -257,7 +257,7 @@ function formatCny(value: number): string {
 function normalizeError(message: string): string {
   const raw = message.trim();
   const withoutCode = /^[A-Za-z_][A-Za-z0-9_]*:/.test(raw) ? raw.slice(raw.indexOf(':') + 1).trim() : raw;
-  if (!withoutCode || withoutCode.includes('parsing time') || withoutCode.includes('time.Parse')) {
+  if (!withoutCode || withoutCode.includes('parsing time') || withoutCode.includes('cannot parse') || withoutCode.includes('time.Parse')) {
     return '日期格式不正确，应为 YYYY-MM-DD';
   }
   return withoutCode;

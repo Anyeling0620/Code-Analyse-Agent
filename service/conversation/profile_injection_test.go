@@ -25,8 +25,8 @@ func (profileTestSessions) GetByID(context.Context, string) (*do.SessionContext,
 	return nil, nil
 }
 
-func (profileTestSessions) ListMessages(context.Context, string, string, dto.Pager) ([]do.ChatMessageRecord, int64, error) {
-	return nil, 0, nil
+func (profileTestSessions) ListMessages(context.Context, string, string, dto.Pager, bool) ([]do.ChatMessageRecord, bool, error) {
+	return nil, false, nil
 }
 
 // profileTestRuns 只实现 run 落库相关的空操作，避免测试触碰真实数据库。

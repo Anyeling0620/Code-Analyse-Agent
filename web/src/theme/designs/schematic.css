@@ -2666,3 +2666,210 @@ html[data-ui='schematic'][data-theme='dark'] .icon-button {
 html[data-ui='schematic'][data-theme='dark'] .account-card {
   border-color: var(--rule-strong);
 }
+
+/* ---- Cost detail --------------------------------------------------------- */
+/* 制图明细表：方角、细实线、等宽标注，橙色只用于当前选中与告警。 */
+
+html[data-ui='schematic'] .cost-modal {
+  border: 1px solid var(--ink);
+  background: var(--paper-soft);
+}
+
+html[data-ui='schematic'] .cost-modal .modal-header {
+  background: var(--paper-soft);
+}
+
+/* COST 标签不带 inline 背景，用制图蓝的分区色补上。 */
+
+html[data-ui='schematic'] .cost-modal .modal-tab {
+  border-color: var(--section-violet);
+  background: var(--section-violet);
+  color: var(--on-violet);
+}
+
+html[data-ui='schematic'] .cost-subtitle {
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  line-height: 1.7;
+}
+
+html[data-ui='schematic'] .cost-range {
+  border-color: var(--rule-strong);
+}
+
+html[data-ui='schematic'] .cost-range-btn {
+  border-left-color: var(--rule);
+  color: var(--ink-soft);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+}
+
+html[data-ui='schematic'] .cost-range-btn:hover {
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .cost-range-btn.is-active {
+  background: var(--paper-deep);
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+html[data-ui='schematic'] .cost-range-btn:focus-visible,
+html[data-ui='schematic'] .cost-tab:focus-visible {
+  outline-color: var(--section-teal);
+}
+
+html[data-ui='schematic'] .cost-summary {
+  border-color: var(--ink);
+  background: var(--rule);
+}
+
+html[data-ui='schematic'] .cost-stat {
+  background: var(--paper-soft);
+}
+
+html[data-ui='schematic'] .cost-stat-value {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+html[data-ui='schematic'] .cost-stat-label {
+  color: var(--ink-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+}
+
+html[data-ui='schematic'] .cost-tabs {
+  border-bottom-color: var(--ink);
+}
+
+html[data-ui='schematic'] .cost-tab {
+  color: var(--ink-soft);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+}
+
+html[data-ui='schematic'] .cost-tab:hover {
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .cost-tab.is-active {
+  border-bottom-color: var(--accent);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .cost-list {
+  margin-top: 4px;
+}
+
+html[data-ui='schematic'] .cost-row {
+  border-bottom-color: var(--rule);
+}
+
+html[data-ui='schematic'] .cost-row-head {
+  gap: 10px;
+}
+
+html[data-ui='schematic'] .cost-row-label {
+  font-size: 12px;
+}
+
+html[data-ui='schematic'] .cost-row-meta {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+html[data-ui='schematic'] .cost-row-cny {
+  font-size: 12px;
+}
+
+html[data-ui='schematic'] .cost-row-share {
+  font-size: 9.5px;
+}
+
+html[data-ui='schematic'] .cost-bar {
+  height: 5px;
+  background: var(--paper-deep);
+}
+
+html[data-ui='schematic'] .cost-bar-fill {
+  background: var(--section-teal);
+}
+
+html[data-ui='schematic'] .cost-trend {
+  border-bottom-color: var(--ink);
+}
+
+html[data-ui='schematic'] .cost-trend-bar {
+  background: var(--section-teal);
+  opacity: 0.8;
+}
+
+html[data-ui='schematic'] .cost-trend-col:hover .cost-trend-bar {
+  opacity: 1;
+}
+
+html[data-ui='schematic'] .cost-trend-axis {
+  color: var(--ink-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+}
+
+html[data-ui='schematic'] .cost-status {
+  color: var(--ink-faint);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+}
+
+html[data-ui='schematic'] .cost-error {
+  border-color: var(--rule);
+  border-left: 2px solid var(--accent);
+  background: var(--paper-deep);
+  color: var(--vermilion);
+}
+
+/* 账号卡：由静态信息块改为按钮 */
+
+html[data-ui='schematic'] .account-card {
+  border-color: var(--rule);
+  background: var(--case-raised);
+  color: var(--ink);
+}
+
+html[data-ui='schematic'] .account-card:hover {
+  border-color: var(--ink);
+  background: var(--paper-deep);
+}
+
+html[data-ui='schematic'] .account-card:focus-visible {
+  outline: 2px solid var(--section-teal);
+  outline-offset: 2px;
+}
+
+html[data-ui='schematic'] .account-cost-cue {
+  border-top-color: var(--rule);
+  color: var(--accent);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+}
+
+/* ---- Dark legibility: cost detail ---------------------------------------- */
+/* 深色蓝图上 --rule 的细线不足 3:1，边界与轨道统一加厚。 */
+
+html[data-ui='schematic'][data-theme='dark'] .cost-range,
+html[data-ui='schematic'][data-theme='dark'] .cost-summary,
+html[data-ui='schematic'][data-theme='dark'] .account-card {
+  border-color: var(--rule-strong);
+}
+
+html[data-ui='schematic'][data-theme='dark'] .cost-bar {
+  background: rgba(216, 232, 240, 0.1);
+}
+
+/* 上面的深色边界规则会盖掉 hover 的颜色变化，这里补回。 */
+html[data-ui='schematic'][data-theme='dark'] .account-card:hover {
+  border-color: var(--ink);
+}

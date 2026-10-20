@@ -2394,6 +2394,11 @@ html[data-ui='editorial'] .chat-skeleton-line-title {
     padding: 24px 20px 20px;
   }
 
+  /* 消耗明细自带 0 padding + 内边距，避免与通用弹窗叠加。 */
+  html[data-ui='editorial'] .cost-modal {
+    padding: 0;
+  }
+
   html[data-ui='editorial'] .modal-header h2 {
     font-size: 23px;
   }
@@ -2641,4 +2646,216 @@ html[data-ui='editorial'][data-theme='dark'] .session-item-active .session-item-
 
 html[data-ui='editorial'][data-theme='dark'] .profile-entry-button {
   border-bottom-color: var(--rule-strong);
+}
+
+/* ---- Cost detail --------------------------------------------------------- */
+/* 账本式明细：双线表头、衬线标题与行名、等宽账目数字。 */
+
+html[data-ui='editorial'] .cost-modal {
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-soft);
+}
+
+html[data-ui='editorial'] .cost-modal .modal-header {
+  background: var(--paper-soft);
+}
+
+/* COST 标签不带 inline 背景；通用 .modal-tab 在这里是 transparent !important，
+   同权重无法覆盖，只能以 !important 补回分区色。 */
+
+html[data-ui='editorial'] .cost-modal .modal-tab {
+  padding: 4px 9px 4px;
+  background: var(--section-violet) !important;
+  color: var(--on-violet) !important;
+}
+
+html[data-ui='editorial'] .cost-subtitle {
+  color: var(--ink-soft);
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-style: italic;
+  letter-spacing: 0;
+  line-height: 1.6;
+}
+
+html[data-ui='editorial'] .cost-range {
+  border-color: var(--rule-strong);
+}
+
+html[data-ui='editorial'] .cost-range-btn {
+  border-left-color: var(--rule);
+  color: var(--ink-soft);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+
+html[data-ui='editorial'] .cost-range-btn:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+html[data-ui='editorial'] .cost-range-btn.is-active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+html[data-ui='editorial'] .cost-range-btn:focus-visible,
+html[data-ui='editorial'] .cost-tab:focus-visible {
+  outline-color: var(--accent);
+}
+
+html[data-ui='editorial'] .cost-summary {
+  border-color: var(--rule-strong);
+  background: var(--rule);
+}
+
+html[data-ui='editorial'] .cost-stat {
+  background: var(--paper-soft);
+}
+
+html[data-ui='editorial'] .cost-stat-value {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+html[data-ui='editorial'] .cost-stat-label {
+  color: var(--ink-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.18em;
+}
+
+html[data-ui='editorial'] .cost-tabs {
+  border-bottom-color: var(--rule-strong);
+}
+
+html[data-ui='editorial'] .cost-tab {
+  color: var(--ink-faint);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+
+html[data-ui='editorial'] .cost-tab:hover {
+  color: var(--ink);
+}
+
+html[data-ui='editorial'] .cost-tab.is-active {
+  border-bottom: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+html[data-ui='editorial'] .cost-list {
+  margin-top: 4px;
+}
+
+html[data-ui='editorial'] .cost-row {
+  padding: 11px 0 12px;
+  border-bottom-color: var(--rule);
+}
+
+html[data-ui='editorial'] .cost-row-head {
+  gap: 12px;
+}
+
+html[data-ui='editorial'] .cost-row-label {
+  font-family: var(--font-serif);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+html[data-ui='editorial'] .cost-row-meta {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+html[data-ui='editorial'] .cost-row-cny {
+  font-size: 12px;
+}
+
+html[data-ui='editorial'] .cost-row-share {
+  color: var(--ink-soft);
+  font-size: 9.5px;
+}
+
+html[data-ui='editorial'] .cost-bar {
+  height: 5px;
+  background: var(--paper-deep);
+}
+
+html[data-ui='editorial'] .cost-bar-fill {
+  background: var(--secondary);
+}
+
+html[data-ui='editorial'] .cost-trend {
+  border-bottom-color: var(--rule-strong);
+}
+
+html[data-ui='editorial'] .cost-trend-bar {
+  background: var(--secondary);
+  opacity: 0.75;
+}
+
+html[data-ui='editorial'] .cost-trend-col:hover .cost-trend-bar {
+  opacity: 1;
+}
+
+html[data-ui='editorial'] .cost-trend-axis {
+  color: var(--ink-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+}
+
+html[data-ui='editorial'] .cost-status {
+  color: var(--ink-faint);
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  font-style: italic;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+html[data-ui='editorial'] .cost-error {
+  border-color: var(--rule);
+  border-left: 2px solid var(--accent);
+  background: var(--paper-deep);
+  color: var(--accent);
+  font-family: var(--font-serif);
+  font-size: 12px;
+}
+
+/* 账号卡：由静态信息块改为按钮（本设计本身无边框无底色） */
+
+html[data-ui='editorial'] .account-card {
+  background: transparent;
+  color: var(--ink);
+}
+
+html[data-ui='editorial'] .account-card:hover .account-kind,
+html[data-ui='editorial'] .account-card:hover .account-id {
+  color: var(--accent);
+}
+
+html[data-ui='editorial'] .account-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+html[data-ui='editorial'] .account-cost-cue {
+  border-top-color: var(--rule);
+  color: var(--accent);
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+}
+
+/* ---- Dark legibility: cost detail ---------------------------------------- */
+/* 深色夜空版：账本线、占比条轨道需要比 --rule 再重一档。 */
+
+html[data-ui='editorial'][data-theme='dark'] .cost-modal,
+html[data-ui='editorial'][data-theme='dark'] .cost-range,
+html[data-ui='editorial'][data-theme='dark'] .cost-summary {
+  border-color: var(--rule-strong);
+}
+
+html[data-ui='editorial'][data-theme='dark'] .cost-bar {
+  background: rgba(241, 232, 215, 0.1);
 }

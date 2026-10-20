@@ -490,6 +490,16 @@ html[data-ui='classic'][data-theme='dark'] .icon-button {
   border-color: var(--rule-strong);
 }
 
+/* 消耗明细在深色下：分段控件 / 汇总格的描边与占比条轨道同样需要可见。 */
+html[data-ui='classic'][data-theme='dark'] .cost-range,
+html[data-ui='classic'][data-theme='dark'] .cost-summary {
+  border-color: var(--rule-strong);
+}
+
+html[data-ui='classic'][data-theme='dark'] .cost-bar {
+  background: rgba(242, 239, 227, 0.1);
+}
+
 html[data-ui='classic'][data-theme='dark'] .composer {
   background: linear-gradient(to top, var(--paper) 62%, rgba(23, 28, 32, 0));
 }

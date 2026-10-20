@@ -3124,6 +3124,8 @@ textarea {
 }
 
 .cost-bar-fill {
+  /* span 默认是行内元素，行内元素的 width 不生效，占比条会塌成 0 宽。 */
+  display: block;
   height: 100%;
   background: var(--section-teal);
   transition: width 220ms ease;

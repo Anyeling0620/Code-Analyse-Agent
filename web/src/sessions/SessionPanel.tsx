@@ -26,6 +26,7 @@ export const SessionPanel = memo(function SessionPanel({
   onDeleteSession,
   onShareSession,
   onOpenProfile,
+  onOpenCost,
   onLogout,
   onClose,
   shareNotice,
@@ -45,6 +46,7 @@ export const SessionPanel = memo(function SessionPanel({
   onDeleteSession: (sessionId: string) => void;
   onShareSession: (sessionId: string) => void;
   onOpenProfile: () => void;
+  onOpenCost: () => void;
   onLogout: () => void;
   onClose?: () => void;
   shareNotice: string;
@@ -165,11 +167,12 @@ export const SessionPanel = memo(function SessionPanel({
             <UserIcon size={15} />
             <span>基础画像</span>
           </button>
-          <div className="account-card">
+          <button type="button" className="account-card" onClick={onOpenCost} aria-haspopup="dialog">
             <span className="account-kind">ACCOUNT</span>
             <span className="account-id" title={userId}>{userId}</span>
             <span className="account-plan">{plan}</span>
-          </div>
+            <span className="account-cost-cue" aria-hidden="true">消耗</span>
+          </button>
           <div className="panel-status-row">
             <span className={`health health-${health}`} title={healthLabel[health]} aria-label={healthLabel[health]} />
             <span className="health-label">{healthLabel[health]}</span>

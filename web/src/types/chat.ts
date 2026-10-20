@@ -232,6 +232,52 @@ export type CostDailyTotal = {
   cache_miss_cny: number;
 };
 
+// CostTotal 是消耗总览的汇总行，金额单位 CNY、token 为区间内累加。
+export type CostTotal = {
+  cny: number;
+  calls: number;
+  sessions: number;
+  tools: number;
+  models: number;
+  tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  cache_hit_tokens: number;
+  cache_miss_tokens: number;
+  cache_hit_cny: number;
+  cache_miss_cny: number;
+};
+
+// CostBreakdownItem 是工具/模型/会话三个维度的通用聚合行，key 为对应主键。
+export type CostBreakdownItem = {
+  key: string;
+  label: string;
+  calls: number;
+  tokens: number;
+  cny: number;
+  share: number;
+  last_at: string;
+};
+
+// CostDailyPoint 是区间内单日的消耗，服务端会把没有数据的日子补 0。
+export type CostDailyPoint = {
+  date: string;
+  calls: number;
+  tokens: number;
+  cny: number;
+};
+
+// CostOverview 是 /api/cost/overview 的返回，只描述当前登录用户的数据。
+export type CostOverview = {
+  from: string;
+  to: string;
+  total: CostTotal;
+  by_tool: CostBreakdownItem[];
+  by_model: CostBreakdownItem[];
+  by_session: CostBreakdownItem[];
+  daily: CostDailyPoint[];
+};
+
 export type QuotaToday = {
   user_id: string;
   plan: string;

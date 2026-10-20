@@ -38,6 +38,7 @@ import {
 import { normalizeMarkdown } from './markdown/normalizeMarkdown';
 import { ElevatorNav, shouldShowElevatorNav } from './nav/ElevatorNav';
 import { ProfileModal } from './profile/ProfileModal';
+import { CostModal } from './cost/CostModal';
 import { SessionPanel } from './sessions/SessionPanel';
 import { createShareLink } from './share/api';
 import { SharedSessionView } from './share/SharedSessionView';
@@ -251,6 +252,8 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   const [isLoadingSessionDetail, setIsLoadingSessionDetail] = useState(false);
   const [isComposerExpanded, setIsComposerExpanded] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // 消耗明细弹窗：由左侧栏底部的账号卡片打开，只读展示，不影响对话流。
+  const [showCost, setShowCost] = useState(false);
   // 右侧页缘标签轨当前指向的消息；用来给顶部图幅标签染上同一块分区色。
   const [activeMessageId, setActiveMessageId] = useState('');
   // 刚登录时先弹画像：挂载即打开，并且是「强引导」——不填完保存进不去工作区。
@@ -1414,6 +1417,11 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
                 setIsProfileGate(false);
                 setIsProfileModalOpen(true);
               }}
+              onOpenCost={() => {
+                // 移动端同样先收起抽屉，否则抽屉会压在弹窗上面一截。
+                setIsSidebarOpen(false);
+                setShowCost(true);
+              }}
               onLogout={() => void handleLogout()}
               onClose={() => setIsSidebarOpen(false)}
               shareNotice={shareNotice}
@@ -1526,6 +1534,9 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
                 }}
                 onClose={() => setIsProfileModalOpen(false)}
             />
+        )}
+        {showCost && (
+            <CostModal onClose={() => setShowCost(false)} />
         )}
         {interruptEvent && (
             <InterruptModal

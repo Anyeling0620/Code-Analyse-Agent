@@ -1377,7 +1377,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   }, []);
 
   const activeSession = sessions.find((item) => item.session_id === sessionId);
-  const activeSessionTitle = activeSession?.last_user_message || activeSession?.summary
+  const activeSessionTitle = activeSession?.title || activeSession?.last_user_message || activeSession?.summary
       || (sessionId ? '当前会话' : '新的分析');
   const activeMessageIndex = messages.findIndex((item) => item.id === activeMessageId);
   const activeHue = sectionHueAt(activeMessageIndex >= 0 ? activeMessageIndex : Math.max(messages.length - 1, 0));

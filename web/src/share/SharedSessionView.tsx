@@ -55,7 +55,7 @@ export function SharedSessionView({ token }: { token: string }) {
     return () => window.cancelAnimationFrame(frame);
   }, [state, messages]);
 
-  const summary = detail?.session?.summary || detail?.session?.last_user_message || '未命名会话';
+  const sessionTitle = detail?.session?.title || detail?.session?.last_user_message || detail?.session?.summary || '未命名会话';
   const projectName = detail?.session?.current_project_name || '';
   const sharedAt = detail ? formatTime(detail.shared_at) : '';
 
@@ -73,7 +73,7 @@ export function SharedSessionView({ token }: { token: string }) {
 
           <div className="share-heading">
             <span className="share-badge">只读分享</span>
-            <h1 className="share-title" title={summary}>{summary}</h1>
+            <h1 className="share-title" title={sessionTitle}>{sessionTitle}</h1>
             <div className="share-chips">
               {projectName && <span className="share-chip">项目：{projectName}</span>}
               {sharedAt && <span className="share-chip">分享于 {sharedAt}</span>}

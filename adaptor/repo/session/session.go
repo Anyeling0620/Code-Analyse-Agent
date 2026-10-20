@@ -55,6 +55,7 @@ func (s *Session) GetByID(ctx context.Context, sessionID string) (*do.SessionCon
 		SessionID:          row.SessionID,
 		UserID:             row.UserID,
 		SessionOwner:       row.SessionOwner,
+		Title:              row.Title,
 		Summary:            row.Summary,
 		LastUserMessage:    row.LastUserMessage,
 		LastAssistantMsg:   row.LastAssistantMsg,
@@ -96,6 +97,7 @@ func (s *Session) ListByUser(cx context.Context, userID string, pager dto.Pager)
 			SessionID:          item.SessionID,
 			UserID:             item.UserID,
 			SessionOwner:       item.SessionOwner,
+			Title:              item.Title,
 			Summary:            truncateContent(item.Summary),
 			LastUserMessage:    truncateContent(item.LastUserMessage),
 			LastAssistantMsg:   truncateContent(item.LastAssistantMsg),
@@ -253,12 +255,25 @@ func (s *Session) Upsert(ctx context.Context, session *do.SessionContext) error 
 		SessionID:          session.SessionID,
 		UserID:             session.UserID,
 		SessionOwner:       session.SessionOwner,
+		Title:              session.Title,
 		Summary:            session.Summary,
 		LastUserMessage:    session.LastUserMessage,
 		LastAssistantMsg:   session.LastAssistantMsg,
 		CurrentProjectRoot: session.CurrentProjectRoot,
 		CurrentProjectName: session.CurrentProjectName,
 		UpdatedAt:          time.Now(),
+	}
+	// Save 会整行覆盖，空标题（老会话、标题生成失败、非首轮调用方没带 Title）
+	// 不能把库里已经生成的标题抹掉。这里只在待写入标题为空时读一次旧值保留，
+	// 非空标题仍然正常覆盖。
+	if row.Title == "" {
+		var existingTitle string
+		if err := s.db.WithContext(ctx).Model(&model.Session{}).
+			Where("session_id = ?", session.SessionID).
+			Pluck("title", &existingTitle).Error; err != nil {
+			return err
+		}
+		row.Title = existingTitle
 	}
 	return s.db.WithContext(ctx).Save(&row).Error
 }

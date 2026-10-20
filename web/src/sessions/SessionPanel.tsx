@@ -97,7 +97,7 @@ export const SessionPanel = memo(function SessionPanel({
                   {sessions.map((item) => {
                     const hue = sectionHueFor(item.session_id);
                     const active = item.session_id === sessionId;
-                    const title = item.last_user_message || item.summary || '未命名会话';
+                    const title = item.title || item.last_user_message || item.summary || '未命名会话';
                     return (
                         <div key={item.session_id} className={`session-item${active ? ' session-item-active' : ''}`}>
                           <button

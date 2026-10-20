@@ -24,7 +24,7 @@ func newSessionRepoTestDB(t *testing.T) (*gorm.DB, *Session) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&model.ChatMessage{}); err != nil {
+	if err := db.AutoMigrate(&model.ChatMessage{}, &model.Session{}); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
 	return db, NewSessionWithDB(db)
@@ -185,5 +185,85 @@ func TestGetMessageChecksOwnership(t *testing.T) {
 		if record != nil {
 			t.Fatalf("%s: got %+v, want nil", tc.name, record)
 		}
+	}
+}
+
+// TestUpsertSessionTitle 锁定标题的两条写入规则：
+//  1. 非空标题正常落库，并在 GetByID/ListByUser 中读回；
+//  2. 后续轮次提交空标题时不能把库里已有的 AI 标题覆盖掉。
+func TestUpsertSessionTitle(t *testing.T) {
+	_, repo := newSessionRepoTestDB(t)
+	ctx := context.Background()
+
+	first := &do.SessionContext{
+		SessionID:       "s-title",
+		UserID:          "u1",
+		Title:           "登录接口调试",
+		Summary:         "首轮摘要",
+		LastUserMessage: "帮我看看登录为什么失败",
+	}
+	if err := repo.Upsert(ctx, first); err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+
+	got, err := repo.GetByID(ctx, "s-title")
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got == nil || got.Title != "登录接口调试" {
+		t.Fatalf("GetByID title = %+v, want 登录接口调试", got)
+	}
+
+	list, _, err := repo.ListByUser(ctx, "u1", dto.Pager{Page: 1, Limit: 10})
+	if err != nil {
+		t.Fatalf("ListByUser: %v", err)
+	}
+	if len(list) != 1 || list[0].Title != "登录接口调试" {
+		t.Fatalf("ListByUser = %+v, want title 登录接口调试", list)
+	}
+
+	// 模拟第二轮：调用方没有携带 Title（空），其他字段正常更新。
+	second := &do.SessionContext{
+		SessionID:       "s-title",
+		UserID:          "u1",
+		Title:           "",
+		Summary:         "第二轮摘要",
+		LastUserMessage: "那日志在哪里看",
+	}
+	if err := repo.Upsert(ctx, second); err != nil {
+		t.Fatalf("second upsert: %v", err)
+	}
+	got, err = repo.GetByID(ctx, "s-title")
+	if err != nil {
+		t.Fatalf("GetByID after empty title: %v", err)
+	}
+	if got.Title != "登录接口调试" {
+		t.Fatalf("empty title overwrote existing title: %q", got.Title)
+	}
+	if got.LastUserMessage != "那日志在哪里看" || got.Summary != "第二轮摘要" {
+		t.Fatalf("non-title fields were not updated: %+v", got)
+	}
+
+	// 新会话第一次写入时标题为空也应正常插入（库中无旧值可保留）。
+	fresh := &do.SessionContext{SessionID: "s-empty", UserID: "u1", LastUserMessage: "q"}
+	if err := repo.Upsert(ctx, fresh); err != nil {
+		t.Fatalf("insert with empty title: %v", err)
+	}
+	got, err = repo.GetByID(ctx, "s-empty")
+	if err != nil || got == nil {
+		t.Fatalf("GetByID fresh: %v %+v", err, got)
+	}
+	if got.Title != "" {
+		t.Fatalf("fresh session title = %q, want empty", got.Title)
+	}
+
+	// 显式传入新标题时允许覆盖（未来若增加手动改名可复用）。
+	renamed := &do.SessionContext{SessionID: "s-title", UserID: "u1", Title: "新的标题"}
+	if err := repo.Upsert(ctx, renamed); err != nil {
+		t.Fatalf("rename upsert: %v", err)
+	}
+	got, err = repo.GetByID(ctx, "s-title")
+	if err != nil || got.Title != "新的标题" {
+		t.Fatalf("explicit title did not overwrite: %+v %v", got, err)
 	}
 }

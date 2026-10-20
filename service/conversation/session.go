@@ -105,6 +105,9 @@ func (s *Service) persistSession(ctx context.Context, session *dto.SessionContex
 	if runState == nil {
 		return nil
 	}
+	// 标题只能在"新会话第一轮"生成：必须在下面把本轮问题写进 LastUserMessage 之前判断。
+	// 老会话 LastUserMessage 非空，即使 Title 为空也不会回填，保持原有可读标题。
+	needsTitle := shouldGenerateSessionTitle(session, runState.Question)
 	if runState.Question != "" {
 		err := s.sessions.AppendMessage(ctx, &do.ChatMessageRecord{
 			SessionID: session.SessionID,
@@ -145,6 +148,18 @@ func (s *Service) persistSession(ctx context.Context, session *dto.SessionContex
 		session.Summary = mergeSessionSummary(session.Summary, runState.Question, runState.Answer)
 	} else {
 		session.Summary = summarySession(runState.Question, runState.Answer)
+	}
+
+	// 同步 best-effort 生成标题：放在 Upsert 之前、done 事件之前，
+	// 这样 result.Session 与随后前端 refreshSessions 拿到的都是同一个标题，
+	// 不会出现"刷新两次才看到标题"。失败/超时只记日志，主对话照常落库。
+	if needsTitle {
+		// 去掉请求取消信号：客户端断开不应让已经跑完的这轮丢掉标题；
+		// 生成器内部另有一次短超时兜底。
+		title := s.titleGen.generate(context.WithoutCancel(ctx), runState.Question, runState.Answer)
+		if title != "" {
+			session.Title = title
+		}
 	}
 
 	doSession := do.SessionContext{}

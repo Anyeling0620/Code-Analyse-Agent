@@ -3180,6 +3180,82 @@ textarea {
   font-size: 14px;
 }
 
+/* 登录 / 注册切换：只在服务端开启邮箱注册时渲染。
+   用底部 2px 的克制下划线表示当前页，不引入额外的胶囊按钮。 */
+.login-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: -4px 0 20px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.login-mode-tab {
+  padding: 9px 10px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: color 90ms steps(2), border-color 90ms steps(2);
+}
+
+.login-mode-tab:hover {
+  color: var(--ink-soft);
+}
+
+.login-mode-tab.is-active {
+  border-bottom-color: var(--section-teal);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* 验证码输入与发送按钮同一行：输入框占满剩余宽度，按钮保持可读宽度。 */
+.code-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  min-width: 0;
+}
+
+.code-send-button {
+  min-width: 104px;
+  padding: 9px 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  white-space: nowrap;
+  transition: background 90ms steps(2), border-color 90ms steps(2);
+}
+
+.code-send-button:hover:not(:disabled) {
+  border-color: var(--ink-soft);
+  background: var(--paper-deep);
+}
+
+.code-send-button:disabled {
+  opacity: 0.55;
+}
+
+.form-notice {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(42, 110, 106, 0.32);
+  border-radius: var(--radius);
+  background: rgba(42, 110, 106, 0.08);
+  color: var(--section-teal);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
 .guest-login {
   display: grid;
   gap: 12px;

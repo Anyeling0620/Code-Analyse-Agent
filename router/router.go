@@ -17,8 +17,10 @@ func New(h *api.Handler) *gin.Engine {
 func routeRegister(app *gin.Engine, h *api.Handler) {
 	app.GET("/healthz", h.Health)
 	app.GET("/api/version", h.Version)
-	app.POST("/api/auth/login", h.Login)                     // 账号密码登录，换取令牌
+	app.POST("/api/auth/login", h.Login)                     // 账号/邮箱密码登录，换取令牌
 	app.POST("/api/auth/guest", h.GuestLogin)                // 游客登录：IP + 浏览器指纹派生身份，默认 plus
+	app.POST("/api/auth/email/code", h.SendEmailCode)        // 发送邮箱注册验证码（公开）
+	app.POST("/api/auth/register", h.Register)               // 邮箱验证码注册，成功即签发令牌（公开）
 	app.POST("/api/auth/logout", h.Logout)                   // 吊销当前令牌
 	app.GET("/api/quota/today", h.QuotaToday)                // 用户当天调用量
 	app.GET("/api/profile", h.GetProfile)                    // 当前登录用户的画像（登录后回填表单）

@@ -17,7 +17,7 @@
 | 断连续传 | run 与 HTTP 请求解绑，客户端断线/刷新后按 `Last-Event-ID` 回放并继续跟随。 |
 | 审批中断恢复 | 高危终端命令需人工审批，审批后从 checkpoint 复用同一条 run 继续执行。 |
 | 崩溃续跑 | 进程重启时把遗留 `running` run 标记为 `interrupted`，前端可回放已落库内容。 |
-| 账号与配额 | 账号密码登录（Redis 不透明令牌）+ 游客免密登录，按用户区分配额与成本。 |
+| 账号与配额 | 账号密码登录（Redis 不透明令牌）+ 邮箱验证码注册/登录 + 游客免密登录，按用户区分配额与成本。 |
 | 用户画像 | 登录后强引导填写（用户类型/技能水平/目标类型/当前主题/当前阶段/描述），`PUT /api/profile` 保存即入库、`GET /api/profile` 登录后回读，随每轮对话注入模型。 |
 | 会话管理 | 会话列表/详情/删除、只读分享链接、调用链路查看。 |
 | 可观测 | OpenTelemetry tracing（OTLP / stdout 回退），结构化日志。 |
@@ -112,6 +112,23 @@ auth:
     enabled: true
     plan: "plus"
     daily_quota: 30
+  # 邮箱验证码注册：enabled 为 true 且 SMTP 配置有效时才开放。
+  register:
+    enabled: true
+    plan: "free"                 # free / plus / pro
+    code_ttl_minutes: 10
+    resend_interval_seconds: 60
+    max_attempts: 5
+  smtp:
+    enabled: true
+    host: "smtp.example.com"
+    port: 465                    # 465(ssl) / 587(starttls)
+    username: "noreply@example.com"
+    password: ""                 # 不要写真实授权码；由环境变量 SMTP_PASSWORD 注入
+    from: "noreply@example.com"
+    from_name: "代码仓库分析工作台"
+    tls: "ssl"                   # ssl / starttls / none（none 仅本地测试）
+    timeout_seconds: 10
 
 workspace:
   root: "<绝对路径>/workspace"
@@ -136,6 +153,13 @@ rag:
 ```
 
 把 `rag.enabled` 设为 `false` 可关闭 Milvus 与语义索引，此时不会创建 Milvus 客户端。`auth` 与 `redis` 两段是必需的，缺失会以 `redis addr can't be empty` 启动失败。
+
+SMTP 密码等敏感项支持环境变量覆盖，启动时在读取 YAML 后应用：`SMTP_ENABLED`、`SMTP_HOST`、`SMTP_PORT`、`SMTP_USERNAME`、`SMTP_PASSWORD`、`SMTP_FROM`、`SMTP_FROM_NAME`、`SMTP_TLS`、`SMTP_TIMEOUT_SECONDS`、`AUTH_REGISTER_ENABLED`。推荐的部署方式是在 systemd / 容器环境里只注入 `SMTP_PASSWORD`，配置文件中的 `auth.smtp.password` 永远留空。
+
+```bash
+# 例：QQ 邮箱 SMTP 授权码（不是邮箱登录密码）
+export SMTP_PASSWORD="<从密钥管理系统注入>"
+```
 
 Milvus 不是启动的硬依赖：`rag.enabled: true` 但 Milvus 连不上时，服务会以**降级模式**启动（HTTP 照常监听、其余功能不受影响），后台按退避重连，连上后 RAG 自动恢复，不需要重启进程。`GET /healthz` 的 `dependencies.milvus` 字段会显示 `ok` / `down`，`down` 时附带最近一次连接失败原因。
 
@@ -174,18 +198,20 @@ npm run build # 产物输出到 web/dist
 | `rag` | 是否启用、文档根、分片参数、embedding、Milvus、rerank、中文查询改写。 |
 | `skills` | 技能中间件目录（默认 `~/.claude/skills`）与工具名。 |
 | `mcp` / `mcp_server_self` | 外部 MCP 工具来源，以及对内暴露的 MCP Server。 |
-| `redis` / `auth` | 令牌存储与账号、游客登录配置。 |
+| `redis` / `auth` | 令牌存储、账号、邮箱验证码注册与游客登录配置；`auth.smtp.password` 建议只走环境变量。 |
 | `context_compact` | 上下文压缩：按窗口占比与消息条数触发，折叠较早对话为结构化摘要。 |
 
 ## API 概览
 
-除白名单外，所有接口都需要 `Authorization: Bearer <token>`。白名单：`/healthz`、`/api/version`、`/api/auth/login`、`/api/auth/guest`、`/api/sessions/shared/info`。
+除白名单外，所有接口都需要 `Authorization: Bearer <token>`。白名单：`/healthz`、`/api/version`、`/api/auth/login`、`/api/auth/guest`、`/api/auth/email/code`、`/api/auth/register`、`/api/sessions/shared/info`。
 
 | 方法 | 路径 | 说明 |
 | ---- | ---- | ---- |
 | GET | `/healthz` | 健康检查 |
-| GET | `/api/version` | 版本信息 |
-| POST | `/api/auth/login` | 账号密码登录，返回令牌 |
+| GET | `/api/version` | 版本信息；`email_register` 表示邮箱注册是否开放 |
+| POST | `/api/auth/login` | 邮箱/账号密码登录，返回令牌（`email` 或 `username` + `password`） |
+| POST | `/api/auth/email/code` | 发送邮箱注册验证码（公开；`email` + `purpose=register`） |
+| POST | `/api/auth/register` | 邮箱验证码注册，成功直接返回令牌（公开） |
 | POST | `/api/auth/guest` | 游客免密登录（按 IP + 浏览器指纹派生身份） |
 | POST | `/api/auth/logout` | 吊销当前令牌 |
 | GET | `/api/quota/today` | 当天调用量 |
@@ -276,6 +302,8 @@ RELEASE_TAG="release-latest"   # 最新推送
 ## 安全说明
 
 - 配置文件 `agent_code_local.yml` 含真实密钥，已在 `.gitignore` 中，切勿提交。
+- SMTP 授权码只通过 `SMTP_PASSWORD` 环境变量注入，不写入任何 tracked 文件。
+- 邮箱注册密码使用 bcrypt(cost 10) 哈希；验证码在 Redis 中只存 SHA-256 哈希，10 分钟过期、一次性消费、错误次数受限。
 - 数据库报表 Agent 只允许只读 SQL，禁止写库/改表/删表。
 - 终端工具对高危命令强制人工审批，并支持目录逃逸拦截（`workspace.enable_escaped`）。
 - 会话与 run 均做用户归属校验，跨账号读取会被拒绝。

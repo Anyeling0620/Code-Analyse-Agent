@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -115,6 +117,133 @@ type Auth struct {
 	// Guest 是游客登录配置：为没有账号的访客提供免密码入口，
 	// 身份由 IP + 浏览器指纹派生，用量计入该派生身份的配额。
 	Guest Guest `yaml:"guest"`
+	// Register 是邮箱验证码注册配置。只有 enabled 为 true 且 SMTP 配置有效时才开放。
+	Register Register `yaml:"register"`
+	// SMTP 是发送邮箱验证码使用的 SMTP 配置。
+	// 密码建议只通过环境变量 SMTP_PASSWORD 注入，不要把真实授权码写进配置文件或仓库。
+	SMTP SMTP `yaml:"smtp"`
+}
+
+// Register 是邮箱注册的开关与验证码策略。
+type Register struct {
+	// Enabled 为 false 时注册接口与验证码接口都不可用，前端也不展示注册入口。
+	Enabled bool `yaml:"enabled"`
+	// Plan 是注册用户默认使用的套餐，只接受 free/plus/pro；为空或非法时按 free 处理。
+	Plan string `yaml:"plan"`
+	// CodeTTLMinutes 是验证码有效期（分钟），<=0 时按 10 分钟处理。
+	CodeTTLMinutes int `yaml:"code_ttl_minutes"`
+	// ResendIntervalSeconds 是同一邮箱两次发送验证码的最小间隔（秒），<=0 时按 60 秒处理。
+	ResendIntervalSeconds int `yaml:"resend_interval_seconds"`
+	// MaxAttempts 是单个验证码允许的最大错误次数，<=0 时按 5 次处理。
+	MaxAttempts int `yaml:"max_attempts"`
+}
+
+// SMTP 是验证码邮件的发送配置。
+type SMTP struct {
+	Enabled  bool   `yaml:"enabled"`
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Username string `yaml:"username"`
+	// Password 必须通过环境变量 SMTP_PASSWORD 注入，不能提交到 Git。
+	Password       string `yaml:"password"`
+	From           string `yaml:"from"`
+	FromName       string `yaml:"from_name"`
+	TLS            string `yaml:"tls"` // ssl（默认，465）/ starttls（587）/ none（仅本地测试）
+	TimeoutSeconds int    `yaml:"timeout_seconds"`
+}
+
+// EffectivePlan 返回注册用户默认套餐，非法值回落到 free。
+func (r Register) EffectivePlan() string {
+	plan := strings.ToLower(strings.TrimSpace(r.Plan))
+	switch plan {
+	case "free", "plus", "pro":
+		return plan
+	default:
+		return "free"
+	}
+}
+
+// EffectiveCodeTTL 返回验证码有效期。
+func (r Register) EffectiveCodeTTL() time.Duration {
+	minutes := r.CodeTTLMinutes
+	if minutes <= 0 {
+		minutes = 10
+	}
+	return time.Duration(minutes) * time.Minute
+}
+
+// EffectiveResendInterval 返回同一邮箱的发送冷却时间。
+func (r Register) EffectiveResendInterval() time.Duration {
+	seconds := r.ResendIntervalSeconds
+	if seconds <= 0 {
+		seconds = 60
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+// EffectiveMaxAttempts 返回单个验证码允许的最大错误次数。
+func (r Register) EffectiveMaxAttempts() int {
+	if r.MaxAttempts <= 0 {
+		return 5
+	}
+	return r.MaxAttempts
+}
+
+// EffectiveTLS 返回标准化后的 TLS 模式。
+func (s SMTP) EffectiveTLS() string {
+	switch strings.ToLower(strings.TrimSpace(s.TLS)) {
+	case "starttls":
+		return "starttls"
+	case "none":
+		return "none"
+	default:
+		return "ssl"
+	}
+}
+
+// EffectivePort 返回 SMTP 端口：未配置时按 TLS 模式给出常用端口。
+func (s SMTP) EffectivePort() int {
+	if s.Port > 0 {
+		return s.Port
+	}
+	if s.EffectiveTLS() == "starttls" {
+		return 587
+	}
+	return 465
+}
+
+// EffectiveTimeout 返回 SMTP 连接与读写超时。
+func (s SMTP) EffectiveTimeout() time.Duration {
+	seconds := s.TimeoutSeconds
+	if seconds <= 0 {
+		seconds = 10
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+// Valid 判断 SMTP 配置是否足以发送邮件。
+// 有用户名时必须有密码；tls 只能是 ssl/starttls/none。测试环境允许无认证。
+func (s SMTP) Valid() bool {
+	if !s.Enabled {
+		return false
+	}
+	if strings.TrimSpace(s.Host) == "" || strings.TrimSpace(s.From) == "" {
+		return false
+	}
+	if strings.TrimSpace(s.Username) != "" && s.Password == "" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(s.TLS)) {
+	case "", "ssl", "starttls", "none":
+		return true
+	default:
+		return false
+	}
+}
+
+// EmailRegisterEnabled 返回邮箱注册是否真正可用：开关打开且 SMTP 配置有效。
+func (a Auth) EmailRegisterEnabled() bool {
+	return a.Register.Enabled && a.SMTP.Valid()
 }
 
 type AuthAccount struct {
@@ -360,6 +489,7 @@ func InitConfig() *Config {
 		if err != nil {
 			panic(err)
 		}
+		applyEnvOverrides(conf)
 		globalConfig = *conf
 		return conf
 	}
@@ -367,11 +497,55 @@ func InitConfig() *Config {
 	if err != nil {
 		panic(err)
 	}
+	applyEnvOverrides(conf)
 	if conf.DeepSeek.APIKey == "" {
 		conf.DeepSeek.APIKey = os.Getenv("DEEPSEEK_API_KEY")
 	}
 	globalConfig = *conf
 	return conf
+}
+
+// applyEnvOverrides 用环境变量覆盖 SMTP 与注册开关相关的配置。
+//
+// 这样真实 SMTP 授权码可以只存在于部署环境（systemd Environment= 或容器 env），
+// 配置文件里永远留空；本地开发也只改环境变量，不用改 YAML。
+// 空字符串的环境变量不会覆盖 YAML 中已有的值（SMTP_PASSWORD 除外：它允许被显式置空）。
+func applyEnvOverrides(conf *Config) {
+	if conf == nil {
+		return
+	}
+	setString := func(key string, target *string) {
+		if value, ok := os.LookupEnv(key); ok && value != "" {
+			*target = value
+		}
+	}
+	setBool := func(key string, target *bool) {
+		if value, ok := os.LookupEnv(key); ok && strings.TrimSpace(value) != "" {
+			if parsed, err := strconv.ParseBool(strings.TrimSpace(value)); err == nil {
+				*target = parsed
+			}
+		}
+	}
+	setInt := func(key string, target *int) {
+		if value, ok := os.LookupEnv(key); ok && strings.TrimSpace(value) != "" {
+			if parsed, err := strconv.Atoi(strings.TrimSpace(value)); err == nil {
+				*target = parsed
+			}
+		}
+	}
+
+	setBool("SMTP_ENABLED", &conf.Auth.SMTP.Enabled)
+	setString("SMTP_HOST", &conf.Auth.SMTP.Host)
+	setInt("SMTP_PORT", &conf.Auth.SMTP.Port)
+	setString("SMTP_USERNAME", &conf.Auth.SMTP.Username)
+	if value, ok := os.LookupEnv("SMTP_PASSWORD"); ok {
+		conf.Auth.SMTP.Password = value
+	}
+	setString("SMTP_FROM", &conf.Auth.SMTP.From)
+	setString("SMTP_FROM_NAME", &conf.Auth.SMTP.FromName)
+	setString("SMTP_TLS", &conf.Auth.SMTP.TLS)
+	setInt("SMTP_TIMEOUT_SECONDS", &conf.Auth.SMTP.TimeoutSeconds)
+	setBool("AUTH_REGISTER_ENABLED", &conf.Auth.Register.Enabled)
 }
 
 func getFromLocal() (*Config, error) {

@@ -25,6 +25,7 @@
 | 报告导出 | 仅项目分析回答可导出 Markdown 或 PDF；PDF 通过浏览器打印，保留渲染后的 Mermaid 图。 |
 | 外观系统 | 顶栏「外观」可切换经典手册 / 深空控制台 / 纸本社论 / 蓝图工坊四套布局，浅色 / 深色 / 跟随系统独立切换；`?ui=<id>&theme=light\|dark` 可直接预览。 |
 | 运行指标 | 每轮 run 结束后聚合迭代轮次、工具调用/失败、token、成本、压缩次数等指标，异步写入 `agent_telemetry`；只包含数字与 ID，不包含问题、回答或工具入参。 |
+| 限流与熔断 | 入口 Redis 令牌桶（登录按 user_id、登录前公开接口按 IP，多实例共享额度）；主模型 / embedding / rerank / 查询改写四条出站链路挂熔断，连续失败后快速失败、半开自动试探。 |
 | 可观测 | OpenTelemetry tracing（OTLP / stdout 回退），结构化日志。 |
 
 ## 架构总览
@@ -75,7 +76,8 @@ flowchart TD
 │   └── dto/ do/ consts/    # 传输对象、领域对象、常量
 ├── adaptor/                # adaptor.go + repo/（GORM 仓储）+ vector/（Milvus/rerank）
 ├── mcpserver/              # 对内暴露配额与成本的 MCP Server
-├── common/ utils/ config/  # 公共常量、日志、追踪、邮件、计价、路径与配置加载
+├── common/ utils/ config/  # 公共常量、日志、追踪、邮件、计价、路径与配置加载；
+│                           # utils/limiter（Redis 令牌桶）、utils/circuitbreaker（熔断器）
 ├── web/                    # React + TypeScript + Vite 前端；设计文档见 DESIGN.md / APPEARANCE.md / PRODUCT.md
 ├── docs/                   # 上下文压缩设计与评测说明
 ├── e2e/  eval/             # 端到端测试与评测脚本
@@ -283,9 +285,19 @@ POST /api/chat/stream ─► StartChatRun（落 chat_runs）
 
 ### 限流与熔断
 
-限流在入口：所有 `/api/*` 先过 Redis 令牌桶（`/healthz`、`/api/version` 豁免），登录用户按 user_id 计数、未登录按 IP 计数，`/api/chat/*` 再按套餐做用户级令牌桶与单日额度；令牌桶用 Lua 在 Redis 中原子扣减，多实例共享同一份额度，Redis 故障时按配置降级为进程内桶。
+限流在入口：所有 `/api/*` 先过 Redis 令牌桶（`/healthz`、`/api/version` 豁免）。登录用户按 `user_id` 计数；登录前的公开接口（登录、邮箱验证码、注册、重设密码、只读分享）没有身份可用，按客户端 IP 计数——校园网/办公网出口常是同一个 NAT，所以登录后必须切到用户维度，避免互不相干的用户互相误伤。`/api/chat/*` 再按套餐做用户级令牌桶与单日额度，key 用 `chat:user:` 与入口的 `user:` 区分，不重复扣减。令牌桶用 Lua 在 Redis 中原子扣减，时间取 Redis 的 `TIME`，多实例共享同一份额度；key 带 `PEXPIRE`，空闲桶自动回收。
 
-熔断在出口：主模型、embedding、rerank、查询改写四条出站 HTTP 都挂了 `http.RoundTripper` 熔断，连续失败后直接快速失败，半开试探恢复。只有网络错误、5xx、429 与 408 计入失败，4xx 和客户端主动取消不计入，避免一个坏参数把整条链路熔断。
+熔断在出口：主模型（`llm:<model>`）、embedding、rerank、查询改写四条出站 HTTP 都挂了 `http.RoundTripper` 熔断。默认连续失败 5 次打开、30 秒后进入半开、半开只放 1 个试探请求、连续成功 2 次恢复。只有网络错误、5xx、429 与 408 计入失败，4xx 和客户端主动取消不计入，避免一个坏参数把整条链路熔断。
+
+当前实现的局限：
+
+| 局限 | 说明 |
+| --- | --- |
+| 熔断状态是进程内的 | 不做分布式共享，多实例部署时每个实例各自统计、各自熔断；共享的是 Redis 令牌桶，不是熔断器。 |
+| 流式调用覆盖有限 | 主模型的熔断只覆盖「建连 + 收到响应头」，流中途断开由业务层报错，不计入熔断失败次数。 |
+| 只有日志，没有指标 | 状态迁移写 `circuitbreaker: <name> opened/half-open/closed`，尚未接 Prometheus 或告警，需要翻日志确认。 |
+| 降级兜底同样是单机的 | Redis 故障且 `rate_limit.fail_open: true` 时降级为进程内令牌桶，只在当前实例生效，重启会把额度重置。 |
+| 限流粒度到用户/接口 | 没有按接口成本加权（一次聊天和一次版本查询都算 1 个令牌），也没有租户级配额。 |
 
 ### 上下文压缩
 
@@ -317,9 +329,9 @@ npm test
 CI（`.github/workflows/deploy.yml`）在 push 到 `main` 时构建一次，并同时发布两个 Release：
 
 - `release-latest`：滚动最新版，每次推送更新；
-- `release-2.2`：当前 2.x 版本线，每次推送更新；升级大版本时修改 workflow 顶部的 `CURRENT_RELEASE_TAG`（例如改成 `release-3.0`），旧版本线随之冻结。
+- `release-2.3`：当前 2.x 版本线，每次推送更新；升级大版本时修改 workflow 顶部的 `CURRENT_RELEASE_TAG`（例如改成 `release-3.0`），旧版本线随之冻结。
 
-`release-2.1`、`release-2.0` 与 `release-1.0` 是已冻结的历史版本：前两者停在对应的 2.x 版本线，`release-1.0` 是改造前旧版前端的快照，只用于回滚，均不随推送更新。标签统一使用「`release-<版本号>`」形式。每个 Release 的产物为：
+`release-2.2`、`release-2.1`、`release-2.0` 与 `release-1.0` 是已冻结的历史版本：前三个停在对应的 2.x 版本线，`release-1.0` 是改造前旧版前端的快照，只用于回滚，均不随推送更新。标签统一使用「`release-<版本号>`」形式。每个 Release 的产物为：
 
 - `code-analyse-agent.gz`（Linux amd64 后端二进制）
 - `web-dist.tar.gz`（前端静态产物）
@@ -329,7 +341,7 @@ CI（`.github/workflows/deploy.yml`）在 push 到 `main` 时构建一次，并�
 
 ```bash
 RELEASE_TAG="release-latest"   # 最新推送
-# RELEASE_TAG="release-2.2"    # 固定到当前 2.x 版本线
+# RELEASE_TAG="release-2.3"    # 固定到当前 2.x 版本线
 # RELEASE_TAG="release-2.1"    # 回滚到上一版本线
 # RELEASE_TAG="release-1.0"    # 回滚到改造前版本
 ```

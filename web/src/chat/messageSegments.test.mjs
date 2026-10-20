@@ -48,6 +48,31 @@ await build({
 
       assert.deepEqual(legacyMessage.segments.map((segment) => segment.type), ['text']);
       assert.equal(legacyMessage.segments[0].type === 'text' ? legacyMessage.segments[0].content : '', '旧消息正文');
+      assert.equal(legacyMessage.eventsLoaded, true);
+      assert.equal(legacyMessage.hasRenderEvents, false);
+
+      // 轻量历史接口：只给 has_render_events，不回传事件。消息应先渲染正文，
+      // 并标记“事件未加载”，交给 MessageItem 的按钮按需请求。
+      const lightweightMessage = messageRecordToChatMessage({
+        id: 20,
+        session_id: 'session-1',
+        user_id: 'user-1',
+        role: 'assistant',
+        content: '轻量正文',
+        has_render_events: true,
+        has_project_analysis: true,
+        created_at: new Date().toISOString(),
+      });
+      assert.deepEqual(lightweightMessage.segments.map((segment) => segment.type), ['text']);
+      assert.equal(lightweightMessage.segments[0].type === 'text' ? lightweightMessage.segments[0].content : '', '轻量正文');
+      assert.equal(lightweightMessage.eventsLoaded, false);
+      assert.equal(lightweightMessage.hasRenderEvents, true);
+      assert.equal(lightweightMessage.hasProjectAnalysis, true);
+      assert.equal(lightweightMessage.recordId, 20);
+
+      // 带事件的历史记录（旧接口/详情接口）回放后视为已加载。
+      assert.equal(message.eventsLoaded, true);
+      assert.equal(message.hasRenderEvents, true);
 
       // 旧版后端把工具结果也标成 tool_call，只靠 tool_result 字段区分（历史数据同样如此），
       // 这类事件必须按 tool_result 处理，否则结果渲染不出来、状态停在“调用中”。

@@ -17,7 +17,11 @@ import (
 type ISession interface {
 	GetByID(ctx context.Context, sessionID string) (*do.SessionContext, error)
 	ListByUser(ctx context.Context, userID string, pager dto.Pager) ([]*do.SessionContext, int64, error)
-	ListMessages(ctx context.Context, userID, sessionID string, pager dto.Pager) ([]do.ChatMessageRecord, int64, error)
+	// ListMessages 按时间倒序分页取消息，hasMore 通过多取一条判断，不再执行 COUNT(*)。
+	// includeRenderEvents=false 时只 SELECT 轻量列，不把 render_events 读进内存。
+	ListMessages(ctx context.Context, userID, sessionID string, pager dto.Pager, includeRenderEvents bool) ([]do.ChatMessageRecord, bool, error)
+	// GetMessage 按消息 ID 读取单条完整记录（含 render_events），同时校验用户与会话归属。
+	GetMessage(ctx context.Context, userID, sessionID string, messageID uint) (*do.ChatMessageRecord, error)
 	AppendMessage(ctx context.Context, msg *do.ChatMessageRecord) error
 	Upsert(ctx context.Context, session *do.SessionContext) error
 	Delete(ctx context.Context, userID, sessionID string) error
@@ -103,24 +107,80 @@ func (s *Session) ListByUser(cx context.Context, userID string, pager dto.Pager)
 	return results, count, err
 }
 
-func (s *Session) ListMessages(ctx context.Context, userID, sessionID string, pager dto.Pager) ([]do.ChatMessageRecord, int64, error) {
-	var rows []*model.ChatMessage
-	tx := s.db.WithContext(ctx).Model(&model.ChatMessage{}).
-		Where("user_id = ? AND session_id = ?", userID, sessionID)
-	var count int64
-	if err := tx.Count(&count).Error; err != nil {
-		return nil, 0, err
+// hasRenderEventsExpr 只读取列头里的长度信息来判断是否为空，
+// 不会把 render_events 正文反序列化；SQLite 下比把整列 SELECT 出来便宜得多。
+const hasRenderEventsExpr = "CASE WHEN render_events IS NULL OR render_events = '' THEN 0 ELSE 1 END AS has_render_events"
+
+// hasProjectAnalysisExpr 用 instr 在 SQLite 的 C 层扫一遍序列化 JSON，
+// 判断是否调用过 repo_analyzer。它不分配事件对象，几十 MB 的历史页实测
+// 只增加几十毫秒，却能让前端在不加载完整事件时继续显示“导出”入口。
+const hasProjectAnalysisExpr = `CASE WHEN instr(render_events, '"tool_name":"repo_analyzer"') > 0 THEN 1 ELSE 0 END AS has_project_analysis`
+
+// chatMessageRow 是轻量查询的扫描目标：默认不含 render_events。
+type chatMessageRow struct {
+	ID                 uint
+	SessionID          string
+	UserID             string
+	Role               string
+	Content            string
+	RenderEvents       string
+	HasRenderEvents    bool
+	HasProjectAnalysis bool
+	CreatedAt          time.Time
+}
+
+func (row chatMessageRow) toDomain() do.ChatMessageRecord {
+	record := do.ChatMessageRecord{
+		ID:                 row.ID,
+		SessionID:          row.SessionID,
+		UserID:             row.UserID,
+		Role:               row.Role,
+		Content:            row.Content,
+		HasRenderEvents:    row.HasRenderEvents,
+		HasProjectAnalysis: row.HasProjectAnalysis,
+		CreatedAt:          row.CreatedAt,
 	}
-	err := tx.
+	if row.RenderEvents != "" {
+		var events []do.ChatStreamEvent
+		if err := json.Unmarshal([]byte(row.RenderEvents), &events); err == nil {
+			record.RenderEvents = events
+		}
+	}
+	return record
+}
+
+func (s *Session) ListMessages(ctx context.Context, userID, sessionID string, pager dto.Pager, includeRenderEvents bool) ([]do.ChatMessageRecord, bool, error) {
+	// GetOffset 会顺带归一化 page/limit，必须先调用再读 GetLimit。
+	offset := pager.GetOffset()
+	limit := pager.GetLimit()
+	if limit <= 0 {
+		limit = 20
+	}
+
+	columns := []string{"id", "session_id", "user_id", "role", "content", "created_at", hasRenderEventsExpr, hasProjectAnalysisExpr}
+	if includeRenderEvents {
+		columns = append(columns, "render_events")
+	}
+
+	var rows []chatMessageRow
+	err := s.db.WithContext(ctx).Model(&model.ChatMessage{}).
+		Select(columns).
+		Where("user_id = ? AND session_id = ?", userID, sessionID).
 		Order("created_at DESC, id DESC").
-		Offset(pager.GetOffset()).
-		Limit(pager.GetLimit()).
-		Find(&rows).Error
+		Offset(offset).
+		// 多取一条判断是否还有更早的消息，替代每页 COUNT(*)。
+		Limit(limit + 1).
+		Scan(&rows).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, 0, nil
+			return nil, false, nil
 		}
-		return nil, 0, err
+		return nil, false, err
+	}
+
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
 	}
 
 	// 分页按时间倒序取"最新的一页"，返回前在本页内反转回时间升序：
@@ -129,29 +189,51 @@ func (s *Session) ListMessages(ctx context.Context, userID, sessionID string, pa
 		rows[i], rows[j] = rows[j], rows[i]
 	}
 
-	unmarshalRenderEventFun := func(row string) []do.ChatStreamEvent {
-		if row == "" {
-			return nil
-		}
-		var events []do.ChatStreamEvent
-		_ = json.Unmarshal([]byte(row), &events)
-		return events
-	}
-
-	var results []do.ChatMessageRecord
-	lo.ForEach(rows, func(item *model.ChatMessage, index int) {
-		results = append(results, do.ChatMessageRecord{
-			ID:           item.ID,
-			SessionID:    item.SessionID,
-			UserID:       item.UserID,
-			Role:         item.Role,
-			Content:      item.Content,
-			RenderEvents: unmarshalRenderEventFun(item.RenderEvents),
-			CreatedAt:    item.CreatedAt,
-		})
+	results := make([]do.ChatMessageRecord, 0, len(rows))
+	lo.ForEach(rows, func(item chatMessageRow, index int) {
+		results = append(results, item.toDomain())
 	})
+	return results, hasMore, nil
+}
 
-	return results, count, err
+// GetMessage 只返回一条消息，WHERE 同时限定 user_id 与 session_id，
+// 调用方无需再单独做归属查询；不存在时返回 (nil, nil)。
+func (s *Session) GetMessage(ctx context.Context, userID, sessionID string, messageID uint) (*do.ChatMessageRecord, error) {
+	var rows []chatMessageRow
+	// 这里必须把 render_events 取出来，因此不再额外 SELECT 两个 CASE 表达式：
+	// has_render_events 直接看原文是否为空，has_project_analysis 从解析后的事件里判断，
+	// 避免对同一条几十 MB 的列扫三遍。
+	columns := []string{"id", "session_id", "user_id", "role", "content", "created_at", "render_events"}
+	err := s.db.WithContext(ctx).Model(&model.ChatMessage{}).
+		Select(columns).
+		Where("id = ? AND user_id = ? AND session_id = ?", messageID, userID, sessionID).
+		Limit(1).
+		Scan(&rows).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	record := rows[0].toDomain()
+	record.HasRenderEvents = rows[0].RenderEvents != ""
+	record.HasProjectAnalysis = eventsContainProjectAnalysis(record.RenderEvents)
+	return &record, nil
+}
+
+// eventsContainProjectAnalysis 判断事件里是否调用过 repo_analyzer。
+// 与轻量 SQL 的 instr 探测保持一致，供单条详情接口复用。
+func eventsContainProjectAnalysis(events []do.ChatStreamEvent) bool {
+	const projectAnalysisTool = "repo_analyzer"
+	for _, event := range events {
+		if event.ToolName == projectAnalysisTool {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Session) AppendMessage(ctx context.Context, msg *do.ChatMessageRecord) error {

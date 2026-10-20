@@ -43,7 +43,7 @@ import { AppearanceProvider } from './theme/AppearanceContext';
 import { AppearanceSwitcher } from './theme/AppearanceSwitcher';
 import { MenuIcon } from './ui/icons';
 import { sectionHueAt, sectionLabel, shortId } from './ui/palette';
-import type { ChatMessage, ChatRunActiveResp, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent, VersionInfo } from './types/chat';
+import type { ChatMessage, ChatMessageRecord, ChatRunActiveResp, CostDailyTotal, LoginResult, PaginatedSessionList, PendingInterruptEvent, ProfileForm, QuotaToday, SessionDetail, SessionListItem, StreamPayload, TraceEvent, VersionInfo } from './types/chat';
 
 // 会话列表项在后端已截断到 200 字，负载很小，保持 20 条一页。
 const SESSION_PAGE_LIMIT = 20;
@@ -250,6 +250,11 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   const sessionLoadTokenRef = useRef(0);
   // 已打开的会话内容缓存，命中时切换是瞬时的。
   const sessionCacheRef = useRef<Map<string, CachedSessionDetail>>(new Map());
+  // 正在懒加载调用详情的消息 id，避免重复点击发多次请求。
+  const loadingMessageDetailsRef = useRef<Set<string>>(new Set());
+  // 已回放完事件的历史消息。后台补齐/上滑分页会用服务端轻量数据重建列表，
+  // 这里保存最新版本，重建时覆盖回去，避免刚加载的详情被旧数据冲掉。
+  const enrichedMessageDetailsRef = useRef<Map<string, ChatMessage>>(new Map());
   // 正在后台补齐历史的会话 id（空串表示没有）。
   const hydratingSessionIdRef = useRef('');
   // 插入更早消息后需要恢复的滚动位置，避免视口跳动。
@@ -554,7 +559,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       if (token !== sessionLoadTokenRef.current) {
         return;
       }
-      const loadedMessages = detail.list.map(messageRecordToChatMessage);
+      const loadedMessages = applyEnrichedDetails(detail.list.map(messageRecordToChatMessage));
       const page = detail.page || 1;
       const hasMore = resolveHasMore(detail, loadedMessages.length);
       setIsLoadingSessionDetail(false);
@@ -607,7 +612,8 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
         if (token !== sessionLoadTokenRef.current) {
           return;
         }
-        const merged = mergeOlderMessages(currentMessages, detail.list.map(messageRecordToChatMessage));
+        const olderMessages = detail.list.map(messageRecordToChatMessage);
+        const merged = applyEnrichedDetails(mergeOlderMessages(currentMessages, olderMessages));
         if (merged.length === currentMessages.length) {
           // 没有新内容说明已经到头，别空转。
           break;
@@ -618,7 +624,9 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
         currentMessages = merged;
         page = detail.page || page + 1;
         hasMore = resolveHasMore(detail, merged.length);
-        setMessages(merged);
+        // 用函数式合并当前 state：期间用户可能刚展开过详情，
+        // 直接 setMessages(merged) 会把它覆盖回轻量版本。
+        setMessages((current) => applyEnrichedDetails(mergeOlderMessages(current, olderMessages)));
         setMessagePage(page);
         setHasMoreMessages(hasMore);
         cacheSessionDetail(targetSessionId, merged, page, hasMore);
@@ -645,6 +653,55 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       cache.delete(oldest.value);
     }
   }
+
+  // loadMessageDetails 按需拉取单条消息的完整 render_events，并原位替换消息。
+  // 历史首屏只出正文，用户点“加载调用详情”时才付事件解析成本。
+  const loadMessageDetails = useCallback(async (messageId: string) => {
+    const activeSessionId = sessionIdRef.current;
+    const target = messagesRef.current.find((item) => item.id === messageId);
+    if (isStreamingRef.current) {
+      // 正在跑的 run 会持续往同一条消息里追加事件，此时回放历史事件会覆盖新内容。
+      return;
+    }
+    if (!activeSessionId || !target || target.recordId === undefined || target.eventsLoaded) {
+      return;
+    }
+    if (loadingMessageDetailsRef.current.has(messageId)) {
+      return;
+    }
+    loadingMessageDetailsRef.current.add(messageId);
+
+    setMessages((current) => current.map((item) => (item.id === messageId ? { ...item, eventsLoading: true } : item)));
+    try {
+      const record = await fetchJSON<ChatMessageRecord>(
+          `/api/sessions/message?session_id=${encodeURIComponent(activeSessionId)}&message_id=${target.recordId}`,
+      );
+      if (sessionIdRef.current !== activeSessionId) {
+        return;
+      }
+      // 先让“加载中”状态渲染出来，再同步回放事件（事件多的消息解析要几十到几百毫秒）。
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      const enriched = messageRecordToChatMessage(record);
+      const enrichedMessage: ChatMessage = {
+        ...enriched,
+        id: messageId,
+        createdAt: target.createdAt ?? enriched.createdAt,
+        eventsLoading: false,
+      };
+      enrichedMessageDetailsRef.current.set(messageId, enrichedMessage);
+      const applyEnriched = (item: ChatMessage): ChatMessage => (item.id === messageId ? enrichedMessage : item);
+      setMessages((current) => current.map(applyEnriched));
+      const cached = sessionCacheRef.current.get(activeSessionId);
+      if (cached) {
+        sessionCacheRef.current.set(activeSessionId, { ...cached, messages: cached.messages.map(applyEnriched) });
+      }
+    } catch (error) {
+      setMessages((current) => current.map((item) => (item.id === messageId ? { ...item, eventsLoading: false } : item)));
+      setPanelError(error instanceof Error ? error.message : '调用详情加载失败');
+    } finally {
+      loadingMessageDetailsRef.current.delete(messageId);
+    }
+  }, []);
 
   function rememberScrollAnchor() {
     const element = conversationScrollRef.current;
@@ -679,7 +736,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       const detail = await fetchJSON<SessionDetail>(`/api/sessions/info?session_id=${encodeURIComponent(sessionIdRef.current)}&page=${nextPage}&limit=${MESSAGE_PAGE_LIMIT}`);
       const olderMessages = detail.list.map(messageRecordToChatMessage);
       rememberScrollAnchor();
-      setMessages((current) => mergeOlderMessages(current, olderMessages));
+      setMessages((current) => applyEnrichedDetails(mergeOlderMessages(current, olderMessages)));
       setMessagePage(detail.page || nextPage);
       setHasMoreMessages(resolveHasMore(detail, loadedBefore + olderMessages.length));
       setPanelError('');
@@ -707,6 +764,16 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   function mergeOlderMessages(current: ChatMessage[], olderItems: ChatMessage[]) {
     const seen = new Set(current.map((item) => item.id));
     return [...olderItems.filter((item) => !seen.has(item.id)), ...current];
+  }
+
+  // 分页/后台补齐可能用服务端轻量记录重建同一条历史消息；
+  // 已经懒加载过详情的版本优先，避免刚展开的工具卡片被覆盖。
+  function applyEnrichedDetails(items: ChatMessage[]) {
+    const enriched = enrichedMessageDetailsRef.current;
+    if (enriched.size === 0) {
+      return items;
+    }
+    return items.map((item) => enriched.get(item.id) ?? item);
   }
 
   async function deleteSession(targetSessionId: string) {
@@ -953,6 +1020,10 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     // （让审批弹窗恢复出来），正文沿用列表里已有的那条 assistant 消息。
     const interrupted = status === 'interrupted';
     let targetMessageId = interrupted ? findLastAssistantMessageId() : '';
+    if (targetMessageId) {
+      // 这条消息马上会被续跑事件追加，不能再被历史懒加载的旧快照覆盖。
+      enrichedMessageDetailsRef.current.delete(targetMessageId);
+    }
     if (!targetMessageId) {
       targetMessageId = crypto.randomUUID();
       setMessages((current) => [
@@ -1376,6 +1447,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
                     isLoadingOlderMessages={isLoadingOlderMessages}
                     hasMoreMessages={hasMoreMessages}
                     onExportMessage={handleExportMessage}
+                    onLoadDetails={loadMessageDetails}
                 />
             )}
           </div>

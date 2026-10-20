@@ -86,7 +86,10 @@ func (s *Service) CreateShare(ctx context.Context, userID, sessionID string) (*d
 }
 
 // GetSharedSession 按令牌返回只读分享快照。调用方不需要登录。
-func (s *Service) GetSharedSession(ctx context.Context, token string) (*dto.SharedSessionInfo, error) {
+//
+// 默认把每条消息的事件压成前端可渲染的形态：快照本身仍完整落库，
+// 但分享页首屏不再传输几十 MB 的逐 token 事件。raw=true 可读回原始事件。
+func (s *Service) GetSharedSession(ctx context.Context, token string, raw bool) (*dto.SharedSessionInfo, error) {
 	if strings.TrimSpace(token) == "" {
 		return nil, ErrShareLinkInvalid
 	}
@@ -109,6 +112,16 @@ func (s *Service) GetSharedSession(ctx context.Context, token string) (*dto.Shar
 	}
 	if snapshot.List == nil {
 		snapshot.List = make([]*dto.ChatMessageRecord, 0)
+	}
+	if !raw {
+		for _, message := range snapshot.List {
+			if message == nil {
+				continue
+			}
+			message.HasProjectAnalysis = dtoEventsContainProjectAnalysis(message.RenderEvents)
+			message.RenderEvents = compactDTOEvents(message.RenderEvents)
+			message.HasRenderEvents = len(message.RenderEvents) > 0
+		}
 	}
 	return &dto.SharedSessionInfo{
 		Session:   snapshot.Session,

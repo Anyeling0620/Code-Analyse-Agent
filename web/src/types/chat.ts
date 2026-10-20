@@ -52,6 +52,16 @@ export type ChatMessage = {
   status: 'idle' | 'streaming' | 'error' | 'done';
   /** 历史消息的落库时间；实时流新增的消息没有该字段。 */
   createdAt?: string;
+  /** 后端 chat_messages.id；轻量历史消息按条懒加载调用事件时使用。 */
+  recordId?: number;
+  /** 该消息在服务端是否存有调用事件（轻量历史接口返回）。 */
+  hasRenderEvents?: boolean;
+  /** 调用事件是否已在本地回放完成；没有事件时也视为已加载。 */
+  eventsLoaded?: boolean;
+  /** 调用事件正在请求中。 */
+  eventsLoading?: boolean;
+  /** 轻量探测：这条回答调用过 repo_analyzer，未加载事件也能显示导出。 */
+  hasProjectAnalysis?: boolean;
 };
 
 export type ChatResult = {
@@ -111,6 +121,10 @@ export type ChatMessageRecord = {
   role: 'user' | 'assistant';
   content: string;
   render_events?: StreamPayload[];
+  /** 轻量历史接口：库里是否存有调用事件，需要时再按条请求完整事件。 */
+  has_render_events?: boolean;
+  /** 轻量探测：调用过 repo_analyzer，用于导出按钮判定。 */
+  has_project_analysis?: boolean;
   created_at: string;
 };
 
@@ -146,7 +160,8 @@ export type PaginatedSessionList = {
 export type SessionDetail = {
   session: SessionListItem;
   list: ChatMessageRecord[];
-  total: number;
+  /** 轻量历史接口不再做 COUNT(*)，因此可能省略；分页以 has_more 为准。 */
+  total?: number;
   page: number;
   limit: number;
   has_more: boolean;

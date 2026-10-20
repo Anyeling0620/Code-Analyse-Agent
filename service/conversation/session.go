@@ -7,11 +7,16 @@ import (
 	"edu.agent.code/service/do"
 	"edu.agent.code/service/dto"
 	"edu.agent.code/utils/logger"
+	"errors"
 	"github.com/cloudwego/eino/schema"
 	"github.com/jinzhu/copier"
 	"go.uber.org/zap"
 	"time"
 )
+
+// ErrMessageNotFound 表示消息不存在，或不属于当前用户/会话。
+// 两种情况统一成一个错误，避免通过错误信息探测他人消息是否存在。
+var ErrMessageNotFound = errors.New("message not found")
 
 func (s *Service) DeleteSession(ctx context.Context, userID, sessionID string) error {
 	err := s.sessions.Delete(ctx, userID, sessionID)
@@ -45,11 +50,16 @@ func (s *Service) GetSessionInfo(ctx context.Context, userID string, req *dto.Ge
 		logger.Error("GetSessionInfo GetByID error=%v user=%s req=%+v", err, userID, req)
 		return nil, err
 	}
-	if session.UserID != userID {
+	if session == nil || session.UserID != userID {
 		logger.Warn("GetSessionInfo GetByID this session not own user=%s req=%+v", userID, req)
 		return nil, nil
 	}
-	messages, total, err := s.sessions.ListMessages(ctx, userID, req.SessionID, req.Pager)
+	// 先归一化 page/limit：ListMessages 收到的是 Pager 的值拷贝，
+	// 它内部的 GetOffset 不会回写到 req.Pager，响应里的分页参数需要在这里生效。
+	_ = req.GetOffset()
+	// 默认不读 render_events：单条消息的事件最多接近 40MB，首屏只需要正文和
+	// has_render_events 标记。旧调用方可以显式传 include_render_events=1 取回完整数据。
+	messages, hasMore, err := s.sessions.ListMessages(ctx, userID, req.SessionID, req.Pager, req.IncludeRenderEvents)
 	if err != nil {
 		logger.Error("GetSessionInfo ListMessages error=%v user=%s req=%+v", err, userID, req)
 		return nil, err
@@ -58,17 +68,37 @@ func (s *Service) GetSessionInfo(ctx context.Context, userID string, req *dto.Ge
 	copier.Copy(&resultSession, &session)
 	resultMessages := make([]*dto.ChatMessageRecord, 0, len(messages))
 	copier.Copy(&resultMessages, &messages)
-	// GetOffset 会顺带把未传的 page/limit 归一化为默认值，
-	// 因此这里的 req.Pager 已经是实际生效的分页参数。
-	hasMore := int64(req.GetOffset()+len(messages)) < total
 	return &dto.SessionInfo{
 		Session: resultSession,
 		List:    resultMessages,
-		Total:   total,
 		HasMore: hasMore,
 		Pager:   req.Pager,
-	}, err
+	}, nil
 
+}
+
+// GetMessage 返回单条消息的完整调用事件。仓储层在 WHERE 里同时限定
+// user_id 与 session_id，消息不存在和越权访问返回同一个错误。
+func (s *Service) GetMessage(ctx context.Context, userID string, req *dto.GetMessage) (*dto.ChatMessageRecord, error) {
+	message, err := s.sessions.GetMessage(ctx, userID, req.SessionID, req.MessageID)
+	if err != nil {
+		logger.Error("GetMessage repo error=%v user=%s session=%s message=%d", err, userID, req.SessionID, req.MessageID)
+		return nil, err
+	}
+	if message == nil {
+		return nil, ErrMessageNotFound
+	}
+	if !req.Raw {
+		compacted := *message
+		compacted.RenderEvents = compactRenderEvents(message.RenderEvents)
+		// 压缩后可能一条可渲染事件都不剩（例如整轮只有 reasoning），
+		// 此时告诉前端“没有可加载的详情”，避免按钮点了没反应。
+		compacted.HasRenderEvents = len(compacted.RenderEvents) > 0
+		message = &compacted
+	}
+	result := &dto.ChatMessageRecord{}
+	_ = copier.Copy(result, message)
+	return result, nil
 }
 
 func (s *Service) persistSession(ctx context.Context, session *dto.SessionContext, runState *dto.ChatRunState) error {

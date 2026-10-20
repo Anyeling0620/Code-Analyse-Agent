@@ -42,7 +42,7 @@ func (h *Handler) GetSharedSession(ctx *gin.Context) {
 		return
 	}
 
-	resp, err := h.session.GetSharedSession(ctx.Request.Context(), req.ShareToken)
+	resp, err := h.session.GetSharedSession(ctx.Request.Context(), req.ShareToken, req.Raw)
 	if err != nil {
 		if errors.Is(err, conversation.ErrShareLinkInvalid) {
 			h.writeResp(ctx, nil, common.ShareLinkInvalid)

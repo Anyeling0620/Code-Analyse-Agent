@@ -3,6 +3,10 @@ import type { ChatMessage, ChatMessageRecord, MessageSegment, StreamPayload, Too
 
 export function messageRecordToChatMessage(record: ChatMessageRecord): ChatMessage {
   const normalizedRecordContent = record.role === 'assistant' ? normalizeMarkdown(record.content) : record.content;
+  const events = Array.isArray(record.render_events) ? record.render_events : [];
+  // 事件要么随记录一起返回（旧接口/详情接口），要么由后端标记“库里存在”，
+  // 后者需要用户点开时再按 message_id 懒加载。两者都没有才算已加载完成。
+  const hasRenderEvents = events.length > 0 || record.has_render_events === true;
 
   const base: ChatMessage = {
     id: `history-${record.id}-${record.role}`,
@@ -14,13 +18,16 @@ export function messageRecordToChatMessage(record: ChatMessageRecord): ChatMessa
     traceEvents: [],
     status: 'done',
     createdAt: record.created_at,
+    recordId: record.id,
+    hasRenderEvents,
+    eventsLoaded: !hasRenderEvents || events.length > 0,
+    hasProjectAnalysis: record.has_project_analysis === true,
   };
 
   if (record.role !== 'assistant') {
     return base;
   }
 
-  const events = Array.isArray(record.render_events) ? record.render_events : [];
   if (events.length === 0) {
     return {
       ...base,

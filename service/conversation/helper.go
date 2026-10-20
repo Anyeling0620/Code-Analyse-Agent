@@ -175,14 +175,14 @@ func buildSessionSummaryMessage(session *dto.SessionContext) *schema.Message {
 // 两个条件缺一不可：
 //  1. 压缩开关打开。Enabled=false 时必须与改造前完全一致——既不注入摘要，
 //     也不累积摘要（累积在 persistSession 里同样按开关门控）。
-//  2. 历史的确被窗口截断过（totalMessages > fetchedMessages）。否则摘要里写的就是
+//  2. 历史的确被窗口截断过（分页查询多取一条得到 hasMore=true）。否则摘要里写的就是
 //     prompt 中已经存在的近期问答，注入等于把同一段内容重复计费。
 func resolveSessionSummaryMessage(conf config.ContextCompact, session *dto.SessionContext,
-	totalMessages int64, fetchedMessages int) *schema.Message {
+	historyTruncated bool) *schema.Message {
 	if !compress.Enabled(conf) {
 		return nil
 	}
-	if totalMessages <= int64(fetchedMessages) {
+	if !historyTruncated {
 		return nil
 	}
 	return buildSessionSummaryMessage(session)

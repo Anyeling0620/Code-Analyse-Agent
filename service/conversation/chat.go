@@ -60,11 +60,13 @@ func (s *Service) ChatStream(ctx context.Context, req dto.ChatRequest, emit Chat
 func (s *Service) buildMessageWithHistory(ctx context.Context, userID string,
 	session *dto.SessionContext, profile *dto.Profile,
 	question string) ([]*schema.Message, error) {
-	// 根据用户ID和会话ID获取历史消息
-	messageRecords, totalMessages, err := s.sessions.ListMessages(ctx, userID, session.SessionID, dto.Pager{
+	// 根据用户ID和会话ID获取历史消息。
+	// 历史窗口只拼模型输入，不需要 render_events；hasMore 直接用来判断
+	// 历史是否被窗口截断，省掉每轮一次的 COUNT(*)。
+	messageRecords, historyTruncated, err := s.sessions.ListMessages(ctx, userID, session.SessionID, dto.Pager{
 		Page:  1,
 		Limit: historyWindowSize,
-	})
+	}, false)
 	if err != nil {
 		logger.Error("sessions.ListMessages failed", zap.Error(err), zap.Any("session", session))
 		return nil, err
@@ -82,7 +84,7 @@ func (s *Service) buildMessageWithHistory(ctx context.Context, userID string,
 	// 是否注入由 resolveSessionSummaryMessage 决定：开关关闭、或历史还没被窗口截断时
 	// 都不注入，前者保证"关掉开关=行为不变"，后者避免把已经在 prompt 里的内容重复计费。
 	messages := buildModelHistory(
-		resolveSessionSummaryMessage(s.compactConf(), session, totalMessages, len(messageRecords)),
+		resolveSessionSummaryMessage(s.compactConf(), session, historyTruncated),
 		historyMessages,
 		buildProfileMessage(profile),
 	)

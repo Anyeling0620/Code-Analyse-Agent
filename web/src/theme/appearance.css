@@ -449,24 +449,45 @@ html[data-ui='classic'][data-theme='dark'] {
 
   --ink: #f2efe3;
   --ink-soft: #b9b5a7;
-  --ink-faint: #918f85;
-  --rule: rgba(242, 239, 227, 0.15);
-  --rule-strong: rgba(242, 239, 227, 0.32);
+  /* 次要文本在 paper-soft / paper-deep 上也要 ≥ 4.5:1（原 #918f85 仅 4.5 边缘）。 */
+  --ink-faint: #a19d90;
+  --rule: rgba(242, 239, 227, 0.22);
+  /* 组件边界/输入框描边目标 3:1；0.42 在 paper-soft 上约 3.5:1。 */
+  --rule-strong: rgba(242, 239, 227, 0.42);
+  /* 侧栏在深色下仍用浅色 --case-line（0.13 alpha，约 1.5:1）；
+     提升到 0.42，让会话操作组、账号卡、面板按钮等边界 ≥ 3:1。 */
+  --case-line: rgba(242, 239, 227, 0.42);
 
-  --section-oxide: #cf6a3f;
+  /* 深色下章节色改为浅底 + 深字，避免浅字压在浅橙/浅绿上（原本仅 2.2–3.7:1）。
+     超蓝保留深底浅字（4.76:1），message-user 气泡依赖这组值。 */
+  --section-oxide: #df7c52;
+  --on-oxide: #171c20;
   --section-chrome: #e0b11f;
-  --section-grass: #7fa650;
-  --section-teal: #63b7ae;
+  --on-chrome: #1b2024;
+  --section-grass: #9ac26a;
+  --on-grass: #171c20;
+  --section-teal: #74c9c0;
+  --on-teal: #171c20;
   --section-ultramarine: #4d6db3;
-  --section-violet: #8a76bd;
-  --section-sienna: #b87a58;
-  --vermilion: #e05a48;
-  --accent: #d06234;
+  --on-ultramarine: #fbf8ee;
+  --section-violet: #a892d8;
+  --on-violet: #171c20;
+  --section-sienna: #d59a76;
+  --on-sienna: #171c20;
+  --vermilion: #ef7a66;
+  --on-vermilion: #171c20;
+  --accent: #e07a4e;
   --on-accent: #171c20;
 }
 
 html[data-ui='classic'][data-theme='dark'] body {
   background: #101417;
+}
+
+/* .icon-button 的默认描边是 --rule（0.22 alpha，约 1.95:1）；
+   深色下交互控件边界统一提升到 --rule-strong（约 3.5:1）。 */
+html[data-ui='classic'][data-theme='dark'] .icon-button {
+  border-color: var(--rule-strong);
 }
 
 html[data-ui='classic'][data-theme='dark'] .composer {
@@ -479,7 +500,9 @@ html[data-ui='classic'][data-theme='dark'] .composer-shell::after {
 }
 
 html[data-ui='classic'][data-theme='dark'] .message-user {
-  border-color: rgba(242, 239, 227, 0.22);
+  /* 气泡加深，使 --on-ultramarine 浅字及 72% 透明度的 meta 都达到 4.5:1。 */
+  border-color: #5b7bbd;
+  background: #2f4c85;
 }
 
 html[data-ui='classic'][data-theme='dark'] .message-export-button:hover {
@@ -577,4 +600,63 @@ html[data-ui='classic'][data-theme='light'] .index-board .account-kind {
 
 html[data-ui='classic'][data-theme='light'] .index-board .health-checking {
   background: #7a5a00;
+}
+
+/* ---- Classic dark: hardcoded light-paper components --------------------- */
+/* 原表在浅色页面上写死了米色底/深红字；深色下这些规则会变成浅底浅字。 */
+
+html[data-ui='classic'][data-theme='dark'] .tool-card {
+  background: var(--paper-soft);
+}
+
+html[data-ui='classic'][data-theme='dark'] .tool-card[open] {
+  background: var(--paper-deep);
+}
+
+html[data-ui='classic'][data-theme='dark'] .chat-skeleton-leaf {
+  background: var(--paper-soft);
+}
+
+html[data-ui='classic'][data-theme='dark'] .chat-skeleton-line {
+  background: linear-gradient(
+    90deg,
+    rgba(242, 239, 227, 0.06),
+    rgba(242, 239, 227, 0.14),
+    rgba(242, 239, 227, 0.06)
+  );
+}
+
+html[data-ui='classic'][data-theme='dark'] .timeline-error,
+html[data-ui='classic'][data-theme='dark'] .form-error {
+  border-color: rgba(239, 122, 102, 0.45);
+  background: rgba(239, 122, 102, 0.12);
+  color: #ffb4a8;
+}
+
+html[data-ui='classic'][data-theme='dark'] .session-item-active .session-delete-button:hover:not(:disabled) {
+  background: rgba(239, 122, 102, 0.16);
+  color: #ffb4a8;
+}
+
+/* 原始 hover 值（#963d1b / #9f4520 / #b23224）是为浅字准备的深底；
+   深色下 on-* 已改为深字，hover 必须换成浅底，保持 ≥ 4.5:1。 */
+html[data-ui='classic'][data-theme='dark'] .new-session-button:hover:not(:disabled) {
+  background: #ef8f61;
+}
+
+html[data-ui='classic'][data-theme='dark'] .send-button:hover:not(:disabled),
+html[data-ui='classic'][data-theme='dark'] .primary-button:hover:not(:disabled) {
+  border-color: #ef8f61;
+  background: #ef8f61;
+}
+
+html[data-ui='classic'][data-theme='dark'] .danger-button:hover:not(:disabled),
+html[data-ui='classic'][data-theme='dark'] .stop-button:hover:not(:disabled) {
+  border-color: #f08a76;
+  background: #f08a76;
+}
+
+/* select 箭头是内联 SVG，写死了 #1b2024；深色下换成纸白描边。 */
+html[data-ui='classic'][data-theme='dark'] .field select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23f2efe3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }

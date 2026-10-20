@@ -129,6 +129,18 @@ html[data-ui='nocturne'][data-theme='light'] {
   --shadow-lift: 0 20px 46px -22px rgba(13, 34, 32, 0.3);
 }
 
+/* 深色专用对比度令牌。基础块同时是暗色默认值，但把增强值放在
+   [data-theme='dark'] 里可以保证以后新增 token 时不会漏到浅色。 */
+html[data-ui='nocturne'][data-theme='dark'] {
+  /* 0.12 在 case 上仅 1.4:1；0.4 约 3.05:1，用于会话操作组/账号卡等边界。 */
+  --case-line: rgba(126, 240, 200, 0.4);
+  /* 5.8:1 → 6.8:1（paper-soft），给极小的 9px 遥测字号留余量。 */
+  --ink-faint: #8aa39b;
+  --rule: rgba(126, 240, 200, 0.2);
+  --rule-strong: rgba(126, 240, 200, 0.42);
+  --code-line: rgba(126, 240, 200, 0.4);
+}
+
 /* ---- Document ------------------------------------------------------------ */
 
 html[data-ui='nocturne'] body {
@@ -3094,4 +3106,10 @@ html[data-ui='nocturne'] .composer textarea::placeholder {
   html[data-ui='nocturne'] .drawer-scrim {
     transition: none;
   }
+}
+
+/* ---- Dark legibility: component boundaries ------------------------------- */
+/* 图标按钮描边原用 --rule（约 1.6:1）；深色下提升到可辨认的 3:1 级别。 */
+html[data-ui='nocturne'][data-theme='dark'] .icon-button {
+  border-color: var(--rule-strong);
 }

@@ -72,15 +72,17 @@ html[data-ui='schematic'][data-theme='dark'] {
   --acetate: rgba(15, 30, 41, 0.97);
   --case: #0c1a24;
   --case-raised: #12232e;
-  --case-line: rgba(216, 232, 240, 0.16);
+  /* 0.22 在深色 case 上不到 2:1；提高到与 rule-strong 一致的 0.46。 */
+  --case-line: rgba(216, 232, 240, 0.46);
   --case-ink: #d8e8f0;
   --case-soft: #8fa8b5;
-  --case-faint: #647d8b;
+  --case-faint: #8ba2b1;
   --ink: #d8e8f0;
   --ink-soft: #8fa8b5;
-  --ink-faint: #647d8b;
-  --rule: rgba(216, 232, 240, 0.18);
-  --rule-strong: rgba(216, 232, 240, 0.38);
+  /* 原 #647d8b 在 paper-soft 上仅 3.92:1；提到 6.4:1，覆盖时间戳/提示等小字。 */
+  --ink-faint: #8ba2b1;
+  --rule: rgba(216, 232, 240, 0.22);
+  --rule-strong: rgba(216, 232, 240, 0.46);
   --accent: #f08a4b;
   --on-accent: #1a0d05;
   --blue: #63b3d9;
@@ -107,7 +109,8 @@ html[data-ui='schematic'][data-theme='dark'] {
   --corner: rgba(99, 179, 217, 0.5);
   --detail-bg: #07121a;
   --detail-bar: rgba(255, 255, 255, 0.04);
-  --detail-rule: rgba(216, 232, 240, 0.16);
+  /* 代码块 DETAIL 标题栏/按钮边界：0.16 仅 1.7:1，提高到约 3.2:1。 */
+  --detail-rule: rgba(216, 232, 240, 0.4);
   --detail-ink: #d8e8f0;
   --detail-soft: #8fa8b5;
   --shadow-leaf: none;
@@ -2292,4 +2295,21 @@ html[data-ui='schematic'] .trace-elapsed {
   html[data-ui='schematic'] .appearance-theme {
     transition: none;
   }
+}
+
+/* ---- Dark legibility: small controls ------------------------------------- */
+/* 深色下输入框占位符原先只有 70% 不透明度，实际对比度约 3.8:1。 */
+html[data-ui='schematic'][data-theme='dark'] .composer textarea::placeholder {
+  color: var(--ink-soft);
+  opacity: 1;
+}
+
+/* 图标按钮的描边用 --rule 时几乎不可见；深色下提升为组件边界级别。 */
+html[data-ui='schematic'][data-theme='dark'] .icon-button {
+  border-color: var(--rule-strong);
+}
+
+/* 账号卡是承载身份信息的交互容器，边界同样需要 ≥ 3:1。 */
+html[data-ui='schematic'][data-theme='dark'] .account-card {
+  border-color: var(--rule-strong);
 }

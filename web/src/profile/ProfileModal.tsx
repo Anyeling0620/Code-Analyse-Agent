@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { CurrentStage, GoalType, ProfileForm, SkillLevel } from '../types/chat';
+import type { CurrentStage, GoalType, ProfileForm, ProfileRevision, SkillLevel } from '../types/chat';
 import { CloseIcon } from '../ui/icons';
+import { fetchProfileHistory } from './api';
 
 const userTypes = ['学生', '开发者', '教师', '研究员', '产品/运营', '其他'];
 const skillLevels: SkillLevel[] = ['零基础', '入门', '熟悉', '熟练', '专家'];
@@ -23,6 +24,8 @@ const descriptionMaxLength = 1000;
 
 type ProfileModalProps = {
   profile: ProfileForm;
+  // updatedAt 是服务端最后一次实际修改画像的时间（ISO 字符串）。
+  updatedAt?: string;
   // gate=true 是「登录后的强引导」：不能关闭，六项都填了才能保存进主界面。
   gate?: boolean;
   // onSave 允许是异步的：实现里会 await 它，失败就把错误显示在弹窗里（父组件负责成功时关闭）。
@@ -30,10 +33,30 @@ type ProfileModalProps = {
   onClose: () => void;
 };
 
-export function ProfileModal({ profile, gate = false, onSave, onClose }: ProfileModalProps) {
+const historyLimit = 5;
+
+export function ProfileModal({ profile, updatedAt = '', gate = false, onSave, onClose }: ProfileModalProps) {
   const [draft, setDraft] = useState<ProfileForm>(profile);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [history, setHistory] = useState<ProfileRevision[]>([]);
+
+  // 每次打开弹窗都重新拉一次快照：保存后重新打开能立刻看到新记录。
+  useEffect(() => {
+    let cancelled = false;
+    fetchProfileHistory(historyLimit)
+      .then((result) => {
+        if (!cancelled) {
+          setHistory(result.items ?? []);
+        }
+      })
+      .catch(() => {
+        // 历史只是辅助信息，拉取失败不影响查看和保存当前画像。
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const nextProfile = useMemo<ProfileForm>(() => ({
     user_type: draft.user_type.trim(),
@@ -82,6 +105,10 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
           <div>
             <h2>{gate ? '先完善基础画像' : '基础画像'}</h2>
             <p>保存后会随下一轮对话提交，帮助 Agent 调整解释深度和学习建议。</p>
+            <p className="profile-saved-status">
+              <span className={updatedAt ? 'profile-saved-dot is-saved' : 'profile-saved-dot'} aria-hidden="true" />
+              {updatedAt ? `已保存 · 更新于 ${formatProfileTime(updatedAt)}` : '尚未保存到云端'}
+            </p>
           </div>
           {!gate && (
             <button className="icon-button" type="button" onClick={onClose} aria-label="关闭资料弹窗" disabled={saving}>
@@ -174,6 +201,21 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
             </span>
           </div>
 
+          {history.length > 0 && (
+            <section className="profile-history" aria-label="最近画像存档">
+              <span className="field-label">最近存档（只读）</span>
+              <ul>
+                {history.map((item) => (
+                  <li key={item.id}>
+                    <span className="profile-history-time">{formatProfileTime(item.updated_at)}</span>
+                    <span className="profile-history-source">{sourceLabel(item.source)}</span>
+                    <span className="profile-history-summary">{historySummary(item)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <footer className="modal-footer">
             {!gate && (
               <button className="ghost-button" type="button" onClick={onClose} disabled={saving}>取消</button>
@@ -197,4 +239,40 @@ export function ProfileModal({ profile, gate = false, onSave, onClose }: Profile
 
 function isComplete(profile: ProfileForm): boolean {
   return Object.values(profile).every((value) => value.trim() !== '');
+}
+
+// formatProfileTime 把服务端的 RFC3339 时间转成本地可读时间；解析失败时原样展示，
+// 不能因为一个格式异常把整条存档隐藏掉。
+function formatProfileTime(value: string): string {
+  const date = new Date(value);
+  // Go time.Time 的零值代表“没有记录”，不能显示成 0001/01/01。
+  if (Number.isNaN(date.getTime()) || date.getUTCFullYear() <= 1) {
+    return '';
+  }
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function sourceLabel(source: string): string {
+  switch (source) {
+    case 'api':
+      return '手动保存';
+    case 'chat':
+      return '对话同步';
+    case 'legacy':
+      return '历史存档';
+    default:
+      return source || '存档';
+  }
+}
+
+// historySummary 用一行展示这条快照最有辨识度的内容。
+function historySummary(item: ProfileRevision): string {
+  const parts = [item.current_topic, item.current_stage, item.user_type].map((value) => value?.trim()).filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : '（空画像）';
 }

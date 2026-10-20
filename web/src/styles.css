@@ -2511,6 +2511,69 @@ textarea {
   transition: width 90ms steps(2);
 }
 
+.profile-saved-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+
+.profile-saved-dot {
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--rule);
+  background: var(--paper-deep);
+}
+
+.profile-saved-dot.is-saved {
+  border-color: var(--section-violet);
+  background: var(--section-violet);
+}
+
+.profile-history {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+}
+
+.profile-history ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-history li {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+
+.profile-history-time {
+  color: var(--ink-faint);
+}
+
+.profile-history-source {
+  padding: 0 4px;
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
+}
+
+.profile-history-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .form-hint {
   margin: 0;
   color: var(--ink-soft);

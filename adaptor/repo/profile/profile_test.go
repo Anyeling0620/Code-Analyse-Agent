@@ -63,7 +63,7 @@ func TestUpsertAndReadDescription(t *testing.T) {
 		Description:  "本科在读，正在用 Go + Eino 做 Agent 项目",
 		CurrentTopic: "Go Agent Eino 实战",
 		CurrentStage: "开发中",
-	}); err != nil {
+	}, do.ProfileSourceAPI); err != nil {
 		t.Fatalf("写入失败：%v", err)
 	}
 
@@ -90,7 +90,7 @@ func TestUpsertOverwritesDescriptionWhenProvided(t *testing.T) {
 	ctx := context.Background()
 
 	for _, description := range []string{"第一版描述", "第二版描述"} {
-		if err := repo.Upsert(ctx, &do.Profile{UserID: "u_update", Description: description}); err != nil {
+		if err := repo.Upsert(ctx, &do.Profile{UserID: "u_update", Description: description}, do.ProfileSourceChat); err != nil {
 			t.Fatalf("写入 %q 失败：%v", description, err)
 		}
 	}
@@ -103,13 +103,108 @@ func TestUpsertOverwritesDescriptionWhenProvided(t *testing.T) {
 	}
 }
 
+// 每次实际变更都要在同一事务里留下快照；内容没变则既不刷新 updated_at，
+// 也不产生重复快照（前端每轮对话都会带完整画像）。
+func TestUpsertWritesRevisionOnlyOnChange(t *testing.T) {
+	repo, _ := newTestRepo(t)
+	ctx := context.Background()
+	profile := &do.Profile{
+		UserID:       "u_rev",
+		UserType:     "student",
+		SkillLevel:   "入门",
+		CurrentTopic: "Eino",
+	}
+
+	if err := repo.Upsert(ctx, profile, do.ProfileSourceAPI); err != nil {
+		t.Fatalf("首次写入失败：%v", err)
+	}
+	if profile.UpdatedAt.IsZero() {
+		t.Fatal("首次写入后应把实际 updated_at 回填给调用方")
+	}
+	firstUpdatedAt := profile.UpdatedAt
+	// 完全相同的内容再写一次：不产生新快照，也不刷新 updated_at。
+	if err := repo.Upsert(ctx, profile, do.ProfileSourceChat); err != nil {
+		t.Fatalf("重复写入失败：%v", err)
+	}
+	if !profile.UpdatedAt.Equal(firstUpdatedAt) {
+		t.Fatalf("内容未变化时 updated_at 不该变化：%v -> %v", firstUpdatedAt, profile.UpdatedAt)
+	}
+	revisions, err := repo.ListRevisions(ctx, "u_rev", 10, 0)
+	if err != nil {
+		t.Fatalf("读取快照失败：%v", err)
+	}
+	if len(revisions) != 1 {
+		t.Fatalf("内容未变化时不该新增快照，实际 %d 条", len(revisions))
+	}
+	if revisions[0].Source != do.ProfileSourceAPI || revisions[0].CurrentTopic != "Eino" {
+		t.Fatalf("首条快照内容不符：%+v", revisions[0])
+	}
+
+	// 改一个字段：新增一条 chat 来源快照，并保留旧值。
+	changed := *profile
+	changed.CurrentTopic = "Eino 2"
+	if err := repo.Upsert(ctx, &changed, do.ProfileSourceChat); err != nil {
+		t.Fatalf("变更写入失败：%v", err)
+	}
+	revisions, err = repo.ListRevisions(ctx, "u_rev", 10, 0)
+	if err != nil {
+		t.Fatalf("读取快照失败：%v", err)
+	}
+	if len(revisions) != 2 {
+		t.Fatalf("变更后应有 2 条快照，实际 %d 条", len(revisions))
+	}
+	if revisions[0].CurrentTopic != "Eino 2" || revisions[0].Source != do.ProfileSourceChat {
+		t.Fatalf("最新快照应为 chat 来源且是新值：%+v", revisions[0])
+	}
+	if revisions[1].CurrentTopic != "Eino" {
+		t.Fatalf("旧快照应保留历史值：%+v", revisions[1])
+	}
+}
+
+// 历史快照按用户隔离、按时间倒序，并支持 limit/offset 分页。
+func TestListRevisionsScopesUserAndPaginates(t *testing.T) {
+	repo, _ := newTestRepo(t)
+	ctx := context.Background()
+
+	for _, topic := range []string{"t1", "t2", "t3"} {
+		if err := repo.Upsert(ctx, &do.Profile{UserID: "u_page", CurrentTopic: topic}, do.ProfileSourceAPI); err != nil {
+			t.Fatalf("写入 %q 失败：%v", topic, err)
+		}
+	}
+	if err := repo.Upsert(ctx, &do.Profile{UserID: "u_other", CurrentTopic: "other"}, do.ProfileSourceAPI); err != nil {
+		t.Fatalf("写入他人画像失败：%v", err)
+	}
+
+	first, err := repo.ListRevisions(ctx, "u_page", 2, 0)
+	if err != nil {
+		t.Fatalf("第一页失败：%v", err)
+	}
+	if len(first) != 2 || first[0].CurrentTopic != "t3" || first[1].CurrentTopic != "t2" {
+		t.Fatalf("第一页顺序/条数不符：%+v", first)
+	}
+	second, err := repo.ListRevisions(ctx, "u_page", 2, 2)
+	if err != nil {
+		t.Fatalf("第二页失败：%v", err)
+	}
+	if len(second) != 1 || second[0].CurrentTopic != "t1" {
+		t.Fatalf("第二页结果不符：%+v", second)
+	}
+	other, err := repo.ListRevisions(ctx, "u_other", 10, 0)
+	if err != nil {
+		t.Fatalf("读取他人快照失败：%v", err)
+	}
+	if len(other) != 1 || other[0].UserID != "u_other" {
+		t.Fatalf("快照未按用户隔离：%+v", other)
+	}
+}
+
 func newTestRepo(t *testing.T) (*Profile, *gorm.DB) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "profile.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("打开测试库失败：%v", err)
 	}
-	if err := db.AutoMigrate(&model.Profile{}); err != nil {
+	if err := db.AutoMigrate(&model.Profile{}, &model.ProfileRevision{}); err != nil {
 		t.Fatalf("建表失败：%v", err)
 	}
 	sqlDB, err := db.DB()

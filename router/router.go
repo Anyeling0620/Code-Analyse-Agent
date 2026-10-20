@@ -23,6 +23,7 @@ func routeRegister(app *gin.Engine, h *api.Handler) {
 	app.GET("/api/quota/today", h.QuotaToday)                // 用户当天调用量
 	app.GET("/api/profile", h.GetProfile)                    // 当前登录用户的画像（登录后回填表单）
 	app.PUT("/api/profile", h.SaveProfile)                   // 保存当前登录用户的画像（全量替换，保存即入库）
+	app.GET("/api/profile/history", h.GetProfileHistory)     // 当前登录用户的画像历史快照（分页）
 	app.GET("/api/cost/daily", h.CostDaily)                  // 用户当天的成本
 	app.GET("/api/cost/by_user", h.CostByUser)               // 按用户统计成本
 	app.GET("/api/cost/by_tool", h.CostByTool)               // 按工具统计成本

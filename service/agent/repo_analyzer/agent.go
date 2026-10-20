@@ -3,6 +3,7 @@ package repo_analyzer
 import (
 	"context"
 	"edu.agent.code/service/agent/force_answer"
+	"edu.agent.code/service/agent/userprofile"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/prebuilt/deep"
 	"github.com/cloudwego/eino/components/model"
@@ -45,6 +46,8 @@ func NewAnalyzerWithOptions(
 		MaxIteration:                 opts.MaxIterations,
 		TaskToolDescriptionGenerator: repoAnalyzerTaskToolDescription,
 		Handlers: []adk.ChatModelAgentMiddleware{
+			// 画像注入：AgentTool 转发历史时会过滤 system 消息，必须由中间件重新补上。
+			userprofile.NewMiddleware(),
 			force_answer.NewForceAnswerHandler(force_answer.Config{
 				MaxIterations: opts.MaxIterations,
 				ActiveKey:     repoAnalyzerForceReportActiveKey,
@@ -102,6 +105,11 @@ func newRepoAnalyzerSubAgent(
 				EmitInternalEvents: true,
 			},
 			MaxIterations: maxIterations,
+			// 二级子 Agent 只拿到任务描述，历史里的画像 system 消息不会跟过来，
+			// 同样依赖中间件从 context 注入当前画像。
+			Handlers: []adk.ChatModelAgentMiddleware{
+				userprofile.NewMiddleware(),
+			},
 		})
 		if err != nil {
 			return nil, err

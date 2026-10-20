@@ -1969,6 +1969,266 @@ textarea {
   line-height: 1.6;
 }
 
+/* ---- Mermaid lightbox ---------------------------------------------------- */
+
+.mermaid-open-surface {
+  cursor: zoom-in;
+  border-radius: var(--radius);
+  outline: 2px solid transparent;
+  outline-offset: 4px;
+}
+
+.mermaid-open-surface:focus-visible {
+  outline-color: var(--accent);
+}
+
+.mermaid-zoom-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 3vh 3vw;
+  background: rgba(11, 14, 13, 0.74);
+  overscroll-behavior: contain;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: mermaid-zoom-fade 160ms ease-out both;
+}
+
+.mermaid-zoom-dialog {
+  display: flex;
+  flex-direction: column;
+  width: 94vw;
+  height: 92vh;
+  max-width: 1720px;
+  overflow: hidden;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+  color: var(--ink);
+  box-shadow: 0 34px 90px -32px rgba(0, 0, 0, 0.8);
+  animation: mermaid-zoom-rise 180ms ease-out both;
+}
+
+.mermaid-zoom-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 7px 8px 7px 14px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper);
+}
+
+.mermaid-zoom-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.mermaid-zoom-title strong {
+  color: var(--ink);
+  font-family: var(--font-body, inherit);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.mermaid-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.mermaid-zoom-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--rule);
+}
+
+.mermaid-zoom-export {
+  position: relative;
+}
+
+.mermaid-zoom-menu {
+  top: calc(100% + 6px);
+  z-index: 10;
+}
+
+.mermaid-zoom-button,
+.mermaid-zoom-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 27px;
+  height: 27px;
+  padding: 0 7px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.mermaid-zoom-button:hover:not(:disabled),
+.mermaid-zoom-reset:hover {
+  border-color: var(--rule-strong);
+  background: var(--paper-deep);
+}
+
+.mermaid-zoom-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.mermaid-zoom-reset {
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+.mermaid-zoom-scale {
+  min-width: 44px;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.mermaid-zoom-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.mermaid-zoom-close:hover {
+  border-color: var(--rule);
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+/* 图纸固定用 Mermaid 自己的纸色舞台，深色主题下也不会把深色文字埋进暗底。 */
+.mermaid-zoom-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: #f8f5ec;
+  overscroll-behavior: contain;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.mermaid-zoom-stage.is-dragging {
+  cursor: grabbing;
+}
+
+.mermaid-zoom-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.mermaid-zoom-canvas[data-ready='false'] {
+  visibility: hidden;
+}
+
+.mermaid-zoom-canvas svg {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+.mermaid-zoom-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  padding: 4px 8px;
+  border: 1px solid rgba(27, 32, 36, 0.14);
+  border-radius: var(--radius);
+  background: rgba(248, 245, 236, 0.9);
+  color: rgba(60, 65, 58, 0.72);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@keyframes mermaid-zoom-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mermaid-zoom-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .mermaid-zoom-backdrop {
+    padding: 8px;
+  }
+
+  .mermaid-zoom-dialog {
+    width: 100%;
+    height: 100%;
+  }
+
+  .mermaid-zoom-title {
+    display: none;
+  }
+
+  .mermaid-zoom-hint {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mermaid-zoom-backdrop,
+  .mermaid-zoom-dialog {
+    animation: none;
+  }
+}
+
+@media print {
+  .mermaid-zoom-backdrop {
+    display: none !important;
+  }
+}
+
 /* ---- Composer ------------------------------------------------------------ */
 
 .composer {

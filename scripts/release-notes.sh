@@ -101,6 +101,9 @@ echo
 echo "| 项 | 值 |"
 echo "| --- | --- |"
 echo "| Commit | \`${short_sha}\` |"
+# 服务器部署脚本会从 Release 正文里正则抓第一个 40 位十六进制串当 commit，
+# 所以这里必须显式输出**完整 SHA**；只给短 SHA 会让它记成 unknown。
+echo "| 完整 SHA | ${SHA} |"
 echo "| 构建号 | ${RUN_NUMBER} |"
 echo "| 版本线 | \`${CURRENT_TAG}\` |"
 echo "| 滚动标签 | \`${ROLLING_TAG}\` |"

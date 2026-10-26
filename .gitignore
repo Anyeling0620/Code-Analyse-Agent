@@ -25,6 +25,11 @@ docs
 scripts
 deploy
 spec
+# 例外：CI 构建链需要它生成 Release 说明，必须随仓库分发。
+# （! 规则要求父目录未被整体排除，所以先放行 scripts 目录本身，再逐项忽略其它脚本。）
+!scripts/
+scripts/*
+!scripts/release-notes.sh
 
 # Agent 工作区与任务临时文件
 workspace

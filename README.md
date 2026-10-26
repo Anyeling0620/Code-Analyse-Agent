@@ -9,13 +9,16 @@
 | 能力 | 说明 |
 | ---- | ---- |
 | 仓库分析 | 给出 Git URL 或本机路径，自动 fetch 到工作区并输出固定 8 节的 Markdown 报告（含 Mermaid 图）。 |
+| 多镜像竞速 | 每次需要拉代码时，对候选镜像并发测速、选最快的那个克隆；单个镜像失效（如 TLS 握手失败）自动降级到下一名，全部不通再回退直连。 |
 | 项目问答 | 针对“当前项目”连续追问，例如某接口在哪实现、配置怎么加载、调用链怎么串。 |
 | 自省报表 | 基于 `agent_telemetry.run_metrics` 做只读查询，产出运行表现的中文 Markdown 自省报表；需开启 `self_report.enable` 且用户在 `self_report.allowed_users` 白名单中。 |
 | 项目级 RAG | 按项目隔离 Milvus collection，符号级切分 + 中文查询改写 + RRF 融合 + 重排，语义检索项目代码。 |
 | 结构化索引 | 项目级符号表 + 依赖/类型关系图，独立 SQLite、与 RAG 解耦；支持按符号名、文件依赖、继承/实现精确查询，覆盖 16 种语言。 |
 | 工具调用 | 本机终端命令、HTTP 请求、项目扫描/搜索、文件读取、Git 仓库拉取、RAG 检索、结构化索引查询、运行指标查询，以及 MCP 外部工具。 |
 | 流式对话 | SSE 逐事件下发（`ready`/`delta`/`reason`/`tool_call`/`tool_result`/`done`/`error` 等），前端 Markdown + Mermaid 渲染。 |
+| 跨会话并行 | 会话级流式句柄表：A 会话生成中可以切到 B 会话继续提问、也可以直接新建会话；切走只 detach 不中断后台执行，切回按 `lastSeq` 续接、不重复渲染。同会话内仍严格串行（前端闸门 + 后端 409 双重保险）。 |
 | 断连续传 | run 与 HTTP 请求解绑，客户端断线/刷新后按 `Last-Event-ID` 回放并继续跟随。 |
+| 首问即建标签 | 发出第一条消息时侧栏立刻出现该会话，不必等整轮回答结束；拿到服务端 `session_id` 后在原位替换，期间的后台刷新不会把它冲掉。 |
 | 审批中断恢复 | 高危终端命令需人工审批，审批后从 checkpoint 复用同一条 run 继续执行。 |
 | 崩溃续跑 | 进程重启时把遗留 `running` run 标记为 `interrupted`，前端可回放已落库内容。 |
 | 降级收尾 | 子 Agent 达到最大迭代轮次时注入收尾指令并清空工具列表，基于已有证据直接作答；run 标记 `degraded`，原因记为 `max_iterations` / `error_partial`。 |
@@ -210,7 +213,7 @@ npm run build # 产物输出到 web/dist
 | `redis` | 登录令牌与邮箱验证码存储；启动时探活，连接失败直接退出。 |
 | `deepseek` | 主对话模型（OpenAI 兼容协议）。 |
 | `model_price` | 各模型输入 / 缓存命中 / 输出单价，用于成本计算。 |
-| `workspace` | 仓库工作区根目录、克隆超时、仓库大小上限、Git 镜像前缀、目录逃逸开关。 |
+| `workspace` | 仓库工作区根目录、克隆超时、仓库大小上限、Git 镜像前缀（**支持逗号分隔多候选，拉取前自动测速选最快**；留空用内置候选，写 `-` 关闭镜像）、目录逃逸开关。 |
 | `telemetry` | run 指标异步写入 `agent_telemetry` 的连接、队列长度与写超时。 |
 | `self_report` | 自省报表的只读数据源、`allowed_users` 白名单与最大迭代轮次。 |
 | `code_index` | 项目级结构化索引：开关、独立 SQLite 路径、单文件/项目规模上限与返回条数。 |
@@ -280,6 +283,30 @@ POST /api/chat/stream ─► StartChatRun（落 chat_runs）
 
 高危终端命令会经 `terminal.ApprovalMiddleware` 中断本轮，把 pending 与 checkpoint 写入 `approvals`，run 落到 `interrupted`。用户审批后 `POST /api/chat/resume` 用 pending 的 checkpoint 命中同一条 run，`seq` 连续、不重复回放，恢复后继续产出事件。
 
+### 跨会话并行与同会话串行
+
+前端用**会话级句柄表**（`web/src/api/runRegistry.ts`）替代了原来的单一 `isStreaming` 布尔：每个 `sessionId` 独立持有 `runId` / `lastSeq` / `assistantId` / `AbortController`。「切走」只把该句柄标记为 `detached`（保活连接、停止更新视口），只有用户主动点停止、登出或 LRU 淘汰才 `abort`。
+
+```text
+会话 A 生成中 ──切到 B──► A 句柄 detached（后台继续收事件、写库）
+                           │
+                     B 正常发起 run（并行）
+                           │
+        ◄──切回 A──────────┘  attachRun({ afterSeq: lastSeq }) 续接，不重复渲染
+```
+
+增量按**消息 id** 投影（`web/src/chat/sessionStreamBuffer.ts`），因此后台会话的 delta 不可能写到当前展示的另一会话上。同会话串行有两道闸门：前端 `registry.begin()` 对同会话二次登记抛错；后端 `sessionRunGuard` 在**读历史窗口之前**抢占会话执行权，第二个请求直接收 `SessionBusy(409)`。
+
+> 两个闸门职责不同，不是冗余：前端防的是"页面内状态互踩"，后端防的是"历史窗口快照互踩"（多标签页、刷新后重发、LRU 淘汰后回来再提交等场景前端管不到）。后端 409 带 `run_id`，前端据此直接挂到已有 run 继续接收。
+
+### 多镜像竞速拉取
+
+`repo_fetch` 每次真正需要联网拉代码时（首次克隆或刷新），对 `workspace.git_mirror_prefix` 里的候选镜像**并发测速**——探测的是 `<镜像><仓库>/info/refs?service=git-upload-pack`，即 git clone 的第一步，拿到响应头就够判断链路通不通、有多快，不下载对象。
+
+选择顺序即尝试顺序：**测速最快的镜像 → 其余候选按配置顺序 → 原始地址直连**。某个地址失败会清掉半成品换下一个，最后一项永远是直连兜底，因此"所有镜像都不通"只会变慢、不会拉不下来。
+
+> 每次拉取都重新测速是刻意的：镜像的可用性会变（实测有镜像直接 TLS 握手失败），缓存上一次的选择反而容易挑到已经劣化的入口。配置留空使用内置候选，显式写 `-` 才表示关闭镜像、纯直连。
+
 ### 项目级 RAG 隔离
 
 `repo_fetch` 成功后会回写会话的“当前项目”并异步触发建索引。项目 ID 由 git remote 优先派生，非 git 目录退回本地绝对路径；GitHub 镜像地址会先归一化，因此同一个仓库在不同目录或镜像写法下会复用同一套索引。每个项目使用独立 Milvus collection（`基础名_项目ID`），写入与召回都只针对该集合，检索侧再用元数据二次校验。切分优先按源码符号结构，失败时回退通用递归切分；查询改写、RRF 融合与重排均可按配置开关。
@@ -337,6 +364,10 @@ CI（`.github/workflows/deploy.yml`）在 push 到 `main` 时构建一次，并�
 - `code-analyse-agent.gz`（Linux amd64 后端二进制）
 - `web-dist.tar.gz`（前端静态产物）
 - `version.json`（commit、release tag 与各产物 sha256）
+
+每次推送 `main` 都会构建并更新两个 Release（`release-latest` 滚动 + `release-<版本线>`），**Release 说明由 `scripts/release-notes.sh` 自动生成**：以上一个 `release-*` 标签为基线，汇总本次提交（按 `feat` / `fix` / 其它归类）、变更规模与构建信息，因此每个版本页面都能直接看出这一版改了什么。
+
+> 生成依赖完整 git 历史，CI 的 `actions/checkout` 必须带 `fetch-depth: 0`（浅克隆会让提交清单为空）。
 
 服务器侧由 systemd timer 每分钟执行 `analyse-deploy.sh`（部署脚本与 `/etc/analyse-deploy.conf` 在服务器本地维护，不在本仓库）主动拉取 Release，用 `api.github.com` 的 ETag 条件请求判版本、按产物指纹判是否需要重启；下载走镜像链并校验 sha256，后端原子替换 + `/healthz` 健康检查 + 失败回滚。部署哪个版本由 `/etc/analyse-deploy.conf` 的 `RELEASE_TAG` 决定：
 

@@ -24,6 +24,13 @@ import {
 } from './chat/messageSegments';
 import { applyBufferUpdates, mergeLiveMessages, mergeRunUpdateBuffers, projectRunUpdates, resolveTargetMessageId, shouldAcceptRunEvent } from './chat/sessionStreamBuffer';
 import type { RunUpdateBuffer } from './chat/sessionStreamBuffer';
+import {
+  PENDING_SESSION_PREFIX,
+  insertPendingSession,
+  mergeRemoteWithPending,
+  removePendingSession,
+  replacePendingSession,
+} from './sessions/sessionList';
 import { Composer } from './composer/Composer';
 import { loadProfile, profileFromServer, saveProfile as cacheProfile } from './profile/storage';
 import { fetchProfile, saveProfileToServer } from './profile/api';
@@ -348,7 +355,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
 
   function ensurePendingSessionKey(): string {
     if (!pendingSessionKeyRef.current) {
-      pendingSessionKeyRef.current = `pending:${crypto.randomUUID()}`;
+      pendingSessionKeyRef.current = `${PENDING_SESSION_PREFIX}${crypto.randomUUID()}`;
     }
     return pendingSessionKeyRef.current;
   }
@@ -577,7 +584,11 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     setIsLoadingSessions(true);
     try {
       const page = await fetchJSON<PaginatedSessionList>(`/api/sessions?page=1&limit=${SESSION_PAGE_LIMIT}`);
-      setSessions(page.list);
+      // 直接覆盖会把本地占位会话冲掉——新会话刚发出首问、服务端还没返回列表时，
+      // 任何一次后台刷新（健康检查、成本指标、其它会话结束）都会让侧栏那条
+      // "正在生成的会话"凭空消失。所以把服务端列表与本地占位合并：
+      // 服务端已经能查到的用服务端数据，查不到的占位继续留着。
+      setSessions((current) => mergeRemoteWithPending(current, page.list));
       setSessionPage(page.page);
       setHasMoreSessions(page.has_more);
       setPanelError('');
@@ -588,6 +599,8 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     }
   }
 
+  // mergeRemoteWithPending 用服务端列表刷新，但保留尚未落到服务端的本地占位项。
+  // 具体合并规则在 sessions/sessionList.ts（纯函数，可单测）。
   async function loadMoreSessions() {
     if (isLoadingSessions || isLoadingMoreSessionsRef.current || !hasMoreSessions) {
       return;
@@ -615,6 +628,20 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   // 跨会话并行之后这里**不再有闸门**：切走 = detach（后台 run 保活继续接收，
   // 只是不再更新视口），切回 = 把那一轮的本地消息合并回视口继续接收。
   async function loadSession(nextSessionId: string) {
+    // 点中的是"本地待定会话"：它服务端还不存在，不能去请求它的详情。
+    // 这种会话只可能有一个（=当前正在发起首问的那个），此时用户其实已经停在那儿了，
+    // 直接忽略即可；如果待定键已经变了（说明它已被替换或作废），也无需处理。
+    if (nextSessionId.startsWith(PENDING_SESSION_PREFIX)) {
+      if (nextSessionId === pendingSessionKeyRef.current) {
+        return;
+      }
+      // 陈旧占位（对应的句柄已不存在）：直接把它从列表里摘掉，避免点了没反应。
+      const staleHandle = registry.get(nextSessionId);
+      if (!staleHandle) {
+        setSessions((current) => current.filter((item) => item.session_id !== nextSessionId));
+        return;
+      }
+    }
     const previousOwnerKey = currentOwnerKey();
     if (previousOwnerKey && previousOwnerKey !== nextSessionId) {
       // 离开前先把当前这一轮（可能正在生成）落进缓存，切回来才有东西可渲染。
@@ -625,7 +652,10 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
         registry.markDetached(previousHandle);
       }
       // 离开"还没落库的新会话"后，待定键就作废了（它可能还在后台跑）。
-      pendingSessionKeyRef.current = '';
+      // 但若目标本身就是那个待定会话，则不能清——否则切回来就找不到了。
+      if (!nextSessionId.startsWith(PENDING_SESSION_PREFIX)) {
+        pendingSessionKeyRef.current = '';
+      }
     }
     const token = sessionLoadTokenRef.current + 1;
     sessionLoadTokenRef.current = token;
@@ -1149,6 +1179,29 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     return handle;
   }
 
+  // insertPendingSessionItem 在首问时先往侧栏插一条本地占位会话。
+  //
+  // 为什么需要它：新会话在服务端还没有 session_id（要等首次请求建出来），而
+  // 会话列表只在整轮流式结束后才 refreshSessions()——如果什么都不做，用户在
+  // 整个生成过程中看不到"我刚问的这个会话"，切走之后就找不回来。
+  //
+  // 具体列表操作在 sessions/sessionList.ts 里，是纯函数、可单测。
+  function insertPendingSessionItem(pendingKey: string, firstMessage: string) {
+    setSessions((current) =>
+      insertPendingSession(current, pendingKey, firstMessage, authSession.user_id, new Date().toISOString()),
+    );
+  }
+
+  // removePendingSessionItem 摘掉一条本地占位会话（首问失败、或陈旧占位被点中）。
+  function removePendingSessionItem(pendingKey: string) {
+    setSessions((current) => removePendingSession(current, pendingKey));
+  }
+
+  // replacePendingSessionItem 把占位键换成服务端真实 id。
+  function replacePendingSessionItem(pendingKey: string, serverSessionId: string) {
+    setSessions((current) => replacePendingSession(current, pendingKey, serverSessionId));
+  }
+
   // adoptServerSessionId 处理新建会话：服务端给出了 session_id 之后，
   // 把句柄与 live 记录一起搬到真正的键上。只有用户仍停在这个（尚未命名的）
   // 会话上时才把视图切过去，避免后台会话把视图拽走。
@@ -1158,6 +1211,11 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     }
     const previousKey = handle.sessionId;
     const wasPending = previousKey !== '' && previousKey === pendingSessionKeyRef.current;
+    // 侧栏占位项换成真实 id：必须在 wasPending 分支之外也做，
+    // 因为用户可能已经切走（视图不跟），但标签仍然该换成真实会话。
+    if (previousKey) {
+      replacePendingSessionItem(previousKey, serverSessionId);
+    }
     registry.rekey(previousKey, serverSessionId);
     if (wasPending) {
       pendingSessionKeyRef.current = '';
@@ -1186,6 +1244,13 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     if (registry.isBusy(ownerSessionId)) {
       setPanelError('该会话正在生成回复，等它结束后再发下一条（其他会话不受影响）。');
       return;
+    }
+
+    // 首问即建标签：新会话在服务端还没有 session_id，但如果等"整轮回复结束才刷新列表"，
+    // 用户会在整个生成过程中看不到自己刚问的这个会话——切回来也找不到入口。
+    // 所以先在侧栏插一条本地占位项（session_id 用待定键），拿到服务端 id 后再替换。
+    if (!requestSessionId) {
+      insertPendingSessionItem(ownerSessionId, message);
     }
 
     const userMessage: ChatMessage = {
@@ -1318,6 +1383,13 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       registry.finish(handle);
       liveRunsRef.current.delete(handle);
       invalidateActiveSessionCache(finalSessionId);
+      // 首问就失败、始终没拿到服务端 session_id：占位会话留着没有意义
+      // （点它只会落进"陈旧占位"分支），直接摘掉，避免侧栏堆一条打不开的空会话。
+      // 注意只在它仍是待定键时才清：一旦拿到真实 id，说明会话已真实存在，
+      // 该保留（哪怕这一轮因为报错提前结束）。
+      if (finalSessionId.startsWith(PENDING_SESSION_PREFIX)) {
+        removePendingSessionItem(finalSessionId);
+      }
       void checkHealth();
       void refreshMetrics();
       void refreshSessions();

@@ -33,6 +33,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 必须拉完整历史：Release 说明要用 git log 生成提交清单、
+          # 用 git describe 找上一个 release tag，浅克隆（默认 depth=1）两者都拿不到。
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -103,8 +107,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          notes=$(printf 'commit: %s\nrun: %s\nrelease: %s\nrolling: %s\n' \
-            "$GITHUB_SHA" "$GITHUB_RUN_NUMBER" "$CURRENT_RELEASE_TAG" "$ROLLING_RELEASE_TAG")
+          # Release 说明由独立脚本生成（便于本地测试与复用），见 scripts/release-notes.sh
+          notes="$(bash ../scripts/release-notes.sh "$GITHUB_SHA" "$CURRENT_RELEASE_TAG" "$ROLLING_RELEASE_TAG" "$GITHUB_RUN_NUMBER")"
+          echo "---- release notes ----"
+          echo "$notes"
+          echo "-----------------------"
           # 先发版本线，再发 rolling release，确保 GitHub 的 Latest 标记落在 release-latest 上。
           for tag in "$CURRENT_RELEASE_TAG" "$ROLLING_RELEASE_TAG"; do
             echo "== publishing $tag =="

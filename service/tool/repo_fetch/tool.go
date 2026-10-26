@@ -178,11 +178,28 @@ func (o *options) fetchRemote(ctx context.Context, workspace config.WorkSpace, s
 	timeout := o.timeout(workspace)
 	// 需要加速时只替换"拉代码用的地址"：project_id、目录名、origin 都保持原始地址，
 	// 否则同一个仓库会因为走了镜像而多出一份身份，导致索引与会话上下文对不上。
-	mirrorPrefix := resolveMirrorPrefix(workspace.GitMirrorPrefix)
+	//
+	// 镜像选择分两种情况：
+	//   · 复用已有仓库且不需要刷新 → 根本不发起网络请求，不必测速；
+	//   · 需要真正拉代码（首次克隆 / refresh）→ 对候选镜像并发测速，选最快的那个。
+	// 每次拉取都重新测速是刻意的：镜像的可用性和速度会随时间变化（实测有镜像
+	// 会直接 TLS 握手失败），缓存上一次的选择反而容易挑到已经劣化的入口。
+	mirrorCandidates := expandMirrorCandidates(workspace.GitMirrorPrefix)
+	mirrorPrefix := ""
+	needNetwork := refresh || !isGitRepository(ctx, o.runner, target)
+	if needNetwork {
+		mirrorPrefix = pickFastestMirror(ctx, mirrorCandidates, source)
+	} else {
+		// 不发请求，按候选首项构造地址仅用于日志与 origin 一致性，不会真的联网。
+		mirrorPrefix = resolveMirrorPrefix(workspace.GitMirrorPrefix)
+	}
 	cloneURL, mirrored := mirrorGitURL(source, mirrorPrefix)
 	if mirrored {
 		logger.Info("repo_fetch use git mirror source=%s mirror=%s", redactCredentials(source), redactCredentials(cloneURL))
 	}
+	// 按优先级排好的拉取地址列表：测速最快的镜像在前，其余镜像按配置顺序降级，
+	// 最后一定是原始地址直连——保证"所有镜像都不通"时仍能跑通（只是可能很慢）。
+	cloneURLs := buildCloneURLs(source, mirrorCandidates, mirrorPrefix)
 	reused := false
 	switch {
 	case isGitRepository(ctx, o.runner, target):
@@ -202,7 +219,7 @@ func (o *options) fetchRemote(ctx context.Context, workspace config.WorkSpace, s
 				return Result{}, fmt.Errorf("清理半成品目录失败：%w", err)
 			}
 		}
-		if err := o.cloneRepo(ctx, source, cloneURL, target, ref, timeout); err != nil {
+		if err := o.cloneRepo(ctx, source, cloneURLs, target, ref, timeout); err != nil {
 			return Result{}, err
 		}
 	}
@@ -242,9 +259,11 @@ func (o *options) fetchRemote(ctx context.Context, workspace config.WorkSpace, s
 
 // cloneRepo 把仓库克隆到 target。
 //
-// source 是用户给出的原始地址（仓库身份），cloneURL 是实际用于拉取的地址（可能是镜像）。
-// 两者不同时：失败会自动回退到原始地址重试一次，成功后把 origin 写回原始地址。
-func (o *options) cloneRepo(ctx context.Context, source, cloneURL, target, ref string, timeout time.Duration) error {
+// source 是用户给出的原始地址（仓库身份），cloneURLs 是按优先级排好序的候选拉取地址
+// （第一个是测速最快的镜像，其后是其它镜像的降级顺序，最后一项是原始地址直连）。
+// 逐个尝试：某个地址失败就清掉半成品、换下一个，全部失败才报错。
+// 成功后把 origin 写回原始地址，保证仓库身份稳定。
+func (o *options) cloneRepo(ctx context.Context, source string, cloneURLs []string, target, ref string, timeout time.Duration) error {
 	buildArgs := func(url string) []string {
 		args := []string{"clone", "--depth=1", "--single-branch"}
 		if ref != "" {
@@ -253,25 +272,38 @@ func (o *options) cloneRepo(ctx context.Context, source, cloneURL, target, ref s
 		// "--" 之后一律按位置参数处理，避免 source 被当作 git 选项。
 		return append(args, "--", url, target)
 	}
-	_, err := o.runner.Run(ctx, "", timeout, buildArgs(cloneURL)...)
-	if err != nil && cloneURL != source {
-		// 镜像不可用不能等于"拉不下来"：回退直连再试一次。
-		logger.Warn("repo_fetch mirror clone failed, retry origin source=%s err=%v", redactCredentials(source), err)
-		_ = os.RemoveAll(target)
-		_, err = o.runner.Run(ctx, "", timeout, buildArgs(source)...)
+	// 兜底：候选为空时至少直连一次，绝不因为"没有镜像"就放弃。
+	if len(cloneURLs) == 0 {
+		cloneURLs = []string{source}
 	}
-	if err != nil {
-		// clone 失败可能留下空目录，清掉避免下次被误判为已有仓库。
+
+	var lastErr error
+	usedURL := ""
+	for idx, url := range cloneURLs {
+		usedURL = url
+		_, err := o.runner.Run(ctx, "", timeout, buildArgs(url)...)
+		if err == nil {
+			if idx > 0 {
+				logger.Info("repo_fetch clone succeeded on fallback attempt index=%d url=%s", idx, redactCredentials(url))
+			}
+			if url != source {
+				// origin 固定回用户原始地址：describeRemote / project_id 都依赖它保持稳定。
+				if _, setErr := o.runner.Run(ctx, target, timeout, "remote", "set-url", "origin", source); setErr != nil {
+					logger.Warn("repo_fetch reset origin url failed target=%s err=%v", target, setErr)
+				}
+			}
+			return nil
+		}
+		lastErr = err
+		// 失败可能留下空目录或半成品：清掉，否则下一次尝试会撞上"目录已存在"。
 		_ = os.RemoveAll(target)
-		return fmt.Errorf("克隆仓库失败（%s）：%w", redactCredentials(source), err)
-	}
-	if cloneURL != source {
-		// origin 固定回用户原始地址：describeRemote / project_id 都依赖它保持稳定。
-		if _, setErr := o.runner.Run(ctx, target, timeout, "remote", "set-url", "origin", source); setErr != nil {
-			logger.Warn("repo_fetch reset origin url failed target=%s err=%v", target, setErr)
+		if idx < len(cloneURLs)-1 {
+			logger.Warn("repo_fetch clone attempt failed, trying next url=%s err=%v", redactCredentials(url), err)
 		}
 	}
-	return nil
+
+	_ = usedURL
+	return fmt.Errorf("克隆仓库失败（%s）：%w", redactCredentials(source), lastErr)
 }
 
 // updateRepo 刷新已有仓库：默认分支走 fetch + 硬重置，指定 ref 时切到 FETCH_HEAD。

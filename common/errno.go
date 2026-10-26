@@ -1,5 +1,7 @@
 package common
 
+import "errors"
+
 type Errno struct {
 	Code   int    `json:"code"`
 	Msg    string `json:"msg"`
@@ -60,6 +62,32 @@ var (
 	SessionNotFound = Errno{Code: 400, Msg: "会话不存在"}
 	// ShareLinkInvalid 是分享令牌不存在、已撤销或已过期。
 	ShareLinkInvalid = Errno{Code: 400, Msg: "分享链接无效或已失效"}
+	// SessionBusy 是同一会话已有正在执行的回答时再次提交。
+	//
+	// 用 409（Conflict）而不是 429：这不是限流，而是"与当前资源状态冲突"，
+	// 前端可以据此区分"稍后重试"与"这条会话已经有一条在跑"，从而决定是提示用户
+	// 等待，还是挂到那条 run 上继续接收（见 GetActiveRun）。Msg 会直接展示给用户。
+	SessionBusy = Errno{Code: 409, Msg: "该会话已有正在生成的回答，请等待完成或先停止"}
 
 	DatabaseError = Errno{Code: 10001, Msg: "DatabaseError"}
 )
+
+// ErrSessionBusy 是 SessionBusy 的错误哨兵，供 errors.Is 判定。
+//
+// 用指针是必须的：Errno.Error() 定义在 *Errno 上，值类型本身不实现 error，
+// 也就不可能作为 errors.Is 的 target。服务层不直接返回 Errno 值，而是返回
+// 包一层的业务错误（带 run_id 等字段）并 Unwrap 到它，这样既保留上下文，
+// 又让上层能一行判定"这是会话忙"，翻译成 409。
+var ErrSessionBusy = &SessionBusy
+
+// AsErrno 把业务层错误翻译成对外响应码。
+//
+// 命中已知业务错误时返回对应 Errno（保留 Code/Msg，前端据此区分场景）；
+// 未命中返回 (ServerError, false)，由调用方决定是否再包一层 WithError。
+// 收敛在这里，是为了让「新增一个业务错误」只改这一处，不必在每个 handler 里写 switch。
+func AsErrno(err error) (Errno, bool) {
+	if err != nil && errors.Is(err, ErrSessionBusy) {
+		return SessionBusy, true
+	}
+	return ServerError, false
+}

@@ -66,6 +66,11 @@ func (s *Service) StartChatRun(ctx context.Context, req dto.ChatRequest) (string
 	}
 	bgCtx := context.WithoutCancel(runCtx)
 	go func() {
+		// 归还顺序很关键：defer 是后进先出。
+		// 先注册释放会话权、再注册 recoverRun，就能保证 **recoverRun 先执行**——
+		// panic 时由它把 run 收敛成 failed 并关闭 topic，然后才释放会话权。
+		// 反过来会出现「会话已被下一个请求占用，而上一条 run 还没标终态」的窗口。
+		defer s.endSessionRun(prep.userID, prep.session.SessionID)
 		defer s.recoverRun(bgCtx, prep.runID)
 		if _, err := s.executeRun(bgCtx, prep); err != nil {
 			logger.Error("conversation run failed",
@@ -89,6 +94,8 @@ func (s *Service) StartResumeRun(ctx context.Context, req *dto.ChatResumeRequest
 	}
 	bgCtx := context.WithoutCancel(runCtx)
 	go func() {
+		// 与 StartChatRun 同理：recoverRun 先收敛 run，再归还会话执行权。
+		defer s.endSessionRun(prep.userID, prep.sessionID)
 		defer s.recoverRun(bgCtx, prep.runID)
 		if err := s.executeResumeRun(bgCtx, prep); err != nil {
 			logger.Error("conversation resume run failed",
@@ -342,7 +349,11 @@ func (s *Service) publishRunEvent(ctx context.Context, runState *dto.ChatRunStat
 }
 
 // prepareChatRun 完成一轮对话的全部同步准备，并落一条 running 的 run 记录。
-func (s *Service) prepareChatRun(ctx context.Context, req dto.ChatRequest) (context.Context, *chatRunPrep, error) {
+//
+// 错误返回里的 err 必须显式命名：函数在中途抢占了「该会话的执行权」，
+// 一旦后续步骤失败就要归还，否则这条会话会被永久锁死。用命名返回值 +
+// defer 判定，比在每一条 return 前手写一次释放更不容易漏。
+func (s *Service) prepareChatRun(ctx context.Context, req dto.ChatRequest) (_ context.Context, _ *chatRunPrep, err error) {
 	userID := req.UserID
 	profile, err := s.prepareProfile(ctx, userID, req.Profile)
 	if err != nil {
@@ -354,6 +365,23 @@ func (s *Service) prepareChatRun(ctx context.Context, req dto.ChatRequest) (cont
 		logger.Error("prepareSession failed", zap.Error(err), zap.Any("req", req))
 		return nil, nil, err
 	}
+	// 同会话串行：抢占执行权必须发生在「读历史窗口」之前。
+	// 历史快照（buildMessageWithHistory → ListMessages limit=20）就是同会话并发的
+	// 互踩点：两个请求各自读到同一份历史，各自追加，后完成的那轮会覆盖前者。
+	// 因此闸门放在读历史之前，而不是落 chat_runs 之前。
+	if err := s.beginSessionRun(ctx, userID, session.SessionID); err != nil {
+		logger.Warn("current session already has a running answer",
+			zap.String("user_id", userID),
+			zap.String("session_id", session.SessionID),
+			zap.Error(err))
+		return nil, nil, err
+	}
+	// 成功返回时执行权移交给后台 goroutine，由它负责释放；只有失败才在这里归还。
+	defer func() {
+		if err != nil {
+			s.endSessionRun(userID, session.SessionID)
+		}
+	}()
 	ctx = common.WithUserAndSession(ctx, userID, session.SessionID)
 	updateProjectContextFromMessage(session, req.Message)
 	ctx = withTurnSession(ctx, session)
@@ -401,6 +429,8 @@ func (s *Service) prepareChatRun(ctx context.Context, req dto.ChatRequest) (cont
 			logger.Error("create chat run failed", zap.Error(err), zap.Any("prep", prep))
 			return nil, nil, err
 		}
+		// 回填占用者 run_id：并发请求被拒时会把它带进错误里，前端据此直接挂到那条 run。
+		s.sessionRuns.bind(userID, session.SessionID, runID)
 	}
 	return ctx, prep, nil
 }
@@ -435,6 +465,25 @@ func (s *Service) prepareResumeRun(ctx context.Context, req *dto.ChatResumeReque
 
 	ctx = common.WithUserAndSession(ctx, pending.UserID, pending.SessionID)
 	ctx = common.WithCheckPointID(ctx, pending.CheckPointID)
+
+	// 审批恢复同样会起一条 goroutine 执行该会话，必须走同一道串行闸门，
+	// 否则「一条 running + 一次 resume」就能让同一会话并行两条执行流。
+	// 注意被恢复的 run 此刻通常还是 interrupted（不拦），但若它已经是 running
+	// （例如并发的两次 resume 点击），第二次就会被这里拒掉。
+	if err := s.beginSessionRun(ctx, pending.UserID, pending.SessionID); err != nil {
+		logger.Warn("resume rejected: session already has a running answer",
+			zap.String("user_id", pending.UserID),
+			zap.String("session_id", pending.SessionID),
+			zap.Error(err))
+		return nil, 0, nil, err
+	}
+	resumeAcquired := true
+	// 恢复准备阶段的失败要归还执行权；成功时移交给后台 goroutine，由它释放。
+	defer func() {
+		if resumeAcquired {
+			s.endSessionRun(pending.UserID, pending.SessionID)
+		}
+	}()
 
 	// 恢复前重新读一次画像：中断可能等待很久，期间用户可能已经改了资料。
 	// 这里必须从库里取当前值，不能依赖启动那轮时写进 checkpoint 的旧消息。
@@ -494,11 +543,15 @@ func (s *Service) prepareResumeRun(ctx context.Context, req *dto.ChatResumeReque
 		}
 		prep.runID = existing.RunID
 		prep.startedAt = existing.StartedAt
+		// 回填占用者，供被拒的并发请求定位到底挂哪条 run。
+		s.sessionRuns.bind(pending.UserID, pending.SessionID, prep.runID)
 	} else {
 		prep.runID = common.GetUUIDHex()
 		prep.startedAt = time.Now()
 	}
 
+	// 准备全部成功：执行权移交给 StartResumeRun 起的后台 goroutine，此处不再归还。
+	resumeAcquired = false
 	return prep, afterSeq, ctx, nil
 }
 

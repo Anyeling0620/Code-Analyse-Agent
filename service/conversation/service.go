@@ -43,6 +43,11 @@ type Service struct {
 	// 事件真身在 chat_run_events，broker 只做"正在看这条 run 的客户端"的转发。
 	runs   run.IRun
 	broker *runBroker
+	// sessionRuns 是「同会话串行」的进程内守卫：同一 user+session 同时只允许一条
+	// 正在执行的 run。它只拦 running，不拦 interrupted（后者没有 goroutine 在跑，
+	// 属于等待审批恢复的状态，仍应允许继续提问或走 /api/chat/resume）。
+	// 零值可用（map 懒初始化），因此字面量构造 Service 的单测不必显式初始化。
+	sessionRuns sessionRunGuard
 
 	cost *cost.Service
 	rag  *rag.Service

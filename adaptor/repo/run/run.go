@@ -23,7 +23,15 @@ type IRun interface {
 	GetByID(ctx context.Context, runID string) (*do.ChatRun, error)
 	GetByCheckpointID(ctx context.Context, checkpointID string) (*do.ChatRun, error)
 	// GetActiveBySession 取该用户该会话下最近一条仍可续跑的 run（running / interrupted）。
+	// 注意它是"可续传"语义，**不能**当作"是否正在执行"的判据：
+	// interrupted 的 run 在等审批恢复，此时允许用户继续提问。
 	GetActiveBySession(ctx context.Context, userID, sessionID string) (*do.ChatRun, error)
+	// GetRunningBySession 取该用户该会话下唯一一条正在执行的 run（仅 running）。
+	//
+	// 它是「同会话串行」的判据：只要返回非 nil，就说明这条会话上已经有一个
+	// 正在跑的 goroutine，再起一条会互踩历史窗口快照。interrupted 不在查询范围内，
+	// 因为审批中断的 run 并没有 goroutine 在跑，拦掉它会打断 /api/chat/resume。
+	GetRunningBySession(ctx context.Context, userID, sessionID string) (*do.ChatRun, error)
 	UpdateStatus(ctx context.Context, runID, status string, extra map[string]any) error
 	// AppendEvent 落库一条事件并返回它分配到的 seq。
 	AppendEvent(ctx context.Context, runID, sessionID, userID, eventType string, payload []byte) (int64, error)
@@ -112,6 +120,30 @@ func (r *Run) GetActiveBySession(ctx context.Context, userID, sessionID string) 
 	err := r.db.WithContext(ctx).
 		Where("user_id = ? AND session_id = ? AND status IN ?", userID, sessionID,
 			[]string{do.RunStatusRunning, do.RunStatusInterrupted}).
+		Order("started_at DESC, run_id DESC").
+		First(&row).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return toDomain(&row), nil
+}
+
+// GetRunningBySession 只查 status = running 的 run。
+//
+// 与 GetActiveBySession 的差别就是查询条件里的状态集合：这里故意把 interrupted
+// 排除在外。同会话串行要拦的是"已经有一个 goroutine 在跑"，而 interrupted 表示
+// goroutine 早就结束了、只剩下一个待审批的 checkpoint，此时允许用户继续对话。
+func (r *Run) GetRunningBySession(ctx context.Context, userID, sessionID string) (*do.ChatRun, error) {
+	if userID == "" || sessionID == "" {
+		return nil, nil
+	}
+	var row model.ChatRun
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND session_id = ? AND status = ?", userID, sessionID,
+			do.RunStatusRunning).
 		Order("started_at DESC, run_id DESC").
 		First(&row).Error
 	if err != nil {

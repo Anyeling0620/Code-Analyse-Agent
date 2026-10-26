@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { InterruptModal } from './InterruptModal';
 import { fetchJSON } from './api/client';
-import { attachRun, readActiveRun, resumeChatRun, streamChatRun, type RunStreamPhase } from './api/runStream';
+import { attachRun, readActiveRun, resumeChatRun, streamChatRun, SessionBusyError, type RunStreamPhase } from './api/runStream';
+import { RunRegistry, type RunHandle } from './api/runRegistry';
 import { LoginModal } from './auth/LoginModal';
 import { clearSession, getSession, saveSession, subscribeSession } from './auth/session';
 import type { AuthSession } from './auth/session';
@@ -21,6 +22,8 @@ import {
   messageRecordToChatMessage,
   resolveStreamEventType,
 } from './chat/messageSegments';
+import { applyBufferUpdates, mergeLiveMessages, mergeRunUpdateBuffers, projectRunUpdates, resolveTargetMessageId, shouldAcceptRunEvent } from './chat/sessionStreamBuffer';
+import type { RunUpdateBuffer } from './chat/sessionStreamBuffer';
 import { Composer } from './composer/Composer';
 import { loadProfile, profileFromServer, saveProfile as cacheProfile } from './profile/storage';
 import { fetchProfile, saveProfileToServer } from './profile/api';
@@ -60,6 +63,10 @@ const MESSAGE_HYDRATE_TARGET = 30;
 const SESSION_CACHE_MAX = 10;
 // SHARE_NOTICE_TTL_MS 是「已复制分享链接」提示的停留时长。
 const SHARE_NOTICE_TTL_MS = 4000;
+// 会话忙（409）且拿不到服务端提示时的兜底文案。
+const SESSION_BUSY_FALLBACK_MESSAGE = '该会话正在生成中，请稍候或先停止';
+// 已成功接管到那条已有 run 时的提示（区别于"没能接管、只给提示"）。
+const SESSION_BUSY_ATTACHED_MESSAGE = '该会话正在生成，已为你接着显示此前的内容';
 
 export default function App() {
   const [authSession, setAuthSession] = useState(() => getSession());
@@ -236,7 +243,6 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   const [interruptEvent, setInterruptEvent] = useState<PendingInterruptEvent | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
   const [health, setHealth] = useState<'checking' | 'online' | 'offline'>('checking');
   const [lastTraceId, setLastTraceId] = useState('');
   const [costDaily, setCostDaily] = useState<CostDailyTotal | null>(null);
@@ -269,12 +275,10 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   const isProfileSyncSettled = profileSyncStatus !== 'pending';
   const [shareNotice, setShareNotice] = useState('');
   const [printEntries, setPrintEntries] = useState<ExportEntry[] | null>(null);
-  const controllerRef = useRef<AbortController | null>(null);
   const sessionIdRef = useRef('');
   // 导出入口在消息卡片上，回调需要保持引用稳定（见 handleExportMessage），
   // 所以最新的消息列表通过 ref 读取。
   const messagesRef = useRef<ChatMessage[]>([]);
-  const isStreamingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const conversationScrollRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
@@ -294,10 +298,66 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   const hydratingSessionIdRef = useRef('');
   // 插入更早消息后需要恢复的滚动位置，避免视口跳动。
   const scrollAnchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
-  const assistantUpdateQueueRef = useRef<Map<string, Array<(item: ChatMessage) => ChatMessage>>>(new Map());
+  // 批量更新队列：run 句柄 → (消息 id → 待应用的更新函数)。
+  // 按 run 分桶是为了并行时一方的增量不会挤进另一方的投影。
+  const assistantUpdateQueueRef = useRef<Map<RunHandle, RunUpdateBuffer>>(new Map());
   const assistantUpdateTimerRef = useRef<number | null>(null);
   // 已经尝试过"重新挂载在跑的 run"的会话集合，避免同一会话重复挂载。
   const reattachedSessionsRef = useRef<Set<string>>(new Set());
+
+  // ── 会话级流式调度 ──────────────────────────────────────────────
+  // 并行输出的状态键是"会话"，不是"页面"：每条 run 一个句柄（runId/lastSeq/
+  // assistantId/AbortController），切走会话只是 detach（保活后台接收），
+  // 只有用户主动点停止才 abort。同会话串行由 isBusy 判定。
+  const registryRef = useRef<RunRegistry | null>(null);
+  if (registryRef.current === null) {
+    registryRef.current = new RunRegistry();
+  }
+  const registry = registryRef.current;
+  // 订阅句柄表变化：侧栏"生成中"指示、顶栏状态章、输入框发送/停止切换都靠它刷新。
+  useSyncExternalStore(
+      useCallback((listener: () => void) => registry.subscribe(listener), [registry]),
+      useCallback(() => registry.getVersion(), [registry]),
+      useCallback(() => registry.getVersion(), [registry]),
+  );
+
+  // liveRunsRef 保存"每条 run 正在生成的那一轮"的本地消息数组，键是句柄本身。
+  //
+  // 它是进行中这一轮的**唯一真身**：后端要等整轮跑完才写会话，所以尚未落库的
+  // user / assistant 消息只存在这里。patchAssistant 直接改它，投影到视口时
+  // 再把这一轮按消息 id 合并进去。
+  //
+  // 键用句柄（对象）而不是会话 id：新建会话在服务端给回 session_id 之前是空串，
+  // 之后又会被迁移成真正的 id，用字符串做键会在迁移瞬间丢数据。
+  const liveRunsRef = useRef<Map<RunHandle, ChatMessage[]>>(new Map());
+
+  // 尚未落库的新会话：本地 sessionId 还是空串，但流式句柄需要一个稳定的键，
+  // 否则同一新会话里连点两次会被当成两个不同会话（同会话串行就失效了）。
+  // 这个键只在本地用，绝不作为 session_id 发给服务端。
+  const pendingSessionKeyRef = useRef('');
+
+  // currentOwnerKey 返回"当前视图对应的调度键"：已有会话就是 session_id，
+  // 新会话则用本地待定键（首次提交时生成）。
+  function currentOwnerKey(): string {
+    const activeSessionId = sessionIdRef.current;
+    if (activeSessionId) {
+      return activeSessionId;
+    }
+    return pendingSessionKeyRef.current;
+  }
+
+  function ensurePendingSessionKey(): string {
+    if (!pendingSessionKeyRef.current) {
+      pendingSessionKeyRef.current = `pending:${crypto.randomUUID()}`;
+    }
+    return pendingSessionKeyRef.current;
+  }
+
+  // liveMessagesFor 取某个会话正在生成的那一轮（没有则 undefined）。
+  function liveMessagesFor(targetSessionId: string): ChatMessage[] | undefined {
+    const handle = registry.get(targetSessionId);
+    return handle ? liveRunsRef.current.get(handle) : undefined;
+  }
 
   useEffect(() => {
     void checkHealth();
@@ -357,15 +417,15 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
   }, [messages]);
 
-  useEffect(() => {
-    isStreamingRef.current = isStreaming;
-  }, [isStreaming]);
-
   // 进入会话（含刷新后重新点开会话）时，如果服务端还有正在跑的 run，
   // 就按 run_id 重新挂载，把断连期间错过的事件补齐。
   // 放在历史消息加载完成之后，避免与 loadSession 的 setMessages([]) 抢 state。
   useEffect(() => {
-    if (!sessionId || isLoadingSessionDetail || isStreaming) {
+    if (!sessionId || isLoadingSessionDetail) {
+      return;
+    }
+    // 该会话已经在我们手里跟着（正在生成），不需要再挂一次。
+    if (registry.isBusy(sessionId)) {
       return;
     }
     if (reattachedSessionsRef.current.has(sessionId)) {
@@ -373,7 +433,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     }
     reattachedSessionsRef.current.add(sessionId);
     void reattachActiveRun(sessionId);
-  }, [sessionId, isLoadingSessionDetail, isStreaming]);
+  }, [sessionId, isLoadingSessionDetail, registry]);
 
   useEffect(() => {
     // 空工作区的封面从顶部开始读，不要因为初始化就滚到底部把标题藏起来。
@@ -385,7 +445,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       window.requestAnimationFrame(() => scrollConversationToBottom('auto'));
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [messages, isStreaming]);
+  }, [messages]);
 
   useEffect(() => {
     return () => {
@@ -551,9 +611,21 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
 
   // 切换会话：先把标签页切过去、露出骨架，历史消息在后台拉。
   // 之前是"等接口返回再 setSessionId"，大会话会有明显卡住不动的手感。
+  //
+  // 跨会话并行之后这里**不再有闸门**：切走 = detach（后台 run 保活继续接收，
+  // 只是不再更新视口），切回 = 把那一轮的本地消息合并回视口继续接收。
   async function loadSession(nextSessionId: string) {
-    if (isStreaming) {
-      return;
+    const previousOwnerKey = currentOwnerKey();
+    if (previousOwnerKey && previousOwnerKey !== nextSessionId) {
+      // 离开前先把当前这一轮（可能正在生成）落进缓存，切回来才有东西可渲染。
+      holdCurrentView(previousOwnerKey);
+      // detach 而不是 abort：只停止更新视口，绝不中断后台执行。
+      const previousHandle = registry.get(previousOwnerKey);
+      if (previousHandle) {
+        registry.markDetached(previousHandle);
+      }
+      // 离开"还没落库的新会话"后，待定键就作废了（它可能还在后台跑）。
+      pendingSessionKeyRef.current = '';
     }
     const token = sessionLoadTokenRef.current + 1;
     sessionLoadTokenRef.current = token;
@@ -564,15 +636,31 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     setActiveMessageId('');
     setPanelError('');
 
-    const cached = sessionCacheRef.current.get(nextSessionId);
+    // 该会话可能正在后台生成：重新接管视口，从这一刻起继续接收增量。
+    const liveHandle = registry.get(nextSessionId);
+    if (liveHandle) {
+      registry.markAttached(liveHandle);
+      // 关键：丢弃它在后台期间攒下的投影队列。
+      // 那些增量已经写进 live 数组，下面的 mergeLiveMessages 会把它们并进视口；
+      // 若留着队列，下一次 flush 会把同样的 delta 再应用一遍（内容翻倍）。
+      assistantUpdateQueueRef.current.delete(liveHandle);
+    }
+    const liveMessages = liveMessagesFor(nextSessionId) ?? [];
+
+    const cachedDetail = sessionCacheRef.current.get(nextSessionId);
+    const cached = cachedDetail ?? (liveMessages.length > 0
+        ? { messages: [] as ChatMessage[], page: 1, hasMore: false }
+        : undefined);
     if (cached) {
       // 命中缓存直接出内容，连骨架都不闪。
+      // 正在生成的会话用本地这一轮覆盖缓存里的旧快照（不重复拉历史、不重复渲染）。
+      const restored = mergeLiveMessages(cached.messages, liveMessages);
       setIsLoadingSessionDetail(false);
-      setMessages(cached.messages);
+      setMessages(restored);
       setMessagePage(cached.page);
       setHasMoreMessages(cached.hasMore);
       window.requestAnimationFrame(() => {
-        if (cached.messages.length === 0) {
+        if (restored.length === 0) {
           scrollConversationToTop();
         } else {
           scrollConversationToBottom('auto');
@@ -599,11 +687,15 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       const page = detail.page || 1;
       const hasMore = resolveHasMore(detail, loadedMessages.length);
       setIsLoadingSessionDetail(false);
-      setMessages(loadedMessages);
+      // 这一轮可能正在生成：历史里还没有它的 user/assistant 消息，
+      // 用本地 live 记录补上，避免"刚切回来就只剩骨架"。
+      const liveForSession = liveMessagesFor(nextSessionId) ?? [];
+      const restoredMessages = mergeLiveMessages(loadedMessages, liveForSession);
+      setMessages(restoredMessages);
       setMessagePage(page);
       setHasMoreMessages(hasMore);
       window.requestAnimationFrame(() => {
-        if (loadedMessages.length === 0) {
+        if (restoredMessages.length === 0) {
           scrollConversationToTop();
         } else {
           scrollConversationToBottom('auto');
@@ -676,6 +768,26 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     }
   }
 
+  // holdCurrentView 把当前视口的消息快照保存下来，供切走再切回时复用。
+  // 正在生成的会话必须走这一步：否则切回来时缓存里还是"生成前"的旧快照，
+  // 或者干脆命中不了缓存而只能重新拉历史。
+  function holdCurrentView(targetSessionId: string) {
+    // 只有"正在生成"的会话需要保留进行中的快照：它的最新内容还没落库，
+    // 缓存里那份是生成前的旧快照。没有在跑的 run 就让它自然失效，
+    // 切回时重新拉服务端已落库的版本（带 recordId，懒加载详情/导出都依赖它）。
+    if (!registry.isBusy(targetSessionId)) {
+      return;
+    }
+    const live = liveMessagesFor(targetSessionId);
+    if (!live || live.length === 0) {
+      return;
+    }
+    const existing = sessionCacheRef.current.get(targetSessionId);
+    const page = existing?.page ?? messagePage;
+    const hasMore = existing?.hasMore ?? hasMoreMessages;
+    cacheSessionDetail(targetSessionId, live, page, hasMore);
+  }
+
   function cacheSessionDetail(targetSessionId: string, nextMessages: ChatMessage[], page: number, hasMore: boolean) {
     const cache = sessionCacheRef.current;
     // 重新写入时先删除，保证 Map 的插入顺序就是"最近使用"顺序。
@@ -695,8 +807,8 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   const loadMessageDetails = useCallback(async (messageId: string) => {
     const activeSessionId = sessionIdRef.current;
     const target = messagesRef.current.find((item) => item.id === messageId);
-    if (isStreamingRef.current) {
-      // 正在跑的 run 会持续往同一条消息里追加事件，此时回放历史事件会覆盖新内容。
+    if (isStreamingFor(activeSessionId)) {
+      // 该会话正在跑的 run 会持续往同一条消息里追加事件，此时回放历史事件会覆盖新内容。
       return;
     }
     if (!activeSessionId || !target || target.recordId === undefined || target.eventsLoaded) {
@@ -748,15 +860,15 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   }
 
   // 本轮问答落库后本地快照就过期了，下次切回该会话要重新拉取。
-  function invalidateActiveSessionCache() {
-    const activeSessionId = sessionIdRef.current;
-    if (activeSessionId) {
-      sessionCacheRef.current.delete(activeSessionId);
+  // 必须显式传会话 id：并行时后台 run 收尾不能清掉用户正在看的会话的缓存。
+  function invalidateActiveSessionCache(targetSessionId: string) {
+    if (targetSessionId) {
+      sessionCacheRef.current.delete(targetSessionId);
     }
   }
 
   async function loadOlderMessages() {
-    if (isStreaming || isLoadingOlderMessagesRef.current || !hasMoreMessages || !sessionIdRef.current) {
+    if (isStreamingFor(sessionIdRef.current) || isLoadingOlderMessagesRef.current || !hasMoreMessages || !sessionIdRef.current) {
       return;
     }
     // 后台补齐已经在按页拉取更早消息，手动加载先让位，避免同一页拉两次。
@@ -813,11 +925,19 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   }
 
   async function deleteSession(targetSessionId: string) {
-    if (isStreaming) {
-      return;
-    }
+    // 确认框必须排在任何副作用之前：用户点"取消"时不能留下"连接已断、
+    // live 记录已删、句柄已释放"的半坏状态（会话还在，却再也收不到输出）。
     if (!window.confirm('确定删除这条会话记录吗？删除后不可恢复。')) {
       return;
+    }
+    if (isStreamingFor(targetSessionId)) {
+      // 已经确认要删：这里才动传输层，避免事件继续写进已删除的会话缓存。
+      // 只 abort，不在这里 finish —— 让该 run 的 finally 走正常收尾，
+      // 否则 live 记录与句柄状态会不一致（finally 里还会再删一次 live）。
+      const handle = registry.get(targetSessionId);
+      if (handle) {
+        registry.abort(handle);
+      }
     }
 
     try {
@@ -842,9 +962,6 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   }
 
   async function shareSession(targetSessionId: string) {
-    if (isStreaming) {
-      return;
-    }
     try {
       const result = await createShareLink(targetSessionId);
       const link = window.location.origin + result.share_path;
@@ -868,8 +985,23 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   }
 
   function startNewSession() {
-    if (isStreaming) {
-      return;
+    // 新建会话与其他会话在跑什么无关：只在发起会话间做 detach。
+    const previousSessionId = sessionIdRef.current;
+    if (previousSessionId) {
+      holdCurrentView(previousSessionId);
+      const previousHandle = registry.get(previousSessionId);
+      if (previousHandle) {
+        registry.markDetached(previousHandle);
+      }
+    }
+    // 无论当前停在哪儿，都换一个全新的待定键：旧的新会话（可能还在后台跑）
+    // 只是 detach，不会阻塞这次新建，也不会被误判成"当前会话正在生成"。
+    if (pendingSessionKeyRef.current) {
+      const pendingHandle = registry.get(pendingSessionKeyRef.current);
+      if (pendingHandle) {
+        registry.markDetached(pendingHandle);
+      }
+      pendingSessionKeyRef.current = '';
     }
     // 令牌自增：丢掉可能还在路上的旧会话请求，避免它把内容灌进新聊天。
     sessionLoadTokenRef.current += 1;
@@ -906,9 +1038,153 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     setPrintEntries([entry]);
   }, []);
 
+  // ── 流式调度核心 ────────────────────────────────────────────────
+  //
+  // 每个会话一条 run。事件回调绑定"发起时的会话 id + 消息 id"，并且：
+  //   · 该会话就是当前展示会话 → 同步更新视口（保证流式平滑）
+  //   · 不是当前会话 → 只更新缓存与 live 记录，不碰视口（跨会话不串台）
+  // 批量更新本身也按消息 id 过滤，所以即便投影时机有偏差，
+  // 也不会把 A 会话的增量写到 B 会话的消息上。
+
+  // findAssistantForRun 在既有消息里找"某条 run 原本对应的 assistant 消息"。
+  //
+  // 409 接管时绝不能新建消息：那条 run 的正文早就在会话里了（或正在往那条上写），
+  // 新建一条只会让旧 run 的事件灌进新气泡，出现重复渲染与内容错位。
+  // 优先用 recordId（服务端消息 id）匹配 run 的归属，退回到最后一条 assistant。
+  function findAssistantForRun(targetSessionId: string, runMessages: ChatMessage[]): ChatMessage | null {
+    // 候选源**只用调用方传进来的这一份**（该 run 的 live 快照）。
+    //
+    // 之前这里会在"目标会话恰好是当前视图"时改读 messagesRef.current，
+    // 形成两个不同源的候选：调用方按 live 传参、函数却悄悄换成视口快照，
+    // 结论随"用户此刻在看哪个会话"而变，属于难复现的隐式耦合。
+    // live 快照是超集（视口内容都是从它投影出来的），只读它就够了。
+    void targetSessionId;
+    const candidates = runMessages;
+    for (let index = candidates.length - 1; index >= 0; index -= 1) {
+      const item = candidates[index];
+      if (item.role !== 'assistant') {
+        continue;
+      }
+      // 还带着 recordId 的说明是已落库的历史消息，正是我们要复用的那条。
+      if (item.recordId !== undefined) {
+        return item;
+      }
+    }
+    // 退回：会话里最后一条 assistant（可能是本标签页此前生成、尚未落库的那条）。
+    for (let index = candidates.length - 1; index >= 0; index -= 1) {
+      if (candidates[index].role === 'assistant') {
+        return candidates[index];
+      }
+    }
+    return null;
+  }
+
+  // adoptBusyRun 处理"本次提交被 409 挡下，改挂到该会话已有 run 上"。
+  //
+  // 三件事必须同时做到：
+  //   ① 废弃本次刚加的 user 气泡 + assistant 占位（它们的 run 从未存在过）；
+  //   ② 把句柄的消息归属改成该 run 原本那条 assistant 消息（绝不能新建）；
+  //   ③ 提示用户"已为你接着显示"，而不是报错。
+  //
+  // 返回 true 表示接管成功，调用方后续不得再触碰本次的 assistantId。
+  function adoptBusyRun(
+      ownerSessionId: string,
+      handle: RunHandle,
+      placeholderAssistantId: string,
+      placeholderUserId: string,
+  ): boolean {
+    // ① 先解析落点，**再**决定删什么。
+    //
+    //    顺序很关键：如果先删占位再发现"找不到归属消息"，handle.assistantId
+    //    会残留一个已被删除的 id，随后的事件全部写到不存在的消息上 ——
+    //    静默丢弃，正是本轮要修的那类缺陷。所以先找、后删。
+    //
+    //    候选快照取"该会话自己的 live"，而不是当前视口的 messages：
+    //    409 发生时用户可能正看着别的会话，按视口找会抓到错误会话的最后一条
+    //    assistant。liveRunsRef 里存的才是这个 handle 这一轮的真身。
+    const runMessages = liveRunsRef.current.get(handle) ?? [];
+    const existing = findAssistantForRun(ownerSessionId, runMessages);
+
+    const stripIds = new Set<string>([placeholderUserId]);
+    if (existing) {
+      // 有归属消息：本次的两个占位都废弃，写入权交给历史消息。
+      stripIds.add(placeholderAssistantId);
+    }
+    // 没有归属消息时**保留 assistant 占位**作为可写落点：宁可显示在一个新气泡里，
+    // 也不能把旧 run 的后续输出丢掉（删除它会让后续事件无处可写）。
+
+    const strip = (items: ChatMessage[]) => items.filter((item) => !stripIds.has(item.id));
+    setMessages((current) => {
+      const next = strip(current);
+      return next.length === current.length ? current : next;
+    });
+    const live = liveRunsRef.current.get(handle);
+    if (live) {
+      liveRunsRef.current.set(handle, strip(live));
+    }
+    const cached = sessionCacheRef.current.get(ownerSessionId);
+    if (cached) {
+      sessionCacheRef.current.set(ownerSessionId, { ...cached, messages: strip(cached.messages) });
+    }
+
+    // ② 落点：优先历史消息，否则沿用（已被保留的）占位消息。
+    //    两种情况都必须是一个**真实存在、可写**的消息 id。
+    const targetId = existing ? existing.id : placeholderAssistantId;
+    handle.assistantId = targetId;
+    // 让它继续显示"生成中"，随后的 delta 会接着往这条上写。
+    patchAssistant(handle, targetId, (item) => ({ ...item, status: 'streaming' }));
+    // ③ 只做状态交接，不在这里写提示文案：文案统一由调用方在 outcome.busy
+    //    分支输出一次，避免两条 setPanelError 互相覆盖。
+    return true;
+  }
+
+  // beginHandle 登记句柄并把 live 记录接到当前会话上（发起前调用）。
+  function beginHandle(ownerSessionId: string, assistantId: string, seedMessages: ChatMessage[]) {
+    const handle = registry.begin({
+      sessionId: ownerSessionId,
+      assistantId,
+      status: 'streaming',
+    });
+    liveRunsRef.current.set(handle, seedMessages);
+    return handle;
+  }
+
+  // adoptServerSessionId 处理新建会话：服务端给出了 session_id 之后，
+  // 把句柄与 live 记录一起搬到真正的键上。只有用户仍停在这个（尚未命名的）
+  // 会话上时才把视图切过去，避免后台会话把视图拽走。
+  function adoptServerSessionId(handle: RunHandle, serverSessionId: string) {
+    if (!serverSessionId || serverSessionId === handle.sessionId) {
+      return;
+    }
+    const previousKey = handle.sessionId;
+    const wasPending = previousKey !== '' && previousKey === pendingSessionKeyRef.current;
+    registry.rekey(previousKey, serverSessionId);
+    if (wasPending) {
+      pendingSessionKeyRef.current = '';
+      // 只有用户仍停在这个还没命名的新会话上时才跟着改视图；
+      // 后台会话把它自己的 id 迁移过来，绝不能把用户正在看的会话拽走。
+      if (sessionIdRef.current === '') {
+        // 同步改 ref：state 要到下一次渲染才生效，而这期间事件还在流入，
+        // 若只改 state 会出现一小段"事件找不到视口"的空窗。
+        sessionIdRef.current = serverSessionId;
+        setSessionId(serverSessionId);
+      }
+    }
+  }
+
   const handleSubmit = useCallback(async (messageText: string) => {
     const message = messageText.trim();
-    if (!message || isStreamingRef.current) {
+    if (!message) {
+      return;
+    }
+    // requestSessionId 是发给服务端的 session_id（新会话为空串，由服务端建）；
+    // ownerSessionId 是本地调度键（新会话用待定键），两者不能混用。
+    const requestSessionId = sessionIdRef.current;
+    const ownerSessionId = requestSessionId || ensurePendingSessionKey();
+    // 同会话串行：该会话已有活跃 run 时拒绝再发一条。
+    // 注意判定的是"这一个会话"，其他会话在跑不影响这里。
+    if (registry.isBusy(ownerSessionId)) {
+      setPanelError('该会话正在生成回复，等它结束后再发下一条（其他会话不受影响）。');
       return;
     }
 
@@ -935,38 +1211,59 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       status: 'streaming',
     };
 
+    setPanelError('');
     shouldStickToBottomRef.current = true;
     setIsComposerExpanded(true);
-    setMessages((current) => [...current, userMessage, assistantPlaceholder]);
-    setIsStreaming(true);
-
-    const controller = new AbortController();
-    controllerRef.current = controller;
+    const seedMessages = [...messagesRef.current, userMessage, assistantPlaceholder];
+    const handle = beginHandle(ownerSessionId, assistantId, seedMessages);
+    setMessages(seedMessages);
     let sawDone = false;
+    // 非空表示"本次提交被 409 挡下，改挂到已有 run 上"，此时本次的占位消息已废弃。
+    let adoptedBusyRun = false;
 
     try {
       // streamChatRun 内部负责断线自动续传：连接被掐断时会带着
       // Last-Event-ID 重新挂上这条 run，把漏掉的事件补齐，UI 无需感知。
       const outcome = await streamChatRun({
-        sessionId: sessionIdRef.current,
+        sessionId: requestSessionId,
         message,
         // 服务端画像回读完成前不要提交本地缓存/默认值：后端会把请求里的 profile
         // 全量写库，拿默认值先发一轮会把用户真正保存的画像覆盖掉。
         profile: profileForChat(profile, profileSyncStatus),
-        signal: controller.signal,
-        onPhase: (phase) => notifyRunPhase(assistantId, phase),
+        signal: handle.controller.signal,
+        onPhase: (phase) => notifyRunPhase(handle, assistantId, phase),
+        onRunIds: (info) => {
+          if (info.busy && !adoptedBusyRun) {
+            // 409 接管：这条 run 不是本次提交创建的。本次刚加的 user 气泡 +
+            // assistant 占位必须废弃，把写入权交还给该 run 原本的那条消息。
+            adoptedBusyRun = adoptBusyRun(ownerSessionId, handle, assistantId, userMessage.id);
+            return;
+          }
+          if (adoptedBusyRun) {
+            return;
+          }
+          registry.setRunId(handle, info.runId);
+          adoptServerSessionId(handle, info.sessionId);
+        },
         onEvent: (eventName, payload) => {
           if (eventName === 'done') {
             sawDone = true;
           }
-          handleStreamEvent(assistantId, eventName, payload);
+          handleStreamEvent(handle, assistantId, eventName, payload);
         },
       });
       if (outcome.done) {
         sawDone = true;
       }
+      // 409 接管的唯一提示出口：无论走 onRunIds 提前接管，还是靠回退挂上，
+      // 都在这里输出一次，避免两条文案竞争覆盖。
+      if (outcome.busy) {
+        setPanelError(SESSION_BUSY_ATTACHED_MESSAGE);
+      }
 
-      patchAssistant(assistantId, (item) => ({
+      // 收尾也从句柄取落点：409 接管后 handle.assistantId 已指向既有消息，
+      // 仍用闭包里的 assistantId 会把收尾状态写进一个已删除的占位。
+      patchAssistant(handle, resolveTargetMessageId(handle, assistantId), (item) => ({
         ...item,
         toolEvents: finalizeToolEvents(item.toolEvents),
         segments: finalizeSegments(item.segments),
@@ -974,11 +1271,32 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       }));
     } catch (error) {
       const isAbort = error instanceof Error && error.name === 'AbortError';
-      const messageText = isAbort ? '本轮已停止。' : error instanceof Error ? error.message : '请求失败，请检查后端是否已经启动。';
+      // 409 会话忙：服务端说这个会话已经有一条 run 在跑。runStream 已经尽力
+      // 挂上那条 run；走到这里说明连 run_id 都查不到，那就只给可读提示，
+      // 绝不把 "stream request failed: 409" 这类技术服务串甩给用户。
+      const isBusy = error instanceof SessionBusyError;
+      const busyMessage = isBusy && error instanceof SessionBusyError
+          ? error.userMessage
+          : SESSION_BUSY_FALLBACK_MESSAGE;
+      const messageText = isAbort
+          ? '本轮已停止。'
+          : isBusy
+              ? busyMessage
+              : error instanceof Error
+                  ? error.message
+                  : '请求失败，请检查后端是否已经启动。';
 
-      patchAssistant(assistantId, (item) => {
+      if (isBusy) {
+        setPanelError(busyMessage);
+      }
+
+      // catch 收尾同样必须从句柄取落点：409 接管成功后占位已被 strip 掉、
+      // handle.assistantId 已指向该 run 原来的历史消息，这里若仍用闭包常量，
+      // 收尾状态（done/error）会写到一条已被删除的消息上并被静默丢弃。
+      patchAssistant(handle, resolveTargetMessageId(handle, assistantId), (item) => {
         const meaningful = hasMeaningfulAssistantState(item);
-        const doneLike = meaningful || isAbort;
+        // 会话忙不是这条回复失败：用 done 渲染成一条可读提示，避免红色错误态误导。
+        const doneLike = meaningful || isAbort || isBusy;
         return {
           ...item,
           content: item.content || messageText,
@@ -988,9 +1306,18 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
         };
       });
     } finally {
-      controllerRef.current = null;
-      setIsStreaming(false);
-      invalidateActiveSessionCache();
+      // 只释放自己的句柄；其他会话的 run 不受影响。
+      const finalSessionId = handle.sessionId;
+      if (handle.superseded) {
+        // 已被接管：句柄归接管者所有，这里不能 flush（会把接管后的增量冲掉）、
+        // 也不能 finish（会删掉新句柄）。
+        return;
+      }
+      flushAssistantUpdates(handle);
+      assistantUpdateQueueRef.current.delete(handle);
+      registry.finish(handle);
+      liveRunsRef.current.delete(handle);
+      invalidateActiveSessionCache(finalSessionId);
       void checkHealth();
       void refreshMetrics();
       void refreshSessions();
@@ -999,30 +1326,41 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
 
   // notifyRunPhase 把"连接中断，正在重连"这类传输层状态显示出来。
   // 关键点：重连中不能把消息标成 error——执行其实还在服务端继续跑。
-  function notifyRunPhase(assistantId: string, phase: RunStreamPhase) {
+  function notifyRunPhase(handle: RunHandle, fallbackAssistantId: string, phase: RunStreamPhase) {
+    const assistantId = resolveTargetMessageId(handle, fallbackAssistantId);
     if (phase === 'reconnecting') {
-      appendTraceEvent(assistantId, {
-        type: 'observe',
-        stage: 'connection',
-        detail: '连接中断，正在重连并补齐事件…',
-        timestamp: new Date().toISOString(),
-      });
+      patchAssistant(handle, assistantId, (item) => ({
+        ...item,
+        traceEvents: [...item.traceEvents, buildTraceEvent({
+          type: 'observe',
+          stage: 'connection',
+          detail: '连接中断，正在重连并补齐事件…',
+          timestamp: new Date().toISOString(),
+        })],
+      }));
       return;
     }
     if (phase === 'reconnected') {
-      appendTraceEvent(assistantId, {
-        type: 'observe',
-        stage: 'connection',
-        detail: '已重新连接，继续接收结果',
-        timestamp: new Date().toISOString(),
-      });
+      patchAssistant(handle, assistantId, (item) => ({
+        ...item,
+        traceEvents: [...item.traceEvents, buildTraceEvent({
+          type: 'observe',
+          stage: 'connection',
+          detail: '已重新连接，继续接收结果',
+          timestamp: new Date().toISOString(),
+        })],
+      }));
     }
   }
 
   // reattachActiveRun 处理"刷新页面 / 切回会话时这一轮还在跑"：
   // 按 run_id 重新挂载，服务端会回放断连期间错过的事件。
   async function reattachActiveRun(targetSessionId: string) {
-    if (!targetSessionId || isStreamingRef.current) {
+    if (!targetSessionId) {
+      return;
+    }
+    // 该会话已经有句柄（正在我们手里跟着）就不再重复挂载。
+    if (registry.isBusy(targetSessionId)) {
       return;
     }
 
@@ -1049,7 +1387,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       runId = cached.runId;
       lastSeq = cached.lastSeq;
     }
-    if (isStreamingRef.current) {
+    if (registry.isBusy(targetSessionId)) {
       return;
     }
 
@@ -1062,35 +1400,48 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
       // 这条消息马上会被续跑事件追加，不能再被历史懒加载的旧快照覆盖。
       enrichedMessageDetailsRef.current.delete(targetMessageId);
     }
-    if (!targetMessageId) {
-      targetMessageId = crypto.randomUUID();
-      setMessages((current) => [
-        ...current,
-        {
-          id: targetMessageId,
-          role: 'assistant',
-          content: '',
-          tools: [],
-          toolEvents: [],
-          segments: [],
-          traceEvents: [],
-          status: 'streaming',
-        },
-      ]);
+    const addedPlaceholder: ChatMessage | null = targetMessageId ? null : {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: '',
+      tools: [],
+      toolEvents: [],
+      segments: [],
+      traceEvents: [],
+      status: 'streaming',
+    };
+    if (addedPlaceholder) {
+      targetMessageId = addedPlaceholder.id;
+    }
+
+    // 只在这个会话就是当前视图会话时往视口里加占位消息；
+    // 否则交给缓存，用户切回时自然看到。
+    const seedMessages = addedPlaceholder
+        ? [...messagesRef.current, addedPlaceholder]
+        : messagesRef.current;
+    if (addedPlaceholder && targetSessionId === sessionIdRef.current) {
+      setMessages(seedMessages);
     }
 
     shouldStickToBottomRef.current = true;
-    setIsStreaming(true);
-    const controller = new AbortController();
-    controllerRef.current = controller;
+    const handle = registry.begin({
+      sessionId: targetSessionId,
+      runId,
+      assistantId: targetMessageId,
+      lastSeq: interrupted ? 0 : lastSeq,
+      status: interrupted ? 'interrupted' : 'running',
+    });
+    if (seedMessages.length > 0) {
+      liveRunsRef.current.set(handle, seedMessages);
+    }
     let sawDone = false;
     try {
       const outcome = await attachRun({
         runId,
         sessionId: targetSessionId,
         afterSeq: interrupted ? 0 : lastSeq,
-        signal: controller.signal,
-        onPhase: (phase) => notifyRunPhase(targetMessageId, phase),
+        signal: handle.controller.signal,
+        onPhase: (phase) => notifyRunPhase(handle, targetMessageId, phase),
         onEvent: (eventName, payload) => {
           const resolved = resolveStreamEventType(eventName, payload);
           if (interrupted && resolved !== 'interrupt' && resolved !== 'done' && resolved !== 'error') {
@@ -1099,7 +1450,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
           if (resolved === 'done') {
             sawDone = true;
           }
-          handleStreamEvent(targetMessageId, eventName, payload);
+          handleStreamEvent(handle, targetMessageId, eventName, payload);
         },
       });
       if (outcome.done) {
@@ -1112,15 +1463,20 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
         console.warn('reattach run failed', error);
       }
     } finally {
-      controllerRef.current = null;
-      setIsStreaming(false);
-      patchAssistant(targetMessageId, (item) => ({
+      if (handle.superseded) {
+        return;
+      }
+      // 收尾顺序：先把这一轮的增量连同收尾状态冲进视口，再释放句柄与 live 记录。
+      patchAssistant(handle, targetMessageId, (item) => ({
         ...item,
         toolEvents: finalizeToolEvents(item.toolEvents),
         segments: finalizeSegments(item.segments),
         status: sawDone || hasMeaningfulAssistantState(item) ? 'done' : item.status,
       }));
-      invalidateActiveSessionCache();
+      flushAssistantUpdates(handle);
+      registry.finish(handle);
+      liveRunsRef.current.delete(handle);
+      invalidateActiveSessionCache(targetSessionId);
       void checkHealth();
       void refreshMetrics();
       void refreshSessions();
@@ -1137,7 +1493,33 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     return '';
   }
 
-  function handleStreamEvent(assistantId: string, eventName: string, payload: StreamPayload) {
+  function buildTraceEvent(payload: StreamPayload): TraceEvent {
+    return {
+      id: crypto.randomUUID(),
+      stage: payload.stage ?? payload.type,
+      detail: payload.detail ?? '',
+      elapsedMs: payload.elapsed_ms,
+      timestamp: payload.timestamp,
+    };
+  }
+
+  // handleStreamEvent 处理一条流事件。
+  // ownerSessionId 是"发起这条 run 的会话"，assistantId 是"这条 run 对应的消息"；
+  // 两者都锁定在发起时刻，事件内容本身不得改写它们（否则后台会话会串台/串消息）。
+  function handleStreamEvent(handle: RunHandle, fallbackAssistantId: string, eventName: string, payload: StreamPayload) {
+    // run 一致性守卫：一条句柄只接受它自己那条 run 的事件。
+    // 句柄 runId 为空时采纳首个帧；一旦有值，run_id 不同的帧一律丢弃
+    // （那是别的 run 串进来的尾巴，写进来就是跨会话/跨 run 污染）。
+    const verdict = shouldAcceptRunEvent(handle.runId, payload.run_id);
+    if (!verdict.accept) {
+      return;
+    }
+    if (verdict.adoptRunId) {
+      handle.runId = verdict.adoptRunId;
+    }
+    // 落点**每次从 handle 读**：adoptBusyRun 会把 handle.assistantId 改指
+    // 该 run 原本那条历史消息，闭包常量此时已经指向一个被移除的占位消息。
+    const assistantId = resolveTargetMessageId(handle, fallbackAssistantId);
     // 后端历史版本把工具结果也发成 tool_call，这里统一归一化后再分发。
     switch (resolveStreamEventType(eventName, payload)) {
       case 'ready':
@@ -1145,13 +1527,13 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
         break;
       case 'session':
         if (payload.session_id) {
-          setSessionId(payload.session_id);
+          adoptServerSessionId(handle, payload.session_id);
         }
         updateTrace(payload);
         break;
       case 'observe':
         updateTrace(payload);
-        appendTraceEvent(assistantId, payload);
+        appendTraceEvent(handle, assistantId, payload);
         break;
       case 'heartbeat':
         updateTrace(payload);
@@ -1161,16 +1543,16 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
         if (!hasToolName(payload)) {
           break;
         }
-        appendTraceEvent(assistantId, { ...payload, stage: `tool_call:${payload.tool_name}`, detail: payload.tool_arguments });
-        patchAssistant(assistantId, (item) => addToolCallWithSegment(item, payload));
+        appendTraceEvent(handle, assistantId, { ...payload, stage: `tool_call:${payload.tool_name}`, detail: payload.tool_arguments });
+        patchAssistant(handle, assistantId, (item) => addToolCallWithSegment(item, payload));
         break;
       case 'tool_result':
         updateTrace(payload);
         if (!hasToolName(payload)) {
           break;
         }
-        appendTraceEvent(assistantId, { ...payload, stage: `tool_result:${payload.tool_name}`, detail: payload.tool_result });
-        patchAssistant(assistantId, (item) => applyToolResultWithSegment(item, payload));
+        appendTraceEvent(handle, assistantId, { ...payload, stage: `tool_result:${payload.tool_name}`, detail: payload.tool_result });
+        patchAssistant(handle, assistantId, (item) => applyToolResultWithSegment(item, payload));
         break;
       case 'interrupt':
         updateTrace(payload);
@@ -1189,17 +1571,14 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
         break;
       case 'progress':
         updateTrace(payload);
-        patchAssistant(assistantId, (item) => appendTextBlockSegment(item, payload.delta ?? payload.message ?? payload.detail ?? '', payload, false, 'progress'));
+        patchAssistant(handle, assistantId, (item) => appendTextBlockSegment(item, payload.delta ?? payload.message ?? payload.detail ?? '', payload, false, 'progress'));
         break;
       case 'delta':
         updateTrace(payload);
-        patchAssistant(assistantId, (item) => appendStreamingDeltaSegment(item, payload.delta ?? '', payload));
+        patchAssistant(handle, assistantId, (item) => appendStreamingDeltaSegment(item, payload.delta ?? '', payload));
         break;
       case 'done':
         updateTrace(payload);
-        if (payload.result?.session_id) {
-          setSessionId(payload.result.session_id);
-        }
         // 服务端是画像的权威来源（按 user_id 存库）：把最终值回写本地状态与缓存，
         // 保证界面显示和后续请求提交的是同一份画像。
         if (payload.result?.profile) {
@@ -1210,7 +1589,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
           // 这一轮能拿到服务端画像，说明画像已经是权威值，后续对话可以正常携带。
           setProfileSyncStatus('ready');
         }
-        patchAssistant(assistantId, (item) => ({
+        patchAssistant(handle, assistantId, (item) => ({
           ...item,
           content: normalizeMarkdown(item.content),
           tools: payload.result?.used_tools ?? item.tools,
@@ -1220,7 +1599,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
         }));
         break;
       case 'error':
-        patchAssistant(assistantId, (item) => {
+        patchAssistant(handle, assistantId, (item) => {
           const meaningful = hasMeaningfulAssistantState(item);
           const errorText = payload.message || '流式请求失败，请稍后再试。';
           const withError = appendErrorSegment(item, errorText);
@@ -1239,42 +1618,78 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
   }
 
   async function resumeInterruptedRun(ev: PendingInterruptEvent, approved: boolean) {
+    const targetSessionId = ev.session_id ?? sessionIdRef.current;
     shouldStickToBottomRef.current = true;
-    setIsStreaming(true);
-    patchAssistant(ev.assistant_message_id, (item) => ({ ...item, status: 'streaming' }));
+    // 审批恢复同属"同会话串行"：续跑的是同一条 run、同一条 assistant 消息。
+    // 但传输层是新建的，而旧句柄（等审批时挂着的）可能还没走完它的 finally，
+    // 所以用 takeover 强制换新句柄，并把旧句柄标记 superseded ——
+    // 旧句柄随后的 finally 不会再 flush 或 finish 掉新句柄。
+    const inheritedLive = liveMessagesFor(targetSessionId);
+    const handle = registry.begin({
+      sessionId: targetSessionId,
+      assistantId: ev.assistant_message_id,
+      status: 'streaming',
+      takeover: true,
+    });
+    // 续跑接手这个会话正在生成的那一轮（没有就沿用当前视口）。
+    if (!inheritedLive || inheritedLive.length === 0) {
+      liveRunsRef.current.set(handle, messagesRef.current);
+    } else {
+      liveRunsRef.current.set(handle, inheritedLive);
+    }
+    patchAssistant(handle, ev.assistant_message_id, (item) => ({ ...item, status: 'streaming' }));
     try {
       // 与普通对话一致：审批恢复同样支持断线续传，续传起点由服务端按
       // 这条 run 的当前游标决定，不会把中断前的事件重复回放一遍。
       await resumeChatRun({
-        sessionId: ev.session_id ?? sessionId,
+        sessionId: targetSessionId,
         pendingId: ev.pending_approval_id,
         approved,
-        onPhase: (phase) => notifyRunPhase(ev.assistant_message_id, phase),
+        signal: handle.controller.signal,
+        onPhase: (phase) => notifyRunPhase(handle, ev.assistant_message_id, phase),
+        onRunIds: (info) => registry.setRunId(handle, info.runId),
         onEvent: (eventName, payload) => {
-          handleStreamEvent(ev.assistant_message_id, eventName, payload);
+          handleStreamEvent(handle, ev.assistant_message_id, eventName, payload);
         },
       });
-      patchAssistant(ev.assistant_message_id, (item) => ({
+      patchAssistant(handle, ev.assistant_message_id, (item) => ({
         ...item,
         toolEvents: finalizeToolEvents(item.toolEvents),
         segments: finalizeSegments(item.segments),
         status: hasMeaningfulAssistantState(item) ? 'done' : item.status,
       }));
     } catch (error) {
-      const messageText = error instanceof Error ? error.message : '审批恢复请求失败，请稍后再试。';
-      patchAssistant(ev.assistant_message_id, (item) => {
+      // 审批恢复也可能被 409 挡下（同一会话并发两次恢复）：给可读提示。
+      const busyMessage = error instanceof SessionBusyError
+          ? error.userMessage
+          : SESSION_BUSY_FALLBACK_MESSAGE;
+      const isBusy = error instanceof SessionBusyError;
+      if (isBusy) {
+        setPanelError(busyMessage);
+      }
+      const messageText = isBusy
+          ? busyMessage
+          : error instanceof Error
+              ? error.message
+              : '审批恢复请求失败，请稍后再试。';
+      patchAssistant(handle, ev.assistant_message_id, (item) => {
         const meaningful = hasMeaningfulAssistantState(item);
         return {
           ...item,
           content: meaningful ? item.content : messageText,
           toolEvents: finalizeToolEvents(item.toolEvents),
           segments: finalizeSegments(item.segments),
-          status: meaningful ? 'done' : 'error',
+          status: meaningful || isBusy ? 'done' : 'error',
         };
       });
     } finally {
-      setIsStreaming(false);
-      invalidateActiveSessionCache();
+      if (handle.superseded) {
+        return;
+      }
+      flushAssistantUpdates(handle);
+      registry.finish(handle);
+      liveRunsRef.current.delete(handle);
+      invalidateActiveSessionCache(targetSessionId);
       void checkHealth();
       void refreshMetrics();
       void refreshSessions();
@@ -1287,29 +1702,67 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     }
   }
 
-  function appendTraceEvent(messageId: string, payload: StreamPayload) {
+  function appendTraceEvent(handle: RunHandle, messageId: string, payload: StreamPayload) {
     if (!payload.stage && !payload.detail) {
       return;
     }
-    const traceEvent: TraceEvent = {
-      id: crypto.randomUUID(),
-      stage: payload.stage ?? payload.type,
-      detail: payload.detail ?? '',
-      elapsedMs: payload.elapsed_ms,
-      timestamp: payload.timestamp,
-    };
-    patchAssistant(messageId, (item) => ({ ...item, traceEvents: [...item.traceEvents, traceEvent] }));
+    patchAssistant(handle, messageId, (item) => ({
+      ...item,
+      traceEvents: [...item.traceEvents, buildTraceEvent(payload)],
+    }));
   }
 
-  function patchAssistant(id: string, updater: (item: ChatMessage) => ChatMessage) {
-    const queuedUpdates = assistantUpdateQueueRef.current.get(id);
+  // patchAssistant 是流式增量的唯一入口，按"会话 + 消息"记账。
+  //
+  // 落点分两种：
+  //   · 该会话就是当前展示会话 → 40ms 批量并进视口（流式要平滑）
+  //   · 后台会话 → 只改它自己那一轮的 live 数组（用户切回时合并出来）
+  // 批量应用时再按消息 id 过滤，因此即便投影时机有偏差，
+  // 也绝不会把 A 会话的增量写到 B 会话的消息上。
+  function patchAssistant(handle: RunHandle, id: string, updater: (item: ChatMessage) => ChatMessage) {
+    if (handle.superseded) {
+      // 这一轮已被接管（审批恢复重新登记了句柄），旧句柄的尾巴不能再写消息。
+      return;
+    }
+    // 用"当前调度键"判定而不是裸 sessionId：新会话在服务端给回 session_id
+    // 之前，句柄的 sessionId 是本地待定键，直接比 sessionIdRef 会永远不相等，
+    // 结果就是新会话的第一轮回复完全不出字。
+    const isViewing = Boolean(handle.sessionId) && handle.sessionId === currentOwnerKey();
+
+    // live 真身始终同步更新：它代表这一轮的真实内容，与用户在看哪个会话无关。
+    const live = liveRunsRef.current.get(handle);
+    if (live) {
+      const index = live.findIndex((item) => item.id === id);
+      if (index >= 0) {
+        const next = live.slice();
+        next[index] = updater(next[index]);
+        liveRunsRef.current.set(handle, next);
+      }
+    }
+
+    // 只有"用户正在看这个会话"才记账到投影队列。
+    //
+    // 后台会话**不入队**：它的真身已经在上面写进 live 数组了，切回时由
+    // mergeLiveMessages 一次性合并到视口。若后台也入队，切回时就会出现
+    // "mergeLive 已经应用过一次 + flush 又应用一次"的二次应用（delta 翻倍）。
+    if (!isViewing) {
+      return;
+    }
+
+    let sessionBuffer = assistantUpdateQueueRef.current.get(handle);
+    if (!sessionBuffer) {
+      sessionBuffer = new Map<string, Array<(item: ChatMessage) => ChatMessage>>();
+      assistantUpdateQueueRef.current.set(handle, sessionBuffer);
+    }
+    const queuedUpdates = sessionBuffer.get(id);
     if (queuedUpdates) {
       queuedUpdates.push(updater);
     } else {
-      assistantUpdateQueueRef.current.set(id, [updater]);
+      sessionBuffer.set(id, [updater]);
     }
     scheduleAssistantUpdateFlush();
   }
+
 
   function scheduleAssistantUpdateFlush() {
     if (assistantUpdateTimerRef.current !== null) {
@@ -1318,23 +1771,39 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     assistantUpdateTimerRef.current = window.setTimeout(flushAssistantUpdates, 40);
   }
 
-  function flushAssistantUpdates() {
-    assistantUpdateTimerRef.current = null;
-    const queuedUpdates = new Map(assistantUpdateQueueRef.current);
-    assistantUpdateQueueRef.current.clear();
-    if (queuedUpdates.size === 0) {
+  // flushAssistantUpdates 把队列里的增量投影到视口。
+  //
+  // 只应用"消息确实在当前视口里"的那部分（projectRunUpdates 按消息 id 过滤）：
+  // 这是跨会话并行不串台的最后一道闸门。传入句柄时只冲刷这一路（该轮收尾），
+  // 否则冲刷全部（定时器到期）。
+  function flushAssistantUpdates(ownerHandle?: RunHandle) {
+    const source = ownerHandle
+        ? (assistantUpdateQueueRef.current.has(ownerHandle)
+            ? ([[ownerHandle, assistantUpdateQueueRef.current.get(ownerHandle)!]] as Array<[RunHandle, RunUpdateBuffer]>)
+            : [])
+        : Array.from(assistantUpdateQueueRef.current.entries());
+
+    if (source.length === 0) {
+      if (ownerHandle === undefined) {
+        assistantUpdateTimerRef.current = null;
+      }
       return;
     }
+    for (const [bufferedHandle] of source) {
+      assistantUpdateQueueRef.current.delete(bufferedHandle);
+    }
+    if (ownerHandle === undefined) {
+      assistantUpdateTimerRef.current = null;
+    }
 
-    setMessages((current) =>
-        current.map((item) => {
-          const itemUpdates = queuedUpdates.get(item.id);
-          if (!itemUpdates) {
-            return item;
-          }
-          return itemUpdates.reduce((next, update) => update(next), item);
-        }),
-    );
+    // 后台会话的增量在这里被整段丢弃投影：它们的真身在 live 数组里已经更新，
+    // 用户切回时由 mergeLiveMessages 带出来。
+    const projected = source.map(([, buffer]) => projectRunUpdates(messagesRef.current, buffer));
+    const merged = mergeRunUpdateBuffers(projected);
+    if (merged.size === 0) {
+      return;
+    }
+    setMessages((current) => applyBufferUpdates(current, merged));
   }
 
   function handleConversationScroll() {
@@ -1344,16 +1813,26 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
     }
     const distanceToBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
     const isAtBottom = distanceToBottom < 96;
-    if (scrollElement.scrollTop < 96 && hasMoreMessages && !isLoadingOlderMessages && !isStreamingRef.current) {
+    if (scrollElement.scrollTop < 96 && hasMoreMessages && !isLoadingOlderMessages && !isStreamingFor(sessionIdRef.current)) {
       void loadOlderMessages();
     }
     shouldStickToBottomRef.current = isAtBottom;
     setIsComposerExpanded((current) => (current === isAtBottom ? current : isAtBottom));
   }
 
+  // 停止只作用于**当前会话**的 run，绝不误停其他会话。
   const stopStreaming = useCallback(() => {
-    controllerRef.current?.abort();
-  }, []);
+    const handle = registry.get(currentOwnerKey());
+    if (!handle) {
+      return;
+    }
+    registry.abort(handle);
+  }, [registry]);
+
+  // isStreamingFor 判定单个会话是否正在生成（送/停按钮、侧栏圆点、顶栏状态章都用它）。
+  const isStreamingFor = useCallback((targetSessionId: string) => registry.isBusy(targetSessionId), [registry]);
+  const busySessions = useCallback(() => registry.busySessions(), [registry]);
+  const currentSessionStreaming = isStreamingFor(currentOwnerKey());
 
   function scrollConversationToBottom(behavior: ScrollBehavior) {
     const scrollElement = conversationScrollRef.current;
@@ -1394,7 +1873,8 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
               panelError={panelError}
               sessions={sessions}
               sessionId={sessionId}
-              isStreaming={isStreaming}
+              isStreamingFor={isStreamingFor}
+              busySessions={busySessions}
               isLoadingMoreSessions={isLoadingMoreSessions}
               hasMoreSessions={hasMoreSessions}
               userId={authSession.user_id}
@@ -1469,8 +1949,8 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
               </div>
             </div>
             <div className="stage-stamps">
-              <span className={`run-stamp ${isStreaming ? 'run-stamp-live' : 'run-stamp-ready'}`}>
-                {isStreaming ? 'RUNNING' : 'READY'}
+              <span className={`run-stamp ${currentSessionStreaming ? 'run-stamp-live' : 'run-stamp-ready'}`}>
+                {currentSessionStreaming ? 'RUNNING' : 'READY'}
               </span>
             </div>
             <AppearanceSwitcher />
@@ -1504,7 +1984,7 @@ function ChatWorkspace({ authSession, promptProfileOnLogin }: ChatWorkspaceProps
           />
 
           <Composer
-              isStreaming={isStreaming}
+              isStreaming={currentSessionStreaming}
               isExpanded={isComposerExpanded}
               costDaily={costDaily}
               quota={quota}

@@ -42,6 +42,9 @@ func (s *Service) ChatCompletion(ctx context.Context, req dto.ChatRequest) (*dto
 	if err != nil {
 		return nil, err
 	}
+	// 阻塞式路径没有后台 goroutine，执行权在本次调用结束时归还。
+	// prepareChatRun 成功即代表已抢占该会话，这里必须无条件释放（defer 兜住 panic）。
+	defer s.endSessionRun(prep.userID, prep.session.SessionID)
 	return s.executeRun(runCtx, prep)
 }
 

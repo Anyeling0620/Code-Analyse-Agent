@@ -25,7 +25,9 @@ func (h *Handler) ChatCompletion(ctx *gin.Context) {
 	ctx.Set(common.CtxKeyTraceID, traceID)
 	resp, err := h.session.ChatCompletion(ctx, req)
 	if err != nil {
-		h.writeResp(ctx, nil, common.ServerError.WithError(err))
+		// 同会话已有运行中的回答时服务层返回 SessionBusy，这里必须原样透出 409，
+		// 不能被压成 500——前端要靠这个码区分"等一会儿"和"挂到已有 run 继续收"。
+		h.writeServiceErr(ctx, err)
 		return
 	}
 	h.writeResp(ctx, resp, common.OK)
@@ -50,7 +52,8 @@ func (h *Handler) ChatStream(ctx *gin.Context) {
 
 	runID, sessionID, err := h.session.StartChatRun(ctx.Request.Context(), req)
 	if err != nil {
-		h.writeResp(ctx, nil, common.ServerError.WithError(err))
+		// 此刻还没有开始写 SSE，可以正常返回 JSON 错误码（含 SessionBusy 的 409）。
+		h.writeServiceErr(ctx, err)
 		return
 	}
 
@@ -160,7 +163,8 @@ func (h *Handler) ChatResume(ctx *gin.Context) {
 
 	runID, sessionID, runAfterSeq, err := h.session.StartResumeRun(ctx.Request.Context(), &req)
 	if err != nil {
-		h.writeResp(ctx, nil, common.ServerError.WithError(err))
+		// 与 ChatStream 同理：恢复也会起一条执行流，被同会话串行闸门拒绝时要透出 409。
+		h.writeServiceErr(ctx, err)
 		return
 	}
 	// 审批恢复时客户端手里已经有中断前的事件，默认从 run 当前游标继续；

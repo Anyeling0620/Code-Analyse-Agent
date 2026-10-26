@@ -339,6 +339,20 @@ textarea {
   opacity: 0.5;
 }
 
+/* 新建按钮右侧的后台生成计数：提示"别处还有 N 个会话在跑"，而不是禁用按钮。 */
+.new-session-busy {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: rgba(251, 248, 238, 0.22);
+  color: var(--on-oxide);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+
 .new-session-icon {
   display: grid;
   place-items: center;
@@ -492,6 +506,35 @@ textarea {
 
 .session-item-active .session-item-meta {
   color: var(--ink-soft);
+}
+
+/* 后台正在生成的会话：左侧色带呼吸 + 元信息换成"正在生成"圆点。
+   这是**会话级**指示，不能用来表示整页忙碌（那会误读成禁止操作）。 */
+.session-item-busy .session-swatch {
+  animation: session-running-pulse 1.4s ease-in-out infinite;
+}
+
+.session-running-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--section-oxide);
+  vertical-align: middle;
+  animation: session-running-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes session-running-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-item-busy .session-swatch,
+  .session-running-dot {
+    animation: none;
+  }
 }
 
 .session-item-actions {

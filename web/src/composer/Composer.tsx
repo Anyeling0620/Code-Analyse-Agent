@@ -29,7 +29,9 @@ export const Composer = memo(function Composer({
     event?.preventDefault();
     const textarea = textareaRef.current;
     const message = textarea?.value.trim() ?? '';
-    if (!message || isStreaming) {
+    // isStreaming 只表示"当前会话"在跑。同会话串行由上层强制（重复提交会被拒
+    // 并给出提示），这里不再用全局忙碌挡掉其他会话的输入。
+    if (!message) {
       return;
     }
     if (textarea) {
@@ -58,7 +60,7 @@ export const Composer = memo(function Composer({
           <div className="composer-topline">
             <span className="composer-label">指令</span>
             <span className="composer-hint">
-              {isStreaming ? '正在返回，可随时停止本轮。' : 'Enter 发送 · Shift+Enter 换行'}
+              {isStreaming ? '该会话正在返回，可随时停止本轮。' : 'Enter 发送 · Shift+Enter 换行'}
             </span>
           </div>
           <textarea

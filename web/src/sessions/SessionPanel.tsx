@@ -15,7 +15,8 @@ export const SessionPanel = memo(function SessionPanel({
   panelError,
   sessions,
   sessionId,
-  isStreaming,
+  isStreamingFor,
+  busySessions,
   isLoadingMoreSessions,
   hasMoreSessions,
   userId,
@@ -35,7 +36,10 @@ export const SessionPanel = memo(function SessionPanel({
   panelError: string;
   sessions: SessionListItem[];
   sessionId: string;
-  isStreaming: boolean;
+  /** 单个会话是否正在生成。跨会话并行后不能再有"整页忙碌"的布尔量。 */
+  isStreamingFor: (sessionId: string) => boolean;
+  /** 正在后台生成的会话 id 列表，用于"有没有别处在跑"的提示。 */
+  busySessions: () => string[];
   isLoadingMoreSessions: boolean;
   hasMoreSessions: boolean;
   userId: string;
@@ -51,6 +55,8 @@ export const SessionPanel = memo(function SessionPanel({
   onClose?: () => void;
   shareNotice: string;
 }) {
+  const busyCount = busySessions().length;
+
   function handleSessionListScroll(event: UIEvent<HTMLDivElement>) {
     const element = event.currentTarget;
     const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
@@ -76,9 +82,12 @@ export const SessionPanel = memo(function SessionPanel({
           </button>
         </header>
 
-        <button className="new-session-button" type="button" onClick={onStartNewSession} disabled={isStreaming}>
+        <button className="new-session-button" type="button" onClick={onStartNewSession}>
           <span className="new-session-icon" aria-hidden="true"><PlusIcon size={16} /></span>
           <span>新建分析</span>
+          {busyCount > 0 && (
+            <span className="new-session-busy" title={`${busyCount} 个会话正在后台生成`}>{busyCount}</span>
+          )}
         </button>
 
         {panelError && <p className="panel-error" role="status">{panelError}</p>}
@@ -99,15 +108,18 @@ export const SessionPanel = memo(function SessionPanel({
                   {sessions.map((item) => {
                     const hue = sectionHueFor(item.session_id);
                     const active = item.session_id === sessionId;
+                    const busy = isStreamingFor(item.session_id);
                     const title = item.title || item.last_user_message || item.summary || '未命名会话';
                     return (
-                        <div key={item.session_id} className={`session-item${active ? ' session-item-active' : ''}`}>
+                        <div
+                            key={item.session_id}
+                            className={`session-item${active ? ' session-item-active' : ''}${busy ? ' session-item-busy' : ''}`}
+                        >
                           <button
                               className="session-item-main"
                               type="button"
                               onClick={() => void onLoadSession(item.session_id)}
-                              disabled={isStreaming}
-                              title={`${title}\n更新时间：${formatTime(item.update_at)}`}
+                              title={`${title}${busy ? '\n正在生成回复' : ''}\n更新时间：${formatTime(item.update_at)}`}
                               aria-label={`${title}，更新时间：${formatTime(item.update_at)}`}
                               aria-current={active ? 'true' : undefined}
                           >
@@ -118,7 +130,10 @@ export const SessionPanel = memo(function SessionPanel({
                             />
                             <span className="session-item-copy">
                               <span className="session-title-line">{title}</span>
-                              <span className="session-item-meta">{formatTime(item.update_at)}</span>
+                              <span className="session-item-meta">
+                                {busy && <span className="session-running-dot" aria-hidden="true" />}
+                                {busy ? '正在生成' : formatTime(item.update_at)}
+                              </span>
                             </span>
                           </button>
                           <div className="session-item-actions">
@@ -129,7 +144,6 @@ export const SessionPanel = memo(function SessionPanel({
                                   event.stopPropagation();
                                   onShareSession(item.session_id);
                                 }}
-                                disabled={isStreaming}
                                 aria-label="分享会话"
                                 title="生成只读分享链接"
                             >
@@ -143,7 +157,6 @@ export const SessionPanel = memo(function SessionPanel({
                                       event.stopPropagation();
                                       void onDeleteSession(item.session_id);
                                     }}
-                                    disabled={isStreaming}
                                     aria-label="删除会话"
                                     title="删除会话"
                                 >

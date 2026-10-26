@@ -44,6 +44,12 @@ func (f *profileTestRuns) GetByCheckpointID(context.Context, string) (*do.ChatRu
 	return nil, nil
 }
 
+// GetRunningBySession 是「同会话串行」守卫的只读兜底查询。
+// 这里的用例只关心画像准备，不存在并发 run，返回 nil 即放行。
+func (f *profileTestRuns) GetRunningBySession(context.Context, string, string) (*do.ChatRun, error) {
+	return nil, nil
+}
+
 func (f *profileTestRuns) UpdateStatus(context.Context, string, string, map[string]any) error {
 	return nil
 }

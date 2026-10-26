@@ -2,6 +2,9 @@ package api
 
 import (
 	"context"
+	"errors"
+	"strings"
+
 	"edu.agent.code/adaptor"
 	"edu.agent.code/adaptor/repo/profile"
 	"edu.agent.code/common"
@@ -127,6 +130,56 @@ func (h *Handler) traceIDFrom(ctx *gin.Context) string {
 		return spanCtx.TraceID().String()
 	}
 	return common.GetUUIDHex()
+}
+
+// serviceErrno 把服务层错误翻译成对外响应码，是 handler 处理业务错误的统一入口。
+//
+// 两条分支的边界必须分清：
+//   - 命中共识别业务错误（common.AsErrno 返回 ok）：按**原 Code** 返回，
+//     例如 SessionBusy 的 409。这类码表达的是一种可判定的业务状态，
+//     前端要据此走不同分支（提示等待 / 挂到已有 run），被压成 500 就丢失了语义。
+//   - 其它错误一律 ServerError.WithError(err)：保留原始错误文本便于排查，
+//     Code=500 同时让 writeResp 的 >=500 归一继续生效（那是刻意的兜底设计）。
+//
+// 注意这里**不**把任意小码都放行：只有 AsErrno 认可的哨兵才会走第一条分支，
+// 避免某个内部错误恰好带 3xx/4xx 码时被误放大成客户可见状态。
+func (h *Handler) serviceErrno(err error) common.Errno {
+	if errno, ok := common.AsErrno(err); ok {
+		return errno
+	}
+	return common.ServerError.WithError(err)
+}
+
+// sessionBusyData 从服务层错误里取出「占用该会话的 run_id」，组装成 409 响应体的 data。
+//
+// 为什么提取逻辑放在 api 层而不是 common 包：
+// common 被 service/conversation 导入（SessionBusy 与哨兵都定义在 common），
+// 若在 common 里 errors.As 到 *conversation.SessionBusyError，就会形成
+// common → conversation → common 的循环依赖。api 本来就依赖 conversation
+// （Handler.session 就是 *conversation.Service），放在这里零新增耦合。
+//
+// 返回 nil 表示"没什么可带的"：调用方据此让 data 保持 null，
+// 避免出现 {"run_id":""} 这种前端会误以为拿到了游标的空值。
+// 前端读取路径是 data.run_id（同时兼容 data.run.run_id），见 web/src/api/runStream.ts。
+func sessionBusyData(err error) any {
+	var busy *conversation.SessionBusyError
+	if !errors.As(err, &busy) || busy == nil {
+		return nil
+	}
+	if strings.TrimSpace(busy.RunID) == "" {
+		// 内存刚抢占、run 尚未落库时 RunID 为空。此时不编造 id：
+		// 前端拿不到就会走既有回退链（GET /api/chat/run/active），语义仍然正确。
+		return nil
+	}
+	return map[string]any{"run_id": busy.RunID}
+}
+
+// writeServiceErr 是服务层错误的统一出口：先映射 errno，再按错误类型决定 data。
+//
+// 只有 SessionBusy 会带 data（run_id）；其它业务码与普通 error 的 data 保持 null，
+// 响应形状与改造前完全一致。
+func (h *Handler) writeServiceErr(ctx *gin.Context, err error) {
+	h.writeResp(ctx, sessionBusyData(err), h.serviceErrno(err))
 }
 
 func (h *Handler) writeResp(ctx *gin.Context, data any, errno common.Errno) {

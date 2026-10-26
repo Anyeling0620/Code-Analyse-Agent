@@ -260,3 +260,61 @@ func TestMarkRunningAsInterrupted(t *testing.T) {
 		t.Fatalf("run-3 status changed to %s", done.Status)
 	}
 }
+
+// GetRunningBySession 是「同会话串行」的判据，必须只认 running。
+// interrupted 表示审批中断、没有 goroutine 在跑，拦掉它会打断 resume 与继续提问。
+func TestGetRunningBySessionExcludesInterrupted(t *testing.T) {
+	ctx := context.Background()
+	repo := NewRunWithDB(newRunRepoTestDB(t))
+
+	if err := repo.Create(ctx, sampleRun("run-1", "user-1", "session-1", do.RunStatusInterrupted)); err != nil {
+		t.Fatalf("create interrupted: %v", err)
+	}
+	got, err := repo.GetRunningBySession(ctx, "user-1", "session-1")
+	if err != nil {
+		t.Fatalf("get running: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("interrupted run must not count as running, got %+v", got)
+	}
+	// 同一份数据下 GetActiveBySession 仍应命中：它是「可续传」语义，二者不能混用。
+	active, err := repo.GetActiveBySession(ctx, "user-1", "session-1")
+	if err != nil {
+		t.Fatalf("get active: %v", err)
+	}
+	if active == nil || active.RunID != "run-1" {
+		t.Fatalf("interrupted run should still be resumable via GetActiveBySession, got %+v", active)
+	}
+
+	if err := repo.Create(ctx, sampleRun("run-2", "user-1", "session-1", do.RunStatusRunning)); err != nil {
+		t.Fatalf("create running: %v", err)
+	}
+	got, err = repo.GetRunningBySession(ctx, "user-1", "session-1")
+	if err != nil {
+		t.Fatalf("get running after create: %v", err)
+	}
+	if got == nil || got.RunID != "run-2" {
+		t.Fatalf("expected running run-2, got %+v", got)
+	}
+
+	// 终态之后不再算 running。
+	if err := repo.UpdateStatus(ctx, "run-2", do.RunStatusDone, map[string]any{"answer": "ok"}); err != nil {
+		t.Fatalf("finish run-2: %v", err)
+	}
+	got, err = repo.GetRunningBySession(ctx, "user-1", "session-1")
+	if err != nil {
+		t.Fatalf("get running after done: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("expected no running run after done, got %+v", got)
+	}
+
+	// 其他用户查不到。
+	other, err := repo.GetRunningBySession(ctx, "user-2", "session-1")
+	if err != nil {
+		t.Fatalf("get running for other user: %v", err)
+	}
+	if other != nil {
+		t.Fatalf("expected nil for other user, got %+v", other)
+	}
+}

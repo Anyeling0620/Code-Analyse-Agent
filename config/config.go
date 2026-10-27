@@ -430,6 +430,16 @@ type WorkSpace struct {
 type ModelPrice struct {
 	FallbackModel string                   `yaml:"fallback_model"`
 	PriceCNY      map[string]ModelPriceCNY `yaml:"price_cny"`
+	// ModelDisplayNames 把「实际请求用的模型名」映射回「官方计价模型名」。
+	//
+	// 场景：通过本机 OpenAI 兼容网关（dsh-provider-hub 的 Jet Hub）调用时，
+	// 请求名可能是 buddy/deepseek-v4.1-flash 这类渠道前缀名，而 price_cny 里
+	// 只配了官方名（deepseek-flash）。没有映射就只能靠 fallback_model 兜底，
+	// 且 cost_records.model 会落库成渠道名，导致成本报表的分模型维度分裂。
+	//
+	// 命中映射时，计价查表与落库展示**都用映射后的官方名**，二者天然一致。
+	// 未配置映射的模型名原样使用（保持既有行为）。
+	ModelDisplayNames map[string]string `yaml:"model_display_names"`
 }
 
 type ModelPriceCNY struct {

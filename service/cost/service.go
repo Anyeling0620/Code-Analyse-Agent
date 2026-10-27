@@ -10,6 +10,7 @@ import (
 	"edu.agent.code/utils/logger"
 	"edu.agent.code/utils/pricing"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -39,6 +40,10 @@ func (s *Service) Track(ctx context.Context, userID, sessionID, modelName, toolN
 	if cached > prompt {
 		cached = prompt
 	}
+	// 先把渠道模型名归一化成官方计价名（见 config.ModelPrice.ModelDisplayNames）。
+	// 在 Track 入口统一做，而不是让每个调用方自己转换：多一处调用就多一个漏转换的机会，
+	// 而漏了只会静默走 fallback 计价、并把渠道名写进成本表。
+	modelName = s.resolveDisplayModel(modelName)
 	rate, err := s.lookupRate(modelName)
 	if err != nil {
 		logger.Warn("cost:%v, fallback=%s", err, s.price.FallbackModel)
@@ -66,6 +71,26 @@ func (s *Service) Track(ctx context.Context, userID, sessionID, modelName, toolN
 		return cny, err
 	}
 	return cny, nil
+}
+
+// resolveDisplayModel 把渠道模型名映射回官方计价模型名。
+//
+// 只做一层映射，不做链式解析（a→b→c 只认 a→b）：配置本身应当是平坦的，
+// 允许链式反而会让"最终算哪个价"变成需要推理的问题。
+// 空白值或未配置映射时原样返回，保持既有行为。
+func (s *Service) resolveDisplayModel(modelName string) string {
+	if len(s.price.ModelDisplayNames) == 0 {
+		return modelName
+	}
+	alias, ok := s.price.ModelDisplayNames[modelName]
+	if !ok {
+		return modelName
+	}
+	alias = strings.TrimSpace(alias)
+	if alias == "" {
+		return modelName
+	}
+	return alias
 }
 
 // lookupRate 查询模型单价：模型未配置，或缓存命中价未正确配置时返回错误。

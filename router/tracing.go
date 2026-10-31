@@ -4,14 +4,19 @@ import (
 	"edu.agent.code/common"
 	"edu.agent.code/utils/tracing"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 )
 
+// getTraceID 生成兜底 trace id（32 位 hex，不带连字符）。
+//
+// 历史上这里用的是 uuid.New().String()，即带连字符的 UUID。那个值与 span 的
+// TraceID 完全无关，导致响应里回给用户的 trace_id 在 Jaeger 里搜不到——
+// 面板上的 trace 是按 32 位 hex 索引的。现在只有在 span 上下文确实拿不到
+// TraceID 时才走这条兜底，且格式与 Jaeger 对齐，保证两种来源都能直接检索。
 func getTraceID() string {
-	return uuid.New().String()
+	return common.GetUUIDHex()
 }
 
 func Tracing() gin.HandlerFunc {
@@ -20,9 +25,14 @@ func Tracing() gin.HandlerFunc {
 		ctx, span := tracing.Tracer().Start(ctx, "http "+c.Request.Method+" "+c.FullPath())
 		defer span.End()
 
-		traceID := c.GetString("trace_id")
-		if traceID == "" {
-			traceID = getTraceID()
+		// trace_id 必须是 span 自己的 TraceID：它才是 Jaeger 里能检索的键。
+		// 入站若带了 W3C traceparent，Extract 会复用父 traceId，这里也能自然继承。
+		traceID := span.SpanContext().TraceID().String()
+		if !span.SpanContext().HasTraceID() {
+			traceID = c.GetString("trace_id")
+			if traceID == "" {
+				traceID = getTraceID()
+			}
 		}
 		c.Set(common.CtxKeyTraceID, traceID)
 		c.Request = c.Request.WithContext(ctx)
